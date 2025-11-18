@@ -276,11 +276,55 @@ class BatchPreprocessRequest(BaseModel):
         }
 
 
+class ColumnHealthMetrics(BaseModel):
+    """Health metrics for a single column."""
+
+    column_name: str = Field(..., description="Column name")
+    data_type: str = Field(..., description="Detected data type")
+    health_score: float = Field(..., description="Overall health score (0-100)")
+    anomalies: List[str] = Field(default=[], description="List of detected anomalies")
+
+    # Quality metrics
+    null_count: int = Field(default=0, description="Number of null values")
+    null_pct: float = Field(default=0.0, description="Percentage of null values")
+    duplicate_count: int = Field(default=0, description="Number of duplicate values")
+    duplicate_pct: float = Field(default=0.0, description="Percentage of duplicates")
+    unique_count: int = Field(default=0, description="Number of unique values")
+    unique_ratio: float = Field(default=0.0, description="Ratio of unique values")
+
+    # Numeric-specific metrics
+    outlier_count: Optional[int] = Field(None, description="Number of outliers (numeric only)")
+    outlier_pct: Optional[float] = Field(None, description="Percentage of outliers")
+    skewness: Optional[float] = Field(None, description="Distribution skewness")
+    kurtosis: Optional[float] = Field(None, description="Distribution kurtosis")
+    mean: Optional[float] = Field(None, description="Mean value")
+    std: Optional[float] = Field(None, description="Standard deviation")
+    cv: Optional[float] = Field(None, description="Coefficient of variation")
+
+    # Categorical-specific metrics
+    cardinality: Optional[int] = Field(None, description="Number of categories")
+    is_imbalanced: Optional[bool] = Field(None, description="Whether categorical is imbalanced")
+
+    # Severity classification
+    severity: str = Field(..., description="Overall severity: 'healthy', 'warning', 'critical'")
+
+
+class BatchHealthResponse(BaseModel):
+    """Response schema for batch data health analysis."""
+
+    overall_health_score: float = Field(..., description="Overall dataset health score (0-100)")
+    healthy_columns: int = Field(..., description="Number of healthy columns")
+    warning_columns: int = Field(..., description="Number of columns with warnings")
+    critical_columns: int = Field(..., description="Number of critical columns")
+    column_health: Dict[str, ColumnHealthMetrics] = Field(..., description="Per-column health metrics")
+
+
 class BatchPreprocessResponse(BaseModel):
     """Response schema for batch preprocessing."""
 
     results: Dict[str, PreprocessResponse]
     summary: Dict[str, Any]
+    health: Optional[BatchHealthResponse] = Field(None, description="Data health analysis")
 
     class Config:
         json_schema_extra = {
