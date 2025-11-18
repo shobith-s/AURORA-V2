@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Upload, Play, Download, CheckCircle, AlertCircle, Info, FileSpreadsheet, X } from 'lucide-react';
+import { Upload, Play, Download, CheckCircle, AlertCircle, Info, FileSpreadsheet, X, Edit2 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import ResultCard from './ResultCard';
@@ -21,6 +21,9 @@ export default function PreprocessingPanel() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [batchResults, setBatchResults] = useState<BatchResults | null>(null);
+  const [showCorrectionFor, setShowCorrectionFor] = useState<string | null>(null);
+  const [correctActions, setCorrectActions] = useState<Record<string, string>>({});
+  const [isSubmittingCorrection, setIsSubmittingCorrection] = useState<Record<string, boolean>>({});
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -141,6 +144,37 @@ export default function PreprocessingPanel() {
     setColumnData(samples[type as keyof typeof samples] || '');
     setColumnName(type + '_sample');
     setMode('single');
+  };
+
+  const handleBatchCorrection = async (columnName: string, wrongAction: string, confidence: number) => {
+    const correctAction = correctActions[columnName];
+    if (!correctAction) {
+      toast.error('Please select the correct action');
+      return;
+    }
+
+    setIsSubmittingCorrection(prev => ({ ...prev, [columnName]: true }));
+    try {
+      await axios.post('/api/correct', {
+        column_data: [],
+        column_name: columnName,
+        wrong_action: wrongAction,
+        correct_action: correctAction,
+        confidence: confidence
+      });
+
+      toast.success(`Correction for "${columnName}" submitted! System is learning...`);
+      setShowCorrectionFor(null);
+      setCorrectActions(prev => {
+        const newActions = { ...prev };
+        delete newActions[columnName];
+        return newActions;
+      });
+    } catch (error) {
+      toast.error('Failed to submit correction');
+    } finally {
+      setIsSubmittingCorrection(prev => ({ ...prev, [columnName]: false }));
+    }
   };
 
   return (
@@ -342,9 +376,9 @@ export default function PreprocessingPanel() {
               </div>
               <div className="text-center">
                 <div className="text-3xl font-bold text-green-600">
-                  {batchResults.summary.processed_columns}
+                  {Object.values(batchResults.results).filter((r: any) => r.action === 'keep_as_is').length}
                 </div>
-                <div className="text-sm text-slate-600 mt-1">Need Preprocessing</div>
+                <div className="text-sm text-slate-600 mt-1">Healthy Columns</div>
               </div>
               <div className="text-center">
                 <div className="text-3xl font-bold text-purple-600">
@@ -353,10 +387,10 @@ export default function PreprocessingPanel() {
                 <div className="text-sm text-slate-600 mt-1">Avg Confidence</div>
               </div>
             </div>
-            {Object.keys(batchResults.results).length === 0 && (
+            {Object.values(batchResults.results).filter((r: any) => r.action === 'keep_as_is').length === batchResults.summary.total_columns && (
               <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
                 <p className="text-sm text-green-700 text-center">
-                  🎉 All columns are clean! No preprocessing needed.
+                  🎉 All columns are healthy! No preprocessing needed.
                 </p>
               </div>
             )}
@@ -366,13 +400,13 @@ export default function PreprocessingPanel() {
           {Object.keys(batchResults.results).length > 0 && (
             <div className="glass-card p-6">
               <h3 className="text-lg font-bold text-slate-800 mb-4">
-                Columns Needing Preprocessing ({Object.keys(batchResults.results).length})
+                Column Recommendations ({Object.keys(batchResults.results).length})
               </h3>
               <div className="space-y-4">
                 {Object.entries(batchResults.results).map(([columnName, columnResult]) => (
                 <div key={columnName} className="border border-slate-200 rounded-lg p-4 bg-white/50">
                   <div className="flex items-start justify-between mb-3">
-                    <div>
+                    <div className="flex-1">
                       <h4 className="font-semibold text-slate-800">{columnName}</h4>
                       <p className="text-sm text-slate-600 mt-1">{columnResult.explanation}</p>
                     </div>
@@ -384,12 +418,19 @@ export default function PreprocessingPanel() {
                           ? 'bg-yellow-100 text-yellow-700'
                           : 'bg-red-100 text-red-700'
                       }`}>
-                        {(columnResult.confidence * 100).toFixed(0)}% confidence
+                        {(columnResult.confidence * 100).toFixed(0)}%
                       </div>
+                      <button
+                        onClick={() => setShowCorrectionFor(showCorrectionFor === columnName ? null : columnName)}
+                        className="flex items-center gap-1 px-2 py-1 bg-white hover:bg-blue-50 text-blue-600 rounded-lg text-xs font-medium border border-blue-200 transition"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        Override
+                      </button>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-4 flex-wrap mb-3">
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-slate-600">Action:</span>
                       <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
@@ -405,7 +446,7 @@ export default function PreprocessingPanel() {
                   </div>
 
                   {columnResult.alternatives && columnResult.alternatives.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-slate-200">
+                    <div className="mb-3 pb-3 border-b border-slate-200">
                       <p className="text-xs text-slate-600 mb-2">Alternative actions:</p>
                       <div className="flex gap-2 flex-wrap">
                         {columnResult.alternatives.slice(0, 3).map((alt: any, idx: number) => (
@@ -416,6 +457,51 @@ export default function PreprocessingPanel() {
                             {alt.action} ({(alt.confidence * 100).toFixed(0)}%)
                           </span>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Override Form */}
+                  {showCorrectionFor === columnName && (
+                    <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mt-3">
+                      <div className="flex items-start gap-2 mb-2">
+                        <Edit2 className="w-4 h-4 text-blue-600 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-xs font-semibold text-blue-800">Override Recommendation</p>
+                          <p className="text-xs text-blue-600 mt-0.5">
+                            Select the correct action for "{columnName}"
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <select
+                          value={correctActions[columnName] || ''}
+                          onChange={(e) => setCorrectActions(prev => ({ ...prev, [columnName]: e.target.value }))}
+                          className="flex-1 px-2 py-1.5 rounded-lg border border-blue-300 text-xs bg-white"
+                        >
+                          <option value="">-- Select Action --</option>
+                          <option value="keep_as_is">Keep (No preprocessing)</option>
+                          <option value="standard_scale">Standard Scale</option>
+                          <option value="minmax_scale">Min-Max Scale</option>
+                          <option value="robust_scale">Robust Scale</option>
+                          <option value="log_transform">Log Transform</option>
+                          <option value="box_cox">Box-Cox Transform</option>
+                          <option value="yeo_johnson">Yeo-Johnson Transform</option>
+                          <option value="onehot_encode">One-Hot Encode</option>
+                          <option value="label_encode">Label Encode</option>
+                          <option value="target_encode">Target Encode</option>
+                          <option value="fill_null_mean">Fill Nulls (Mean)</option>
+                          <option value="fill_null_median">Fill Nulls (Median)</option>
+                          <option value="fill_null_mode">Fill Nulls (Mode)</option>
+                          <option value="drop_column">Drop Column</option>
+                        </select>
+                        <button
+                          onClick={() => handleBatchCorrection(columnName, columnResult.action, columnResult.confidence)}
+                          disabled={isSubmittingCorrection[columnName] || !correctActions[columnName]}
+                          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isSubmittingCorrection[columnName] ? 'Submitting...' : 'Apply'}
+                        </button>
                       </div>
                     </div>
                   )}
