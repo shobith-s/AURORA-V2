@@ -1,0 +1,66 @@
+# Privacy and Security Configuration
+
+# Differential Privacy
+differential_privacy:
+  epsilon: 1.0  # Privacy budget
+  delta: 1.0e-5  # Failure probability
+  noise_mechanism: "laplacian"  # or "gaussian"
+  gradient_clip_norm: 1.0
+
+# Privacy Levels
+privacy_levels:
+  low:
+    discretization_bins: 20
+    allow_column_names: true
+    pattern_detail: "high"
+
+  medium:
+    discretization_bins: 10
+    allow_column_names: true
+    pattern_detail: "medium"
+
+  high:
+    discretization_bins: 5
+    allow_column_names: false
+    pattern_detail: "low"
+
+# Data Anonymization
+anonymization:
+  hash_algorithm: "sha256"
+  k_anonymity: 3
+  suppress_threshold: 2
+
+  # PII Detection
+  pii_keywords:
+    - id
+    - uuid
+    - email
+    - phone
+    - ssn
+    - name
+    - address
+    - ip
+    - user_id
+    - customer_id
+
+# Federated Learning
+federated:
+  enabled: false
+  min_participants: 3
+  secure_aggregation: true
+  max_rounds: 100
+  convergence_threshold: 0.01
+
+# Pattern Storage
+pattern_storage:
+  max_patterns: 10000
+  auto_cleanup: true
+  cleanup_threshold: 15000
+  retention_days: 90
+
+# Audit Logging
+audit:
+  enabled: false
+  log_corrections: true
+  log_patterns: false  # Don't log patterns (privacy)
+  log_decisions: false

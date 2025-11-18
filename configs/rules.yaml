@@ -1,0 +1,44 @@
+# Symbolic Engine Rules Configuration
+
+# Data Quality Rules
+data_quality:
+  null_threshold: 0.6  # Drop columns with > 60% nulls
+  constant_threshold: 1  # Drop if unique_count == 1
+  duplicate_threshold: 0.1  # Flag if > 10% duplicates
+  unique_ratio_threshold: 0.95  # Drop if all unique (likely ID)
+
+# Statistical Thresholds
+statistical:
+  high_skewness: 2.0  # Threshold for log transform
+  moderate_skewness: 1.5  # Threshold for Box-Cox
+  outlier_clip_threshold: 0.1  # Clip if > 10% outliers
+  outlier_winsorize_threshold: 0.05  # Winsorize if 5-10% outliers
+
+# Categorical Encoding
+categorical:
+  onehot_max_cardinality: 10  # Max categories for one-hot
+  target_encode_min_cardinality: 50  # Min for target encoding
+  frequency_encode_range: [10, 50]  # Range for frequency encoding
+
+# Type Detection
+type_detection:
+  datetime_match_threshold: 0.85  # Min % to detect as datetime
+  boolean_match_threshold: 0.9  # Min % to detect as boolean
+  numeric_match_threshold: 0.9  # Min % to detect as numeric
+  json_match_threshold: 0.85  # Min % to detect as JSON
+
+# Domain-Specific
+domain:
+  currency_match_threshold: 0.8
+  phone_match_threshold: 0.85
+  email_match_threshold: 0.85
+  url_match_threshold: 0.85
+
+# Rule Priorities
+priorities:
+  data_quality: 100
+  type_detection: 90
+  domain_specific: 85
+  statistical: 80
+  categorical: 75
+  learned: 85  # Priority for learned rules

@@ -1,0 +1,64 @@
+# Feature Extraction Configuration
+
+# Minimal Features (for NeuralOracle)
+minimal_features:
+  count: 10
+  names:
+    - null_percentage
+    - unique_ratio
+    - skewness
+    - outlier_percentage
+    - entropy
+    - pattern_complexity
+    - multimodality_score
+    - cardinality_bucket
+    - detected_dtype
+    - column_name_signal
+
+# Feature Extraction Settings
+extraction:
+  use_cache: true
+  cache_size_limit: 1000
+  compute_timeout_ms: 100
+
+# Cardinality Buckets
+cardinality:
+  low: [0, 10]
+  medium: [10, 50]
+  high: [50, inf]
+  unique_threshold: 0.95
+
+# Dtype Encoding
+dtype_encoding:
+  numeric: 0
+  categorical: 1
+  text: 2
+  temporal: 3
+  other: 4
+
+# Column Name Keywords
+name_keywords:
+  drop_indicators:
+    - id
+    - key
+    - uuid
+    score: -1.0
+
+  temporal_indicators:
+    - timestamp
+    - date
+    - time
+    score: 0.8
+
+  numeric_indicators:
+    - price
+    - amount
+    - revenue
+    - cost
+    score: 0.6
+
+  categorical_indicators:
+    - category
+    - type
+    - status
+    score: 0.5
