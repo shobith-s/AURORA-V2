@@ -229,6 +229,154 @@ async def preprocess_column(request: PreprocessRequest):
         )
 
 
+def compute_column_health(column: pd.Series, column_name: str) -> 'ColumnHealthMetrics':
+    """Compute health metrics for a single column."""
+    from ..api.schemas import ColumnHealthMetrics
+
+    anomalies = []
+    health_score = 100.0
+
+    # Basic stats
+    total_count = len(column)
+    null_count = int(column.isnull().sum())
+    null_pct = float(null_count / total_count) if total_count > 0 else 0.0
+
+    # Duplicates
+    duplicate_count = int(total_count - column.nunique())
+    duplicate_pct = float(duplicate_count / total_count) if total_count > 0 else 0.0
+
+    # Unique values
+    unique_count = int(column.nunique())
+    unique_ratio = float(unique_count / total_count) if total_count > 0 else 0.0
+
+    # Detect data type
+    non_null = column.dropna()
+    if len(non_null) == 0:
+        data_type = "empty"
+        anomalies.append("All values are null")
+        health_score = 0.0
+    elif pd.api.types.is_numeric_dtype(column):
+        data_type = "numeric"
+    elif pd.api.types.is_datetime64_any_dtype(column):
+        data_type = "datetime"
+    else:
+        data_type = "categorical"
+
+    # Numeric-specific metrics
+    outlier_count = None
+    outlier_pct = None
+    skewness = None
+    kurtosis = None
+    mean = None
+    std = None
+    cv = None
+
+    if data_type == "numeric" and len(non_null) > 0:
+        try:
+            from scipy import stats
+            mean = float(non_null.mean())
+            std = float(non_null.std())
+            cv = float(abs(std / mean)) if mean != 0 else None
+
+            # Skewness and kurtosis
+            if len(non_null) > 2:
+                skewness = float(non_null.skew())
+                kurtosis = float(non_null.kurtosis())
+
+            # Outlier detection using IQR
+            Q1 = non_null.quantile(0.25)
+            Q3 = non_null.quantile(0.75)
+            IQR = Q3 - Q1
+            outliers = (non_null < (Q1 - 1.5 * IQR)) | (non_null > (Q3 + 1.5 * IQR))
+            outlier_count = int(outliers.sum())
+            outlier_pct = float(outlier_count / len(non_null)) if len(non_null) > 0 else 0.0
+
+            # Anomaly detection for numeric
+            if outlier_pct and outlier_pct > 0.1:
+                anomalies.append(f"High outlier percentage ({outlier_pct:.1%})")
+                health_score -= 15
+            if skewness and abs(skewness) > 2:
+                anomalies.append(f"High skewness ({skewness:.2f})")
+                health_score -= 10
+            if cv and cv > 2:
+                anomalies.append(f"High coefficient of variation ({cv:.2f})")
+                health_score -= 5
+        except:
+            pass
+
+    # Categorical-specific metrics
+    cardinality = None
+    is_imbalanced = None
+
+    if data_type == "categorical":
+        cardinality = unique_count
+        # Check for imbalance
+        if len(non_null) > 0:
+            value_counts = non_null.value_counts()
+            max_freq = value_counts.iloc[0] if len(value_counts) > 0 else 0
+            is_imbalanced = (max_freq / len(non_null)) > 0.9
+
+            if is_imbalanced:
+                anomalies.append(f"Imbalanced categories ({max_freq / len(non_null):.1%} in top category)")
+                health_score -= 10
+            if cardinality > 100:
+                anomalies.append(f"High cardinality ({cardinality} categories)")
+                health_score -= 15
+            elif cardinality == 1:
+                anomalies.append("Only one unique value (constant column)")
+                health_score -= 30
+
+    # General anomalies
+    if null_pct > 0.5:
+        anomalies.append(f"High null percentage ({null_pct:.1%})")
+        health_score -= 30
+    elif null_pct > 0.2:
+        anomalies.append(f"Moderate null percentage ({null_pct:.1%})")
+        health_score -= 15
+    elif null_pct > 0.05:
+        anomalies.append(f"Low null percentage ({null_pct:.1%})")
+        health_score -= 5
+
+    if unique_ratio > 0.95 and total_count > 50:
+        anomalies.append(f"Nearly all values unique ({unique_ratio:.1%}) - likely ID column")
+        health_score -= 20
+
+    if unique_count == 1:
+        anomalies.append("All values are identical")
+        health_score -= 30
+
+    # Determine severity
+    if health_score >= 80:
+        severity = "healthy"
+    elif health_score >= 50:
+        severity = "warning"
+    else:
+        severity = "critical"
+
+    return ColumnHealthMetrics(
+        column_name=column_name,
+        data_type=data_type,
+        health_score=max(0.0, health_score),
+        anomalies=anomalies,
+        null_count=null_count,
+        null_pct=null_pct,
+        duplicate_count=duplicate_count,
+        duplicate_pct=duplicate_pct,
+        unique_count=unique_count,
+        unique_ratio=unique_ratio,
+        outlier_count=outlier_count,
+        outlier_pct=outlier_pct,
+        skewness=skewness,
+        kurtosis=kurtosis,
+        mean=mean,
+        std=std,
+        cv=cv,
+        cardinality=cardinality,
+        is_imbalanced=is_imbalanced,
+        severity=severity
+    )
+
+
 @app.post("/batch", response_model=BatchPreprocessResponse)
 async def batch_preprocess(request: BatchPreprocessRequest):
     """
@@ -257,14 +405,42 @@ async def batch_preprocess(request: BatchPreprocessRequest):
         batch_latency_ms = (time.time() - start_time) * 1000
         monitor.record_call('overall_pipeline', batch_latency_ms, success=True)
 
-        # Convert results to response format
+        # Compute health metrics for all columns
+        from ..api.schemas import BatchHealthResponse, ColumnHealthMetrics
+        column_health = {}
+        healthy_count = 0
+        warning_count = 0
+        critical_count = 0
+
+        for col_name in df.columns:
+            health = compute_column_health(df[col_name], col_name)
+            column_health[col_name] = health
+
+            if health.severity == "healthy":
+                healthy_count += 1
+            elif health.severity == "warning":
+                warning_count += 1
+            else:
+                critical_count += 1
+
+        # Overall health score
+        overall_health = sum(h.health_score for h in column_health.values()) / len(column_health) if column_health else 0.0
+
+        health_response = BatchHealthResponse(
+            overall_health_score=float(overall_health),
+            healthy_columns=int(healthy_count),
+            warning_columns=int(warning_count),
+            critical_columns=int(critical_count),
+            column_health=column_health
+        )
+
+        # Convert results to response format (INCLUDE ALL COLUMNS, even healthy ones)
         results = {}
         total_confidence = 0.0
         source_breakdown = {}
-        processed_count = 0  # Columns that actually need preprocessing
 
         for col_name, result in results_dict.items():
-            # Record decision in monitor (for all columns, not just those that need preprocessing)
+            # Record decision in monitor (for all columns)
             monitor.record_decision(
                 decision_id=result.decision_id,
                 column_name=col_name,
@@ -274,11 +450,6 @@ async def batch_preprocess(request: BatchPreprocessRequest):
                 latency_ms=batch_latency_ms / len(results_dict),  # Approximate per-column latency
                 num_rows=len(df)
             )
-
-            # Skip columns that don't need preprocessing (action = "keep")
-            # These columns are already clean and should not be shown to the user
-            if result.action.value.lower() == 'keep':
-                continue
 
             # Convert alternatives to JSON-serializable format
             alternatives = [
@@ -307,13 +478,12 @@ async def batch_preprocess(request: BatchPreprocessRequest):
 
             total_confidence += float(result.confidence)
             source_breakdown[result.source] = source_breakdown.get(result.source, 0) + 1
-            processed_count += 1
 
         # Create summary - ensure all values are JSON-serializable
         summary = {
             "total_columns": int(len(results_dict)),  # Total columns analyzed
-            "processed_columns": int(processed_count),  # Columns that need preprocessing
-            "avg_confidence": float(total_confidence / processed_count) if processed_count > 0 else 0.0,
+            "processed_columns": int(len(results_dict)),  # All columns
+            "avg_confidence": float(total_confidence / len(results_dict)) if len(results_dict) > 0 else 0.0,
             "source_breakdown": {k: int(v) for k, v in source_breakdown.items()}
         }
 
@@ -323,7 +493,8 @@ async def batch_preprocess(request: BatchPreprocessRequest):
         # Create response
         response = BatchPreprocessResponse(
             results=results,
-            summary=json_safe_summary
+            summary=json_safe_summary,
+            health=health_response
         )
 
         # Use FastAPI's jsonable_encoder to ensure ALL types are JSON-safe

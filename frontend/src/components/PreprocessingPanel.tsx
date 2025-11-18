@@ -1,8 +1,39 @@
 import { useState } from 'react';
-import { Upload, Play, Download, CheckCircle, AlertCircle, Info, FileSpreadsheet, X, Edit2 } from 'lucide-react';
+import { Upload, Play, Download, CheckCircle, AlertCircle, Info, FileSpreadsheet, X, Edit2, Activity, TrendingUp, TrendingDown, MinusCircle } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import ResultCard from './ResultCard';
+
+interface ColumnHealthMetrics {
+  column_name: string;
+  data_type: string;
+  health_score: number;
+  anomalies: string[];
+  null_count: number;
+  null_pct: number;
+  duplicate_count: number;
+  duplicate_pct: number;
+  unique_count: number;
+  unique_ratio: number;
+  outlier_count?: number;
+  outlier_pct?: number;
+  skewness?: number;
+  kurtosis?: number;
+  mean?: number;
+  std?: number;
+  cv?: number;
+  cardinality?: number;
+  is_imbalanced?: boolean;
+  severity: 'healthy' | 'warning' | 'critical';
+}
+
+interface BatchHealthResponse {
+  overall_health_score: number;
+  healthy_columns: number;
+  warning_columns: number;
+  critical_columns: number;
+  column_health: Record<string, ColumnHealthMetrics>;
+}
 
 interface BatchResults {
   results: Record<string, any>;
@@ -11,6 +42,7 @@ interface BatchResults {
     processed_columns: number;
     avg_confidence: number;
   };
+  health?: BatchHealthResponse;
 }
 
 export default function PreprocessingPanel() {
@@ -24,6 +56,7 @@ export default function PreprocessingPanel() {
   const [showCorrectionFor, setShowCorrectionFor] = useState<string | null>(null);
   const [correctActions, setCorrectActions] = useState<Record<string, string>>({});
   const [isSubmittingCorrection, setIsSubmittingCorrection] = useState<Record<string, boolean>>({});
+  const [expandedHealthColumn, setExpandedHealthColumn] = useState<string | null>(null);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -395,6 +428,199 @@ export default function PreprocessingPanel() {
               </div>
             )}
           </div>
+
+          {/* Data Health Dashboard */}
+          {batchResults.health && (
+            <div className="glass-card p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <Activity className="w-6 h-6 text-blue-600" />
+                <h3 className="text-lg font-bold text-slate-800">Data Health Analysis</h3>
+              </div>
+
+              {/* Overall Health Score */}
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 mb-6 border border-blue-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-600 mb-1">Overall Dataset Health</p>
+                    <div className="flex items-center gap-3">
+                      <div className="text-4xl font-bold" style={{
+                        color: batchResults.health.overall_health_score >= 80 ? '#10b981' :
+                               batchResults.health.overall_health_score >= 50 ? '#f59e0b' : '#ef4444'
+                      }}>
+                        {batchResults.health.overall_health_score.toFixed(1)}
+                      </div>
+                      <div className="text-2xl text-slate-400">/100</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-green-600">{batchResults.health.healthy_columns}</div>
+                      <div className="text-xs text-slate-600">Healthy</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-yellow-600">{batchResults.health.warning_columns}</div>
+                      <div className="text-xs text-slate-600">Warning</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-red-600">{batchResults.health.critical_columns}</div>
+                      <div className="text-xs text-slate-600">Critical</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Column Health Details */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-slate-700 mb-3">Column-Level Health Details</h4>
+                {Object.values(batchResults.health.column_health).map((health: ColumnHealthMetrics) => (
+                  <div key={health.column_name} className={`border rounded-lg p-4 transition-all ${
+                    health.severity === 'healthy' ? 'border-green-200 bg-green-50/30' :
+                    health.severity === 'warning' ? 'border-yellow-200 bg-yellow-50/30' :
+                    'border-red-200 bg-red-50/30'
+                  }`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-3 flex-1">
+                        {health.severity === 'healthy' && <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />}
+                        {health.severity === 'warning' && <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0" />}
+                        {health.severity === 'critical' && <X className="w-5 h-5 text-red-600 flex-shrink-0" />}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h5 className="font-semibold text-slate-800">{health.column_name}</h5>
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-xs">
+                              {health.data_type}
+                            </span>
+                          </div>
+                          {health.anomalies.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {health.anomalies.map((anomaly, idx) => (
+                                <span key={idx} className={`text-xs px-2 py-0.5 rounded ${
+                                  health.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                                  health.severity === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {anomaly}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <div className={`text-2xl font-bold ${
+                            health.severity === 'healthy' ? 'text-green-600' :
+                            health.severity === 'warning' ? 'text-yellow-600' :
+                            'text-red-600'
+                          }`}>
+                            {health.health_score.toFixed(0)}
+                          </div>
+                          <div className="text-xs text-slate-500">health</div>
+                        </div>
+                        <button
+                          onClick={() => setExpandedHealthColumn(expandedHealthColumn === health.column_name ? null : health.column_name)}
+                          className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded transition"
+                        >
+                          {expandedHealthColumn === health.column_name ? 'Hide' : 'Details'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expanded Details */}
+                    {expandedHealthColumn === health.column_name && (
+                      <div className="mt-4 pt-4 border-t border-slate-200">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {/* Quality Metrics */}
+                          <div className="bg-white rounded-lg p-3 shadow-sm">
+                            <div className="text-xs text-slate-600 mb-1">Null Values</div>
+                            <div className="text-lg font-semibold text-slate-800">
+                              {health.null_pct > 0 ? `${(health.null_pct * 100).toFixed(1)}%` : 'None'}
+                            </div>
+                            <div className="text-xs text-slate-500">{health.null_count} rows</div>
+                          </div>
+
+                          <div className="bg-white rounded-lg p-3 shadow-sm">
+                            <div className="text-xs text-slate-600 mb-1">Unique Values</div>
+                            <div className="text-lg font-semibold text-slate-800">{health.unique_count}</div>
+                            <div className="text-xs text-slate-500">{(health.unique_ratio * 100).toFixed(1)}% unique</div>
+                          </div>
+
+                          <div className="bg-white rounded-lg p-3 shadow-sm">
+                            <div className="text-xs text-slate-600 mb-1">Duplicates</div>
+                            <div className="text-lg font-semibold text-slate-800">
+                              {health.duplicate_pct > 0 ? `${(health.duplicate_pct * 100).toFixed(1)}%` : 'None'}
+                            </div>
+                            <div className="text-xs text-slate-500">{health.duplicate_count} rows</div>
+                          </div>
+
+                          {/* Numeric-specific */}
+                          {health.data_type === 'numeric' && (
+                            <>
+                              {health.outlier_pct !== null && health.outlier_pct !== undefined && (
+                                <div className="bg-white rounded-lg p-3 shadow-sm">
+                                  <div className="text-xs text-slate-600 mb-1">Outliers</div>
+                                  <div className="text-lg font-semibold text-slate-800">
+                                    {(health.outlier_pct * 100).toFixed(1)}%
+                                  </div>
+                                  <div className="text-xs text-slate-500">{health.outlier_count} values</div>
+                                </div>
+                              )}
+                              {health.skewness !== null && health.skewness !== undefined && (
+                                <div className="bg-white rounded-lg p-3 shadow-sm">
+                                  <div className="text-xs text-slate-600 mb-1">Skewness</div>
+                                  <div className="text-lg font-semibold text-slate-800 flex items-center gap-1">
+                                    {health.skewness.toFixed(2)}
+                                    {health.skewness > 0.5 && <TrendingUp className="w-4 h-4 text-orange-500" />}
+                                    {health.skewness < -0.5 && <TrendingDown className="w-4 h-4 text-blue-500" />}
+                                    {Math.abs(health.skewness) <= 0.5 && <MinusCircle className="w-4 h-4 text-green-500" />}
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    {Math.abs(health.skewness) < 0.5 ? 'Normal' : Math.abs(health.skewness) < 1 ? 'Moderate' : 'High'}
+                                  </div>
+                                </div>
+                              )}
+                              {health.mean !== null && health.mean !== undefined && (
+                                <div className="bg-white rounded-lg p-3 shadow-sm">
+                                  <div className="text-xs text-slate-600 mb-1">Mean ± Std</div>
+                                  <div className="text-sm font-semibold text-slate-800">
+                                    {health.mean.toFixed(2)} ± {health.std?.toFixed(2) || '0'}
+                                  </div>
+                                  {health.cv && <div className="text-xs text-slate-500">CV: {health.cv.toFixed(2)}</div>}
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          {/* Categorical-specific */}
+                          {health.data_type === 'categorical' && (
+                            <>
+                              {health.cardinality !== null && health.cardinality !== undefined && (
+                                <div className="bg-white rounded-lg p-3 shadow-sm">
+                                  <div className="text-xs text-slate-600 mb-1">Cardinality</div>
+                                  <div className="text-lg font-semibold text-slate-800">{health.cardinality}</div>
+                                  <div className="text-xs text-slate-500">categories</div>
+                                </div>
+                              )}
+                              {health.is_imbalanced !== null && health.is_imbalanced !== undefined && (
+                                <div className="bg-white rounded-lg p-3 shadow-sm">
+                                  <div className="text-xs text-slate-600 mb-1">Balance</div>
+                                  <div className="text-lg font-semibold text-slate-800">
+                                    {health.is_imbalanced ? 'Imbalanced' : 'Balanced'}
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    {health.is_imbalanced ? 'Skewed distribution' : 'Good distribution'}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Results for Each Column */}
           {Object.keys(batchResults.results).length > 0 && (
