@@ -109,6 +109,75 @@ def create_data_quality_rules() -> List[Rule]:
         priority=85
     ))
 
+    # KEEP_AS_IS RULES - HIGH PRIORITY (evaluated first)
+    # These catch healthy columns that don't need preprocessing
+
+    # Rule 4a: Keep numeric columns already normalized
+    rules.append(Rule(
+        name="KEEP_IF_ALREADY_NORMALIZED",
+        category=RuleCategory.DATA_QUALITY,
+        action=PreprocessingAction.KEEP_AS_IS,
+        condition=lambda stats: (
+            stats.get("is_numeric", False) and
+            stats.get("null_pct", 0) < 0.05 and
+            -0.5 <= stats.get("mean", 100) <= 0.5 and
+            0.8 <= stats.get("std", 0) <= 1.2 and
+            abs(stats.get("skewness", 0)) < 0.5
+        ),
+        confidence_fn=lambda stats: 0.92,
+        explanation_fn=lambda stats: f"Already normalized: mean={stats.get('mean', 0):.2f}, std={stats.get('std', 0):.2f}",
+        priority=95
+    ))
+
+    # Rule 4b: Keep numeric columns with good distribution
+    rules.append(Rule(
+        name="KEEP_IF_GOOD_DISTRIBUTION",
+        category=RuleCategory.DATA_QUALITY,
+        action=PreprocessingAction.KEEP_AS_IS,
+        condition=lambda stats: (
+            stats.get("is_numeric", False) and
+            stats.get("null_pct", 0) < 0.05 and
+            abs(stats.get("skewness", 0)) < 1.0 and
+            not stats.get("has_outliers", True) and
+            stats.get("cv", 100) < 2.0  # Coefficient of variation
+        ),
+        confidence_fn=lambda stats: 0.88,
+        explanation_fn=lambda stats: f"Good distribution: low skewness ({stats.get('skewness', 0):.2f}), no outliers",
+        priority=92
+    ))
+
+    # Rule 4c: Keep categorical columns with good quality
+    rules.append(Rule(
+        name="KEEP_IF_CATEGORICAL_CLEAN",
+        category=RuleCategory.DATA_QUALITY,
+        action=PreprocessingAction.KEEP_AS_IS,
+        condition=lambda stats: (
+            stats.get("is_categorical", False) and
+            stats.get("null_pct", 0) < 0.05 and
+            2 <= stats.get("unique_count", 0) <= 50 and
+            stats.get("unique_ratio", 0) < 0.8
+        ),
+        confidence_fn=lambda stats: 0.85,
+        explanation_fn=lambda stats: f"Clean categorical: {stats.get('unique_count', 0)} categories, minimal nulls",
+        priority=90
+    ))
+
+    # Rule 4d: Keep columns with no nulls and reasonable properties
+    rules.append(Rule(
+        name="KEEP_IF_NO_QUALITY_ISSUES",
+        category=RuleCategory.DATA_QUALITY,
+        action=PreprocessingAction.KEEP_AS_IS,
+        condition=lambda stats: (
+            stats.get("null_pct", 0) == 0 and
+            stats.get("unique_ratio", 0) > 0.05 and
+            stats.get("unique_ratio", 0) < 0.95 and
+            not stats.get("has_outliers", True)
+        ),
+        confidence_fn=lambda stats: 0.82,
+        explanation_fn=lambda stats: "No data quality issues: no nulls, good cardinality, no outliers",
+        priority=88
+    ))
+
     # Rule 5-9: Null filling strategies based on data type and distribution
     rules.append(Rule(
         name="FILL_NULL_MEDIAN_NUMERIC",
