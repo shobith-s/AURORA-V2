@@ -364,22 +364,22 @@ def generate_decision_tree_explanation(
         null_pct = column_stats.get('null_pct', 0)
         if null_pct > 0.5:
             lines.append(f"   High missing rate ({null_pct*100:.1f}%)")
-            lines.append("  ’ Recommend: REMOVE_COLUMN or FILL")
+            lines.append("  -> Recommend: REMOVE_COLUMN or FILL")
         elif null_pct > 0:
             lines.append(f"   Some missing values ({null_pct*100:.1f}%)")
             skewness = column_stats.get('skewness', 0)
             if abs(skewness) > 1:
                 lines.append(f"   Skewed distribution (skew={skewness:.2f})")
-                lines.append("  ’ Recommend: FILL_MEDIAN")
+                lines.append("  -> Recommend: FILL_MEDIAN")
             else:
                 lines.append(f"   Normal distribution (skew={skewness:.2f})")
-                lines.append("  ’ Recommend: FILL_MEAN")
+                lines.append("  -> Recommend: FILL_MEAN")
     else:
         lines.append("   Column is categorical")
         null_pct = column_stats.get('null_pct', 0)
         if null_pct > 0:
             lines.append(f"   Missing values present ({null_pct*100:.1f}%)")
-            lines.append("  ’ Recommend: FILL_MODE")
+            lines.append("  -> Recommend: FILL_MODE")
 
     lines.append(f"\nFinal Action: {action.value}")
 
