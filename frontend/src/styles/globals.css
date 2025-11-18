@@ -30,7 +30,8 @@
   }
 
   .chat-bubble {
-    @apply rounded-2xl p-4 max-w-[80%] animate-in slide-in-from-bottom-2;
+    @apply rounded-2xl p-4 max-w-[80%];
+    animation: slideIn 0.3s ease-out;
   }
 
   .chat-bubble-user {
@@ -39,6 +40,17 @@
 
   .chat-bubble-assistant {
     @apply chat-bubble bg-white/80 backdrop-blur-sm text-slate-800 border border-slate-200;
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 }
 
