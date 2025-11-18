@@ -39,7 +39,6 @@ export default function PreprocessingPanel() {
       setResult(response.data);
       toast.success('Column analyzed successfully!');
     } catch (error: any) {
-      console.error('Error:', error);
       toast.error(error.response?.data?.detail || 'Failed to process column');
     } finally {
       setIsProcessing(false);
