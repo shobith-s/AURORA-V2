@@ -19,11 +19,11 @@ from src.core.actions import PreprocessingAction
 
 def main():
     print("\n" + "="*70)
-    print("=€ AURORA Neural Oracle Training")
+    print("=ï¿½ AURORA Neural Oracle Training")
     print("="*70 + "\n")
 
     # Step 1: Generate training data
-    print("=Ê Step 1: Generating training data...")
+    print("=ï¿½ Step 1: Generating training data...")
     print("-" * 70)
 
     generator = SyntheticDataGenerator(seed=42)
@@ -38,12 +38,12 @@ def main():
     print(f"\nDifficulty breakdown:")
     difficulty_counts = pd.Series(difficulties).value_counts()
     for diff, count in difficulty_counts.items():
-        print(f"   " {diff:8s}: {count:4d} samples")
+        print(f"    {diff:8s}: {count:4d} samples")
 
     print(f"\nAction breakdown:")
     action_counts = pd.Series([l.value for l in labels]).value_counts()
     for action, count in action_counts.head(10).items():
-        print(f"   " {action:25s}: {count:3d}")
+        print(f"   {action:25s}: {count:3d}")
 
     # Step 2: Extract features
     print(f"\n=' Step 2: Extracting minimal features...")
@@ -62,7 +62,7 @@ def main():
     print(f"   Feature dimensions: 10 features per sample")
 
     # Step 3: Train model
-    print(f"\n>à Step 3: Training XGBoost model...")
+    print(f"\n>ï¿½ Step 3: Training XGBoost model...")
     print("-" * 70)
 
     oracle = NeuralOracle()
@@ -75,7 +75,7 @@ def main():
         )
 
         print(f"\n Training Complete!")
-        print(f"\n=È Performance Metrics:")
+        print(f"\n=ï¿½ Performance Metrics:")
         print(f"   " Training Accuracy:   {metrics['train_accuracy']:6.2%}")
         print(f"   " Validation Accuracy: {metrics['val_accuracy']:6.2%}")
         print(f"   " Number of Trees:     {metrics['num_trees']:6d}")
@@ -87,7 +87,7 @@ def main():
         print(f"   " Model Size:          {model_size_kb:6.1f} KB")
 
         # Step 4: Benchmark inference
-        print(f"\n¡ Step 4: Benchmarking inference speed...")
+        print(f"\nï¿½ Step 4: Benchmarking inference speed...")
         print("-" * 70)
 
         test_features = features_list[0]
@@ -96,23 +96,23 @@ def main():
         print(f" Average inference time: {avg_time_ms:.2f}ms")
 
         if avg_time_ms < 5.0:
-            print(f"   <¯ Target: <5ms - ACHIEVED! ")
+            print(f"   <ï¿½ Target: <5ms - ACHIEVED! ")
         else:
-            print(f"      Target: <5ms - needs optimization")
+            print(f"   ï¿½  Target: <5ms - needs optimization")
 
         # Step 5: Feature importance
-        print(f"\n<¯ Step 5: Feature importance analysis...")
+        print(f"\n<ï¿½ Step 5: Feature importance analysis...")
         print("-" * 70)
 
         top_features = oracle.get_top_features(top_k=10)
         print(f"\nTop 10 Most Important Features:")
         for i, (feature, importance) in enumerate(top_features, 1):
             bar_length = int(importance / max(dict(top_features).values()) * 40)
-            bar = "ˆ" * bar_length
+            bar = "ï¿½" * bar_length
             print(f"   {i:2d}. {feature:25s} {bar} {importance:.1f}")
 
         # Step 6: Save model
-        print(f"\n=¾ Step 6: Saving model...")
+        print(f"\n=ï¿½ Step 6: Saving model...")
         print("-" * 70)
 
         model_path = Path(__file__).parent.parent / "models" / "neural_oracle_v1.pkl"
@@ -124,7 +124,7 @@ def main():
         print(f"   File size: {model_path.stat().st_size / 1024:.1f} KB")
 
         # Step 7: Validation test
-        print(f"\n>ê Step 7: Quick validation test...")
+        print(f"\n>ï¿½ Step 7: Quick validation test...")
         print("-" * 70)
 
         # Test on a few samples
@@ -143,7 +143,7 @@ def main():
         print("\n" + "="*70)
         print(" NEURAL ORACLE TRAINING COMPLETE!")
         print("="*70)
-        print("\n=Ë Next Steps:")
+        print("\n=ï¿½ Next Steps:")
         print("   1. Restart your backend server:")
         print("      uvicorn src.api.server:app --reload")
         print("\n   2. The neural oracle will automatically load on startup")
