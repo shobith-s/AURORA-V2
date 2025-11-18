@@ -63,6 +63,15 @@ class PreprocessResponse(BaseModel):
         None,
         description="Unique ID for this decision"
     )
+    # Phase 1: Enhanced features
+    enhanced_features: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Enhanced feature analysis (statistical tests, patterns, distribution)"
+    )
+    cache_info: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Cache hit information (level, similarity)"
+    )
 
     class Config:
         json_schema_extra = {
@@ -292,5 +301,71 @@ class BatchPreprocessResponse(BaseModel):
                         "neural": 1
                     }
                 }
+            }
+        }
+
+
+# Phase 1: New schemas for cache and drift detection
+
+class CacheStatsResponse(BaseModel):
+    """Response schema for cache statistics."""
+
+    total_queries: int = Field(..., description="Total cache queries")
+    l1_hits: int = Field(..., description="L1 (exact match) hits")
+    l2_hits: int = Field(..., description="L2 (similarity) hits")
+    l3_hits: int = Field(..., description="L3 (pattern) hits")
+    misses: int = Field(..., description="Cache misses")
+    hit_rate: float = Field(..., description="Overall hit rate (0-1)")
+    cache_size: int = Field(..., description="Current cache size")
+    pattern_rules: int = Field(..., description="Number of learned pattern rules")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "total_queries": 1000,
+                "l1_hits": 450,
+                "l2_hits": 120,
+                "l3_hits": 80,
+                "misses": 350,
+                "hit_rate": 0.65,
+                "cache_size": 650,
+                "pattern_rules": 5
+            }
+        }
+
+
+class DriftStatus(BaseModel):
+    """Drift status for a single column."""
+
+    column_name: str
+    drift_detected: bool
+    drift_score: float
+    severity: str  # 'none', 'low', 'medium', 'high', 'critical'
+    recommendation: str
+    p_value: float
+    test_used: str
+    changes: Dict[str, Any]
+    timestamp: float
+
+
+class DriftMonitoringResponse(BaseModel):
+    """Response schema for drift monitoring status."""
+
+    monitored_columns: int = Field(..., description="Number of columns being monitored")
+    columns_with_drift: int = Field(..., description="Number of columns with detected drift")
+    critical_columns: List[str] = Field(default=[], description="Columns with critical drift")
+    high_priority_columns: List[str] = Field(default=[], description="Columns with high drift")
+    requires_retraining: bool = Field(..., description="Whether model retraining is recommended")
+    drift_reports: List[DriftStatus] = Field(default=[], description="Detailed drift reports")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "monitored_columns": 10,
+                "columns_with_drift": 3,
+                "critical_columns": ["age"],
+                "high_priority_columns": ["income", "score"],
+                "requires_retraining": True,
+                "drift_reports": []
             }
         }

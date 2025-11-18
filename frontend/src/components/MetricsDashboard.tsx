@@ -1,15 +1,22 @@
 import { useEffect, useState } from 'react';
-import { Activity, Zap, Brain, BookOpen, Clock, TrendingUp } from 'lucide-react';
+import { Activity, Zap, Brain, BookOpen, Clock, TrendingUp, Database, AlertTriangle } from 'lucide-react';
 import axios from 'axios';
 import { LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 
 export default function MetricsDashboard() {
   const [metrics, setMetrics] = useState<any>(null);
   const [realtime, setRealtime] = useState<any>(null);
+  const [cacheStats, setCacheStats] = useState<any>(null);
+  const [driftStatus, setDriftStatus] = useState<any>(null);
 
   useEffect(() => {
     fetchMetrics();
-    const interval = setInterval(fetchRealtime, 2000);
+    fetchCacheStats();
+    fetchDriftStatus();
+    const interval = setInterval(() => {
+      fetchRealtime();
+      fetchCacheStats();
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -28,6 +35,24 @@ export default function MetricsDashboard() {
       setRealtime(response.data);
     } catch (error) {
       // Silently fail - realtime metrics are not critical
+    }
+  };
+
+  const fetchCacheStats = async () => {
+    try {
+      const response = await axios.get('/api/cache/stats');
+      setCacheStats(response.data);
+    } catch (error) {
+      // Silently fail - cache stats are not critical
+    }
+  };
+
+  const fetchDriftStatus = async () => {
+    try {
+      const response = await axios.get('/api/drift/status');
+      setDriftStatus(response.data);
+    } catch (error) {
+      // Silently fail - drift status is not critical
     }
   };
 
@@ -52,6 +77,14 @@ export default function MetricsDashboard() {
   }));
 
   const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b'];
+
+  // Cache level data for chart
+  const cacheData = cacheStats ? [
+    { name: 'L1 (Exact)', hits: cacheStats.l1_hits, fill: '#10b981' },
+    { name: 'L2 (Similar)', hits: cacheStats.l2_hits, fill: '#3b82f6' },
+    { name: 'L3 (Pattern)', hits: cacheStats.l3_hits, fill: '#8b5cf6' },
+    { name: 'Misses', hits: cacheStats.misses, fill: '#ef4444' }
+  ] : [];
 
   return (
     <div className="container mx-auto px-4 py-6 animate-in slide-in-from-top">
@@ -101,6 +134,124 @@ export default function MetricsDashboard() {
           <div className="text-xs text-slate-600">Avg Latency</div>
         </div>
       </div>
+
+      {/* Phase 1: Cache Statistics */}
+      {cacheStats && (
+        <div className="glass-card p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Database className="w-5 h-5 text-blue-600" />
+              <h3 className="font-bold text-slate-800">Intelligent Cache Performance</h3>
+            </div>
+            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+              cacheStats.hit_rate > 0.7 ? 'bg-green-100 text-green-700' :
+              cacheStats.hit_rate > 0.5 ? 'bg-yellow-100 text-yellow-700' :
+              'bg-red-100 text-red-700'
+            }`}>
+              {(cacheStats.hit_rate * 100).toFixed(1)}% Hit Rate
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+              <div className="text-2xl font-bold text-green-600">{cacheStats.l1_hits}</div>
+              <div className="text-xs text-green-700">L1 Exact Hits</div>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+              <div className="text-2xl font-bold text-blue-600">{cacheStats.l2_hits}</div>
+              <div className="text-xs text-blue-700">L2 Similar Hits</div>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+              <div className="text-2xl font-bold text-purple-600">{cacheStats.l3_hits}</div>
+              <div className="text-xs text-purple-700">L3 Pattern Hits</div>
+            </div>
+            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+              <div className="text-2xl font-bold text-slate-600">{cacheStats.cache_size}</div>
+              <div className="text-xs text-slate-700">Cache Size</div>
+            </div>
+          </div>
+
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart>
+              <Pie
+                data={cacheData}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                label={(entry) => `${entry.name}: ${entry.hits}`}
+                outerRadius={80}
+                dataKey="hits"
+              >
+                {cacheData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+
+          <div className="mt-4 text-center">
+            <p className="text-sm text-slate-600">
+              {cacheStats.pattern_rules} learned pattern rules •
+              {cacheStats.total_queries} total queries
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 1: Drift Monitoring Status */}
+      {driftStatus && driftStatus.monitored_columns > 0 && (
+        <div className="glass-card p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-yellow-600" />
+              <h3 className="font-bold text-slate-800">Data Drift Monitoring</h3>
+            </div>
+            {driftStatus.requires_retraining && (
+              <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                ⚠️ Retraining Recommended
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+              <div className="text-2xl font-bold text-slate-600">{driftStatus.monitored_columns}</div>
+              <div className="text-xs text-slate-700">Monitored Columns</div>
+            </div>
+            <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+              <div className="text-2xl font-bold text-yellow-600">{driftStatus.columns_with_drift}</div>
+              <div className="text-xs text-yellow-700">Columns with Drift</div>
+            </div>
+            <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+              <div className="text-2xl font-bold text-orange-600">{driftStatus.high_priority_columns.length}</div>
+              <div className="text-xs text-orange-700">High Priority</div>
+            </div>
+            <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+              <div className="text-2xl font-bold text-red-600">{driftStatus.critical_columns.length}</div>
+              <div className="text-xs text-red-700">Critical</div>
+            </div>
+          </div>
+
+          {(driftStatus.critical_columns.length > 0 || driftStatus.high_priority_columns.length > 0) && (
+            <div className="mt-4 space-y-2">
+              {driftStatus.critical_columns.length > 0 && (
+                <div className="bg-red-50 rounded-lg p-3 border border-red-200">
+                  <div className="text-sm font-medium text-red-700 mb-1">Critical Columns:</div>
+                  <div className="text-xs text-red-600">{driftStatus.critical_columns.join(', ')}</div>
+                </div>
+              )}
+              {driftStatus.high_priority_columns.length > 0 && (
+                <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                  <div className="text-sm font-medium text-orange-700 mb-1">High Priority Columns:</div>
+                  <div className="text-xs text-orange-600">{driftStatus.high_priority_columns.join(', ')}</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

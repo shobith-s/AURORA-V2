@@ -23,7 +23,10 @@ from .schemas import (
     HealthResponse,
     BatchPreprocessRequest,
     BatchPreprocessResponse,
-    AlternativeAction
+    AlternativeAction,
+    CacheStatsResponse,
+    DriftMonitoringResponse,
+    DriftStatus
 )
 from ..core.preprocessor import IntelligentPreprocessor, get_preprocessor
 from ..utils.monitor import get_monitor, PerformanceTimer
@@ -491,7 +494,7 @@ async def get_realtime_metrics():
     """Get real-time system metrics."""
     try:
         import psutil
-        
+
         return {
             "timestamp": time.time(),
             "cpu_percent": psutil.cpu_percent(interval=0.1),
@@ -505,4 +508,191 @@ async def get_realtime_metrics():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get realtime metrics: {str(e)}"
+        )
+
+
+# Phase 1: Cache and Drift Detection Endpoints
+
+@app.get("/cache/stats", response_model=CacheStatsResponse)
+async def get_cache_statistics():
+    """
+    Get intelligent cache statistics.
+
+    Returns cache hit rates, levels, and pattern rules.
+    """
+    try:
+        from ..features.intelligent_cache import get_cache
+
+        cache = get_cache()
+        stats = cache.get_stats()
+
+        return CacheStatsResponse(
+            total_queries=stats['total_queries'],
+            l1_hits=stats['l1_hits'],
+            l2_hits=stats['l2_hits'],
+            l3_hits=stats['l3_hits'],
+            misses=stats['misses'],
+            hit_rate=stats['hit_rate'],
+            cache_size=stats['cache_size'],
+            pattern_rules=stats['pattern_rules']
+        )
+    except Exception as e:
+        logger.error(f"Error getting cache statistics: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get cache statistics: {str(e)}"
+        )
+
+
+@app.post("/cache/clear")
+async def clear_cache():
+    """Clear the intelligent cache."""
+    try:
+        from ..features.intelligent_cache import clear_cache
+
+        clear_cache()
+        return {"message": "Cache cleared successfully"}
+    except Exception as e:
+        logger.error(f"Error clearing cache: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to clear cache: {str(e)}"
+        )
+
+
+@app.get("/drift/status", response_model=DriftMonitoringResponse)
+async def get_drift_status():
+    """
+    Get drift monitoring status for all tracked columns.
+
+    Returns drift detection results and retraining recommendations.
+    """
+    try:
+        from ..monitoring.drift_detector import get_drift_detector
+
+        detector = get_drift_detector()
+
+        # Get recent drift reports
+        drift_reports = []
+        critical_columns = []
+        high_priority_columns = []
+        columns_with_drift = 0
+
+        for col_name, profile in detector.reference_profiles.items():
+            # Find recent drift report for this column
+            recent_reports = [r for r in detector.drift_history
+                            if r.column_name == col_name]
+
+            if recent_reports:
+                latest = recent_reports[-1]
+
+                drift_status = DriftStatus(
+                    column_name=latest.column_name,
+                    drift_detected=latest.drift_detected,
+                    drift_score=latest.drift_score,
+                    severity=latest.severity,
+                    recommendation=latest.recommendation,
+                    p_value=latest.p_value,
+                    test_used=latest.test_used,
+                    changes=latest.changes,
+                    timestamp=latest.timestamp
+                )
+                drift_reports.append(drift_status)
+
+                if latest.drift_detected:
+                    columns_with_drift += 1
+
+                    if latest.severity == 'critical':
+                        critical_columns.append(col_name)
+                    elif latest.severity == 'high':
+                        high_priority_columns.append(col_name)
+
+        requires_retraining = len(critical_columns) > 0 or len(high_priority_columns) >= 3
+
+        return DriftMonitoringResponse(
+            monitored_columns=len(detector.reference_profiles),
+            columns_with_drift=columns_with_drift,
+            critical_columns=critical_columns,
+            high_priority_columns=high_priority_columns,
+            requires_retraining=requires_retraining,
+            drift_reports=drift_reports
+        )
+    except Exception as e:
+        logger.error(f"Error getting drift status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get drift status: {str(e)}"
+        )
+
+
+@app.post("/drift/set_reference")
+async def set_drift_reference(request: PreprocessRequest):
+    """
+    Set reference distribution for drift detection.
+
+    Args:
+        request: Column data to use as reference
+    """
+    try:
+        from ..monitoring.drift_detector import get_drift_detector
+
+        detector = get_drift_detector()
+        column_series = pd.Series(request.column_data)
+
+        detector.set_reference(
+            column_name=request.column_name,
+            column_data=column_series
+        )
+
+        return {
+            "message": f"Reference set for column '{request.column_name}'",
+            "column_name": request.column_name,
+            "sample_size": len(request.column_data)
+        }
+    except Exception as e:
+        logger.error(f"Error setting drift reference: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to set drift reference: {str(e)}"
+        )
+
+
+@app.post("/drift/check")
+async def check_drift(request: PreprocessRequest):
+    """
+    Check a column for drift against its reference.
+
+    Args:
+        request: Column data to check for drift
+
+    Returns:
+        Drift detection report
+    """
+    try:
+        from ..monitoring.drift_detector import get_drift_detector
+
+        detector = get_drift_detector()
+        column_series = pd.Series(request.column_data)
+
+        report = detector.detect_drift(
+            column_name=request.column_name,
+            new_data=column_series
+        )
+
+        return DriftStatus(
+            column_name=report.column_name,
+            drift_detected=report.drift_detected,
+            drift_score=report.drift_score,
+            severity=report.severity,
+            recommendation=report.recommendation,
+            p_value=report.p_value,
+            test_used=report.test_used,
+            changes=report.changes,
+            timestamp=report.timestamp
+        )
+    except Exception as e:
+        logger.error(f"Error checking drift: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to check drift: {str(e)}"
         )
