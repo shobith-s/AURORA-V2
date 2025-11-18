@@ -16,10 +16,7 @@ import numpy as np
 from datetime import datetime
 import json
 
-from src.data.generator import (
-    generate_synthetic_data,
-    SyntheticDataGenerator
-)
+from src.data.generator import SyntheticDataGenerator
 
 
 def save_dataset(data: pd.DataFrame, output_path: Path, metadata: dict = None):
@@ -63,14 +60,35 @@ def generate_basic_dataset(args):
     print("Generating Basic Dataset")
     print("="*70)
 
-    data = generate_synthetic_data(
-        num_rows=args.rows,
-        num_numeric=args.numeric,
-        num_categorical=args.categorical,
-        missing_rate=args.missing_rate,
-        add_outliers=args.add_outliers,
-        seed=args.seed
-    )
+    generator = SyntheticDataGenerator(seed=args.seed)
+
+    # Generate multiple columns with different characteristics
+    columns_dict = {}
+
+    # Generate numeric columns
+    for i in range(args.numeric):
+        if args.add_outliers and i % 3 == 0:
+            col = generator.generate_outlier_heavy(args.rows, outlier_ratio=0.1)
+        elif i % 3 == 1:
+            col = generator.generate_skewed_numeric(args.rows, skewness_target=2.0)
+        else:
+            col = generator.generate_normal_scaled(args.rows)
+        columns_dict[col.name or f'numeric_{i}'] = col.data
+
+    # Generate categorical columns
+    for i in range(args.categorical):
+        if i % 2 == 0:
+            col = generator.generate_low_cardinality_categorical(args.rows)
+        else:
+            col = generator.generate_high_cardinality_categorical(args.rows, n_categories=50)
+        columns_dict[col.name or f'categorical_{i}'] = col.data
+
+    data = pd.DataFrame(columns_dict)
+
+    # Add missing values if requested
+    if args.missing_rate > 0:
+        mask = np.random.random(data.shape) < args.missing_rate
+        data = data.mask(mask)
 
     metadata = {
         'type': 'basic',
@@ -94,66 +112,35 @@ def generate_edge_cases(args):
 
     generator = SyntheticDataGenerator(seed=args.seed)
 
-    # Generate various edge cases
-    edge_cases = []
+    # Use the built-in edge case dataset generator
+    print("\nGenerating comprehensive edge case dataset...")
+    data = generator.generate_edge_case_dataset(
+        n_samples_per_case=args.rows,
+        include_hard_cases=True
+    )
 
-    # 1. High missing rate columns
-    print("\nGenerating columns with high missing rates...")
-    for i in range(5):
-        col = generator.generate_numeric_column(1000, missing_rate=0.8)
-        edge_cases.append((f'high_missing_{i}', col))
-
-    # 2. Highly skewed columns
-    print("Generating highly skewed columns...")
-    for i in range(5):
-        col = generator.generate_skewed_numeric_column(1000, skewness=3.0)
-        edge_cases.append((f'high_skew_{i}', col))
-
-    # 3. High cardinality categorical
-    print("Generating high cardinality categorical columns...")
-    for i in range(3):
-        col = generator.generate_categorical_column(1000, num_categories=500)
-        edge_cases.append((f'high_cardinality_{i}', col))
-
-    # 4. Constant columns
-    print("Generating constant columns...")
-    for i in range(3):
-        col = pd.Series([42.0] * 1000)
-        edge_cases.append((f'constant_{i}', col))
-
-    # 5. Unique ID columns
-    print("Generating unique ID columns...")
-    for i in range(3):
-        col = pd.Series(range(1000))
-        edge_cases.append((f'unique_id_{i}', col))
-
-    # 6. Outlier-heavy columns
-    print("Generating outlier-heavy columns...")
-    for i in range(5):
-        col = generator.generate_outlier_column(1000, outlier_ratio=0.2)
-        edge_cases.append((f'outliers_{i}', col))
-
-    # Combine into DataFrame
-    data = pd.DataFrame({name: col for name, col in edge_cases})
+    # Print ground truth if available
+    if 'ground_truth' in data.attrs:
+        print("\nGenerated columns with ground truth labels:")
+        for col_name, action in data.attrs['ground_truth'].items():
+            difficulty = data.attrs['difficulties'].get(col_name, 'unknown')
+            description = data.attrs['descriptions'].get(col_name, '')
+            print(f"  {col_name}: {action.value} [{difficulty}]")
+            if description:
+                print(f"    → {description}")
 
     metadata = {
         'type': 'edge_cases',
         'generated_at': datetime.now().isoformat(),
-        'num_rows': 1000,
-        'num_columns': len(edge_cases),
-        'categories': [
-            'high_missing',
-            'high_skew',
-            'high_cardinality',
-            'constant',
-            'unique_id',
-            'outliers'
-        ],
-        'seed': args.seed
+        'num_rows': len(data),
+        'num_columns': len(data.columns),
+        'seed': args.seed,
+        'ground_truth': {k: v.value for k, v in data.attrs.get('ground_truth', {}).items()},
+        'difficulties': data.attrs.get('difficulties', {})
     }
 
     save_dataset(data, Path(args.output), metadata)
-    print(f"\nGenerated {len(edge_cases)} edge case columns")
+    print(f"\nGenerated {len(data.columns)} edge case columns with {len(data)} rows")
 
 
 def generate_realistic_dataset(args):
@@ -169,27 +156,36 @@ def generate_realistic_dataset(args):
     # User data
     print("\nGenerating user-related columns...")
     data['user_id'] = pd.Series(range(args.rows))
-    data['age'] = generator.generate_numeric_column(args.rows, mean=35, std=12, missing_rate=0.02)
-    data['gender'] = generator.generate_categorical_column(args.rows, num_categories=3)
-    data['country'] = generator.generate_categorical_column(args.rows, num_categories=50)
+    # Generate age with normal distribution
+    age_data = np.random.normal(35, 12, args.rows)
+    age_data = np.clip(age_data, 18, 100)  # Reasonable age range
+    mask = np.random.random(args.rows) < 0.02
+    age_series = pd.Series(age_data)
+    age_series[mask] = np.nan
+    data['age'] = age_series
+
+    # Generate categorical columns
+    data['gender'] = pd.Series(np.random.choice(['M', 'F', 'Other'], args.rows))
+    countries = [f'Country_{i}' for i in range(50)]
+    data['country'] = pd.Series(np.random.choice(countries, args.rows))
 
     # Transaction data
     print("Generating transaction columns...")
-    data['purchase_amount'] = generator.generate_skewed_numeric_column(args.rows, skewness=2.0)
-    data['transaction_count'] = generator.generate_numeric_column(args.rows, mean=15, std=10)
-    data['last_purchase_days'] = generator.generate_numeric_column(args.rows, mean=30, std=60)
+    data['purchase_amount'] = generator.generate_skewed_numeric(args.rows, skewness_target=2.0).data
+    data['transaction_count'] = pd.Series(np.abs(np.random.normal(15, 10, args.rows)).astype(int))
+    data['last_purchase_days'] = pd.Series(np.abs(np.random.normal(30, 60, args.rows)))
 
     # Engagement metrics
     print("Generating engagement metrics...")
-    data['login_count'] = generator.generate_numeric_column(args.rows, mean=20, std=15)
-    data['session_duration_min'] = generator.generate_skewed_numeric_column(args.rows, skewness=1.5)
-    data['pages_viewed'] = generator.generate_numeric_column(args.rows, mean=50, std=30)
+    data['login_count'] = pd.Series(np.abs(np.random.normal(20, 15, args.rows)).astype(int))
+    data['session_duration_min'] = generator.generate_skewed_numeric(args.rows, skewness_target=1.5).data
+    data['pages_viewed'] = pd.Series(np.abs(np.random.normal(50, 30, args.rows)).astype(int))
 
     # Features with issues
     print("Adding realistic data quality issues...")
-    data['incomplete_field'] = generator.generate_numeric_column(args.rows, missing_rate=0.4)
-    data['sparse_category'] = generator.generate_categorical_column(args.rows, num_categories=200)
-    data['outlier_metric'] = generator.generate_outlier_column(args.rows, outlier_ratio=0.1)
+    data['incomplete_field'] = generator.generate_mostly_null(args.rows, null_fraction=0.4).data
+    data['sparse_category'] = generator.generate_high_cardinality_categorical(args.rows, n_categories=200).data
+    data['outlier_metric'] = generator.generate_outlier_heavy(args.rows, outlier_ratio=0.1).data
 
     df = pd.DataFrame(data)
 
