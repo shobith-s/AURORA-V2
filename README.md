@@ -9,9 +9,10 @@ AURORA is a production-ready intelligent data preprocessing system that combines
 
 - **Three-Layer Architecture**: Symbolic rules (80%) + Neural oracle (20%) + Privacy-preserving learning
 - **Lightning Fast**: <100μs for most decisions via symbolic engine
-- **Privacy First**: Never stores raw data, uses differential privacy
+- **Privacy First**: Never stores raw data, uses differential privacy for pattern learning
 - **Self-Learning**: Learns generalizable patterns from user corrections
 - **Production Ready**: <50MB memory footprint, comprehensive error handling
+- **Real-time API**: RESTful API with interactive documentation
 
 ## 🏗️ Architecture
 

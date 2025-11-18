@@ -63,6 +63,13 @@ logs/
 .ipynb_checkpoints/
 *.ipynb
 
+# Frontend/Next.js
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+frontend/.turbo/
+frontend/dist/
+
 # mypy
 .mypy_cache/
 .dmypy.json
@@ -71,6 +78,11 @@ dmypy.json
 # Patterns
 patterns.json
 learned_patterns/
+
+# Benchmark and evaluation results
+benchmark_results/
+evaluation_results/
+cache/
 
 # Temporary files
 *.tmp
