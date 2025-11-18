@@ -1,6 +1,6 @@
 """
 Main Preprocessing Pipeline - Integrates all three layers.
-Symbolic Engine ’ NeuralOracle ’ Pattern Learner
+Symbolic Engine -> NeuralOracle -> Pattern Learner
 """
 
 from typing import Any, Dict, List, Optional, Union
@@ -135,7 +135,7 @@ class IntelligentPreprocessor:
                     decision_id=decision_id
                 )
 
-        # LAYER 2: Try symbolic engine (fast - <100¼s)
+        # LAYER 2: Try symbolic engine (fast - <100us)
         symbolic_result = self.symbolic_engine.evaluate(
             column, column_name, target_available
         )

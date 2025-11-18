@@ -263,8 +263,8 @@ class SymbolicEngine:
             stats.matches_json = self._check_json(sample_str)
 
             # Currency pattern
-            stats.has_currency_symbols = sample_str.str.contains(r'[$¬£¥]', regex=True).any()
-            stats.matches_currency_pattern = self._check_pattern(sample_str, r'^\$?\£?\¬?\d+[,\.]?\d*')
+            stats.has_currency_symbols = sample_str.str.contains(r'[$Â£â‚¬Â¥]', regex=True).any()
+            stats.matches_currency_pattern = self._check_pattern(sample_str, r'^\$?Â£?â‚¬?Â¥?\d+[,\.]?\d*')
 
             # Percentage
             stats.has_percentage_symbol = sample_str.str.contains('%').any()
