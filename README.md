@@ -161,8 +161,14 @@ black src/
 # Type checking
 mypy src/
 
-# Generate synthetic training data
+# Generate synthetic data (sample dataset by default)
 python scripts/generate_synthetic_data.py
+
+# Or generate specific dataset types:
+python scripts/generate_synthetic_data.py basic --rows 1000 --numeric 10
+python scripts/generate_synthetic_data.py edge-cases --rows 1000
+python scripts/generate_synthetic_data.py realistic --rows 5000
+python scripts/generate_synthetic_data.py training --samples 5000 --ambiguous-only
 
 # Train NeuralOracle
 python scripts/train_neural_oracle.py

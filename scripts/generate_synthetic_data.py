@@ -292,6 +292,7 @@ def main():
 
     # Edge cases
     edge_parser = subparsers.add_parser('edge-cases', help='Generate edge case dataset')
+    edge_parser.add_argument('--rows', type=int, default=1000, help='Number of rows per case')
 
     # Realistic dataset
     realistic_parser = subparsers.add_parser('realistic', help='Generate realistic dataset')
@@ -304,9 +305,20 @@ def main():
 
     args = parser.parse_args()
 
+    # If no command provided, generate a sample dataset by default
     if not args.command:
-        parser.print_help()
-        return 1
+        print("\nNo command specified. Generating sample dataset...")
+        print("(Use --help to see all available commands)\n")
+
+        # Create a mock args object for edge-cases with default values
+        class SampleArgs:
+            rows = 1000
+            seed = 42
+            output = './data/sample_dataset.csv'
+
+        sample_args = SampleArgs()
+        generate_edge_cases(sample_args)
+        return 0
 
     # Route to appropriate generator
     if args.command == 'basic':
