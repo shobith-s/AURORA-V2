@@ -211,8 +211,14 @@ async def batch_preprocess(request: BatchPreprocessRequest):
         results = {}
         total_confidence = 0.0
         source_breakdown = {}
+        processed_count = 0  # Columns that actually need preprocessing
 
         for col_name, result in results_dict.items():
+            # Skip columns that don't need preprocessing (action = "keep")
+            # These columns are already clean and should not be shown to the user
+            if result.action.value.lower() == 'keep':
+                continue
+
             alternatives = [
                 AlternativeAction(action=action.value, confidence=conf)
                 for action, conf in result.alternatives
@@ -230,11 +236,13 @@ async def batch_preprocess(request: BatchPreprocessRequest):
 
             total_confidence += result.confidence
             source_breakdown[result.source] = source_breakdown.get(result.source, 0) + 1
+            processed_count += 1
 
         # Create summary
         summary = {
-            "total_columns": len(results),
-            "avg_confidence": total_confidence / len(results) if results else 0.0,
+            "total_columns": len(results_dict),  # Total columns analyzed
+            "processed_columns": processed_count,  # Columns that need preprocessing
+            "avg_confidence": total_confidence / processed_count if processed_count > 0 else 0.0,
             "source_breakdown": source_breakdown
         }
 
