@@ -24,10 +24,15 @@ from .schemas import (
     AlternativeAction
 )
 from ..core.preprocessor import IntelligentPreprocessor, get_preprocessor
+from ..utils.monitor import get_monitor, PerformanceTimer
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Performance monitor
+monitor = get_monitor()
 
 # Create FastAPI app
 app = FastAPI(
@@ -124,12 +129,28 @@ async def preprocess_column(request: PreprocessRequest):
         Preprocessing recommendation with action, confidence, and explanation
     """
     try:
+        # Time the operation
+        start_time = time.time()
+
         # Process column
         result = preprocessor.preprocess_column(
             column=request.column_data,
             column_name=request.column_name,
             target_available=request.target_available,
             metadata=request.metadata
+        )
+
+        # Record metrics
+        latency_ms = (time.time() - start_time) * 1000
+        monitor.record_call('overall_pipeline', latency_ms, success=True)
+        monitor.record_decision(
+            decision_id=result.decision_id,
+            column_name=request.column_name,
+            action=result.action.value,
+            confidence=result.confidence,
+            source=result.source,
+            latency_ms=latency_ms,
+            num_rows=len(request.column_data)
         )
 
         # Cache decision for explanation endpoint
@@ -410,3 +431,68 @@ if __name__ == "__main__":
         reload=True,
         log_level="info"
     )
+
+
+@app.get("/metrics/performance")
+async def get_performance_metrics():
+    """Get detailed performance metrics for all components."""
+    try:
+        summary = monitor.get_summary()
+        return summary
+    except Exception as e:
+        logger.error(f"Error getting performance metrics: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get metrics: {str(e)}"
+        )
+
+
+@app.get("/metrics/decisions")
+async def get_recent_decisions(limit: int = 100):
+    """Get recent preprocessing decisions with metrics."""
+    try:
+        decisions = monitor.get_recent_decisions(limit=limit)
+        return {
+            "decisions": [
+                {
+                    "timestamp": d.timestamp,
+                    "decision_id": d.decision_id,
+                    "column_name": d.column_name,
+                    "action": d.action,
+                    "confidence": d.confidence,
+                    "source": d.source,
+                    "latency_ms": d.latency_ms,
+                    "num_rows": d.num_rows
+                }
+                for d in decisions
+            ],
+            "total": len(decisions)
+        }
+    except Exception as e:
+        logger.error(f"Error getting decisions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get decisions: {str(e)}"
+        )
+
+
+@app.get("/metrics/realtime")
+async def get_realtime_metrics():
+    """Get real-time system metrics."""
+    try:
+        import psutil
+        
+        return {
+            "timestamp": time.time(),
+            "cpu_percent": psutil.cpu_percent(interval=0.1),
+            "memory_percent": psutil.virtual_memory().percent,
+            "memory_used_gb": psutil.virtual_memory().used / (1024 ** 3),
+            "active_requests": len(decision_cache),
+            "recent_decisions": len(monitor.get_recent_decisions(limit=10))
+        }
+    except Exception as e:
+        logger.error(f"Error getting realtime metrics: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get realtime metrics: {str(e)}"
+        )
