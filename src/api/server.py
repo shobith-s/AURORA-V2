@@ -24,6 +24,8 @@ from .schemas import (
     HealthResponse,
     BatchPreprocessRequest,
     BatchPreprocessResponse,
+    ExecutePipelineRequest,
+    ExecutePipelineResponse,
     AlternativeAction,
     CacheStatsResponse,
     DriftMonitoringResponse,
@@ -508,6 +510,177 @@ async def batch_preprocess(request: BatchPreprocessRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Batch preprocessing failed: {str(e)}"
+        )
+
+
+@app.post("/execute", response_model=ExecutePipelineResponse)
+async def execute_pipeline(request: ExecutePipelineRequest):
+    """
+    Execute preprocessing pipeline on data.
+
+    Args:
+        request: Data and preprocessing actions to apply
+
+    Returns:
+        Processed data ready for download
+    """
+    try:
+        from sklearn.preprocessing import (
+            StandardScaler, MinMaxScaler, RobustScaler,
+            LabelEncoder, OneHotEncoder
+        )
+        from scipy.stats import boxcox
+        import warnings
+        warnings.filterwarnings('ignore')
+
+        # Convert to DataFrame
+        df = pd.DataFrame(request.columns)
+        processed_df = df.copy()
+        applied_actions = {}
+        skipped_columns = []
+        errors = {}
+
+        for col_name, action in request.actions.items():
+            if col_name not in df.columns:
+                skipped_columns.append(col_name)
+                continue
+
+            try:
+                column = df[col_name].copy()
+
+                # Skip if action is keep_as_is
+                if action.lower() in ['keep_as_is', 'keep']:
+                    applied_actions[col_name] = 'keep_as_is'
+                    continue
+
+                # Handle nulls first (if action is not about nulls)
+                if action not in ['fill_null_mean', 'fill_null_median', 'fill_null_mode']:
+                    # Drop rows with nulls for this column temporarily
+                    non_null_mask = column.notna()
+                    if non_null_mask.sum() == 0:
+                        errors[col_name] = "All values are null"
+                        continue
+                    column_clean = column[non_null_mask]
+                else:
+                    column_clean = column
+
+                # Apply preprocessing based on action
+                if action == 'standard_scale':
+                    scaler = StandardScaler()
+                    processed_df[col_name] = scaler.fit_transform(column_clean.values.reshape(-1, 1)).flatten()
+                    applied_actions[col_name] = action
+
+                elif action == 'minmax_scale':
+                    scaler = MinMaxScaler()
+                    processed_df[col_name] = scaler.fit_transform(column_clean.values.reshape(-1, 1)).flatten()
+                    applied_actions[col_name] = action
+
+                elif action == 'robust_scale':
+                    scaler = RobustScaler()
+                    processed_df[col_name] = scaler.fit_transform(column_clean.values.reshape(-1, 1)).flatten()
+                    applied_actions[col_name] = action
+
+                elif action == 'log_transform':
+                    # Ensure positive values
+                    if (column_clean > 0).all():
+                        processed_df[col_name] = np.log(column_clean)
+                        applied_actions[col_name] = action
+                    else:
+                        errors[col_name] = "Log transform requires all positive values"
+
+                elif action == 'log1p_transform':
+                    processed_df[col_name] = np.log1p(column_clean)
+                    applied_actions[col_name] = action
+
+                elif action == 'sqrt_transform':
+                    if (column_clean >= 0).all():
+                        processed_df[col_name] = np.sqrt(column_clean)
+                        applied_actions[col_name] = action
+                    else:
+                        errors[col_name] = "Sqrt transform requires non-negative values"
+
+                elif action == 'box_cox':
+                    if (column_clean > 0).all():
+                        transformed, _ = boxcox(column_clean)
+                        processed_df[col_name] = transformed
+                        applied_actions[col_name] = action
+                    else:
+                        errors[col_name] = "Box-Cox requires all positive values"
+
+                elif action == 'onehot_encode':
+                    # One-hot encoding creates multiple columns
+                    dummies = pd.get_dummies(column_clean, prefix=col_name)
+                    # Drop original column
+                    processed_df = processed_df.drop(columns=[col_name])
+                    # Add dummy columns
+                    for dummy_col in dummies.columns:
+                        processed_df[dummy_col] = dummies[dummy_col]
+                    applied_actions[col_name] = action
+
+                elif action == 'label_encode':
+                    encoder = LabelEncoder()
+                    processed_df[col_name] = encoder.fit_transform(column_clean.astype(str))
+                    applied_actions[col_name] = action
+
+                elif action == 'fill_null_mean':
+                    if pd.api.types.is_numeric_dtype(column):
+                        processed_df[col_name] = column.fillna(column.mean())
+                        applied_actions[col_name] = action
+                    else:
+                        errors[col_name] = "Mean imputation requires numeric column"
+
+                elif action == 'fill_null_median':
+                    if pd.api.types.is_numeric_dtype(column):
+                        processed_df[col_name] = column.fillna(column.median())
+                        applied_actions[col_name] = action
+                    else:
+                        errors[col_name] = "Median imputation requires numeric column"
+
+                elif action == 'fill_null_mode':
+                    mode_value = column.mode()[0] if not column.mode().empty else None
+                    if mode_value is not None:
+                        processed_df[col_name] = column.fillna(mode_value)
+                        applied_actions[col_name] = action
+                    else:
+                        errors[col_name] = "No mode value found"
+
+                elif action == 'drop_column':
+                    processed_df = processed_df.drop(columns=[col_name])
+                    applied_actions[col_name] = action
+
+                else:
+                    skipped_columns.append(col_name)
+                    errors[col_name] = f"Unknown action: {action}"
+
+            except Exception as e:
+                logger.error(f"Error processing column {col_name} with action {action}: {e}")
+                errors[col_name] = str(e)
+                skipped_columns.append(col_name)
+
+        # Convert DataFrame to dictionary of lists
+        processed_data = {}
+        for col in processed_df.columns:
+            # Convert to native Python types
+            values = processed_df[col].tolist()
+            processed_data[col] = convert_to_json_serializable(values)
+
+        response = ExecutePipelineResponse(
+            success=len(errors) == 0,
+            processed_data=processed_data,
+            applied_actions=applied_actions,
+            skipped_columns=skipped_columns,
+            errors=errors
+        )
+
+        return JSONResponse(content=jsonable_encoder(response))
+
+    except Exception as e:
+        import traceback
+        logger.error(f"Error executing pipeline: {e}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Pipeline execution failed: {str(e)}"
         )
 
 

@@ -251,6 +251,66 @@ class HealthResponse(BaseModel):
         }
 
 
+class ExecutePipelineRequest(BaseModel):
+    """Request schema for executing preprocessing pipeline."""
+
+    columns: Dict[str, List[Any]] = Field(
+        ...,
+        description="Dictionary mapping column names to data"
+    )
+    actions: Dict[str, str] = Field(
+        ...,
+        description="Dictionary mapping column names to preprocessing actions"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "columns": {
+                    "age": [25, 30, 35, 40, 45],
+                    "revenue": [1000, 2000, 15000, 3000, 4000],
+                    "category": ["A", "B", "A", "C", "B"]
+                },
+                "actions": {
+                    "age": "standard_scale",
+                    "revenue": "log_transform",
+                    "category": "onehot_encode"
+                }
+            }
+        }
+
+
+class ExecutePipelineResponse(BaseModel):
+    """Response schema for pipeline execution."""
+
+    success: bool = Field(..., description="Whether pipeline executed successfully")
+    processed_data: Dict[str, List[Any]] = Field(..., description="Processed column data")
+    applied_actions: Dict[str, str] = Field(..., description="Actions that were applied")
+    skipped_columns: List[str] = Field(default=[], description="Columns that were skipped")
+    errors: Dict[str, str] = Field(default={}, description="Errors per column if any")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "processed_data": {
+                    "age": [-1.2, -0.4, 0.4, 1.2, 2.0],
+                    "revenue": [6.9, 7.6, 9.6, 8.0, 8.3],
+                    "category_A": [1, 0, 1, 0, 0],
+                    "category_B": [0, 1, 0, 0, 1],
+                    "category_C": [0, 0, 0, 1, 0]
+                },
+                "applied_actions": {
+                    "age": "standard_scale",
+                    "revenue": "log_transform",
+                    "category": "onehot_encode"
+                },
+                "skipped_columns": [],
+                "errors": {}
+            }
+        }
+
+
 class BatchPreprocessRequest(BaseModel):
     """Request schema for batch preprocessing."""
 

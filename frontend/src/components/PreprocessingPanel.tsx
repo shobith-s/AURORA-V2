@@ -57,6 +57,8 @@ export default function PreprocessingPanel() {
   const [correctActions, setCorrectActions] = useState<Record<string, string>>({});
   const [isSubmittingCorrection, setIsSubmittingCorrection] = useState<Record<string, boolean>>({});
   const [expandedHealthColumn, setExpandedHealthColumn] = useState<string | null>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [originalData, setOriginalData] = useState<Record<string, any[]> | null>(null);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -117,6 +119,9 @@ export default function PreprocessingPanel() {
       const text = await selectedFile.text();
       const columns = parseCSV(text);
 
+      // Store original data for pipeline execution
+      setOriginalData(columns);
+
       const response = await axios.post('/api/batch', {
         columns,
         target_column: null
@@ -129,6 +134,89 @@ export default function PreprocessingPanel() {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleExecutePipeline = async () => {
+    if (!batchResults || !originalData) {
+      toast.error('No data to process');
+      return;
+    }
+
+    setIsExecuting(true);
+    try {
+      // Build actions map from results
+      const actions: Record<string, string> = {};
+      Object.entries(batchResults.results).forEach(([colName, result]: [string, any]) => {
+        actions[colName] = result.action;
+      });
+
+      const response = await axios.post('/api/execute', {
+        columns: originalData,
+        actions
+      });
+
+      const data = response.data;
+
+      if (!data.success) {
+        const errorCount = Object.keys(data.errors).length;
+        toast.error(`Pipeline completed with ${errorCount} errors. Check console for details.`);
+        console.error('Pipeline errors:', data.errors);
+      } else {
+        toast.success('Pipeline executed successfully!');
+      }
+
+      // Convert to CSV and download
+      downloadCSV(data.processed_data);
+
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Failed to execute pipeline');
+      console.error('Pipeline execution error:', error);
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const downloadCSV = (data: Record<string, any[]>) => {
+    // Convert data to CSV format
+    const columns = Object.keys(data);
+    if (columns.length === 0) {
+      toast.error('No data to download');
+      return;
+    }
+
+    const rowCount = data[columns[0]].length;
+
+    // Create CSV header
+    let csv = columns.join(',') + '\n';
+
+    // Create CSV rows
+    for (let i = 0; i < rowCount; i++) {
+      const row = columns.map(col => {
+        const value = data[col][i];
+        // Handle null/undefined
+        if (value === null || value === undefined) return '';
+        // Escape values with commas or quotes
+        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+          return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      });
+      csv += row.join(',') + '\n';
+    }
+
+    // Create blob and download
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'processed_data.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast.success('File downloaded successfully!');
   };
 
   const handlePreprocess = async () => {
@@ -427,6 +515,31 @@ export default function PreprocessingPanel() {
                 </p>
               </div>
             )}
+
+            {/* Execute Pipeline Button */}
+            <div className="flex justify-center">
+              <button
+                onClick={handleExecutePipeline}
+                disabled={isExecuting}
+                className="btn-primary flex items-center gap-3 px-8 py-4 text-lg"
+              >
+                {isExecuting ? (
+                  <>
+                    <div className="loading-dots flex gap-1">
+                      <span className="w-2 h-2 bg-white rounded-full"></span>
+                      <span className="w-2 h-2 bg-white rounded-full"></span>
+                      <span className="w-2 h-2 bg-white rounded-full"></span>
+                    </div>
+                    Processing & Downloading...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-6 h-6" />
+                    Execute Pipeline & Download Results
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Data Health Dashboard */}
