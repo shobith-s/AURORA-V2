@@ -18,7 +18,7 @@ export default function MetricsDashboard() {
       const response = await axios.get('/api/metrics/performance');
       setMetrics(response.data);
     } catch (error) {
-      console.error('Failed to fetch metrics:', error);
+      // Silently fail - metrics are not critical
     }
   };
 
@@ -27,7 +27,7 @@ export default function MetricsDashboard() {
       const response = await axios.get('/api/metrics/realtime');
       setRealtime(response.data);
     } catch (error) {
-      console.error('Failed to fetch realtime metrics:', error);
+      // Silently fail - realtime metrics are not critical
     }
   };
 
