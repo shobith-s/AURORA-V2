@@ -169,8 +169,30 @@ class MultiLevelCache:
 
     def _hash_features(self, features_dict: Dict) -> str:
         """Create hash from features for exact matching."""
+
+        # Convert numpy types to native Python types for JSON serialization
+        def convert_for_json(obj):
+            """Convert numpy types to native Python types."""
+            if isinstance(obj, dict):
+                return {k: convert_for_json(v) for k, v in obj.items()}
+            elif isinstance(obj, (list, tuple)):
+                return [convert_for_json(item) for item in obj]
+            elif isinstance(obj, np.bool_):
+                return bool(obj)
+            elif isinstance(obj, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64)):
+                return int(obj)
+            elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return convert_for_json(obj.tolist())
+            else:
+                return obj
+
+        # Convert features to JSON-serializable format
+        json_safe_features = convert_for_json(features_dict)
+
         # Sort keys for consistent hashing
-        feature_str = json.dumps(features_dict, sort_keys=True)
+        feature_str = json.dumps(json_safe_features, sort_keys=True)
         return hashlib.md5(feature_str.encode()).hexdigest()
 
     def _find_similar(self, query_features: np.ndarray,
