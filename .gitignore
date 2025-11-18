@@ -72,6 +72,11 @@ dmypy.json
 patterns.json
 learned_patterns/
 
+# Benchmark and evaluation results
+benchmark_results/
+evaluation_results/
+cache/
+
 # Temporary files
 *.tmp
 *.bak

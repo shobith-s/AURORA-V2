@@ -1,6 +1,6 @@
 """
 Action definitions for AURORA preprocessing system.
-Defines all possible preprocessing actions with their metadata.
+Defines all possible preprocessing actions with their metadata and categories.
 """
 
 from enum import Enum
