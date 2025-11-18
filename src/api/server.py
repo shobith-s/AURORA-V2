@@ -201,6 +201,9 @@ async def batch_preprocess(request: BatchPreprocessRequest):
         Preprocessing recommendations for all columns
     """
     try:
+        # Time the operation
+        start_time = time.time()
+
         # Convert to DataFrame
         df = pd.DataFrame(request.columns)
 
@@ -210,6 +213,10 @@ async def batch_preprocess(request: BatchPreprocessRequest):
             target_column=request.target_column
         )
 
+        # Record overall pipeline latency
+        batch_latency_ms = (time.time() - start_time) * 1000
+        monitor.record_call('overall_pipeline', batch_latency_ms, success=True)
+
         # Convert results to response format
         results = {}
         total_confidence = 0.0
@@ -217,6 +224,17 @@ async def batch_preprocess(request: BatchPreprocessRequest):
         processed_count = 0  # Columns that actually need preprocessing
 
         for col_name, result in results_dict.items():
+            # Record decision in monitor (for all columns, not just those that need preprocessing)
+            monitor.record_decision(
+                decision_id=result.decision_id,
+                column_name=col_name,
+                action=result.action.value,
+                confidence=result.confidence,
+                source=result.source,
+                latency_ms=batch_latency_ms / len(results_dict),  # Approximate per-column latency
+                num_rows=len(df)
+            )
+
             # Skip columns that don't need preprocessing (action = "keep")
             # These columns are already clean and should not be shown to the user
             if result.action.value.lower() == 'keep':
@@ -450,8 +468,29 @@ if __name__ == "__main__":
 async def get_performance_metrics():
     """Get detailed performance metrics for all components."""
     try:
+        # Get monitor stats (real-time performance tracking)
         summary = monitor.get_summary()
-        return summary
+
+        # Get preprocessor stats (decision statistics and learning)
+        preprocessor_stats = preprocessor.get_statistics()
+
+        # Merge both sources - monitor stats take precedence for overlapping keys
+        # but we add preprocessor-specific stats like learning
+        merged_stats = {
+            **summary,
+            'overview': {
+                **summary.get('overview', {}),
+                # Add total_decisions from preprocessor if monitor is empty
+                'total_decisions': summary.get('overview', {}).get('total_decisions', 0) or preprocessor_stats.get('total_decisions', 0)
+            },
+            'learning': preprocessor_stats.get('learning', {
+                'learned_rules': 0,
+                'total_corrections': 0,
+                'pattern_clusters': 0
+            })
+        }
+
+        return merged_stats
     except Exception as e:
         logger.error(f"Error getting performance metrics: {e}")
         raise HTTPException(
