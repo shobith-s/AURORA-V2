@@ -31,6 +31,7 @@ from .schemas import (
 from ..core.preprocessor import IntelligentPreprocessor, get_preprocessor
 from ..utils.monitor import get_monitor, PerformanceTimer
 import time
+import numpy as np
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -63,6 +64,32 @@ preprocessor: IntelligentPreprocessor = None
 # Decision cache (for explanations)
 decision_cache: Dict[str, Dict[str, Any]] = {}
 MAX_CACHE_SIZE = 1000
+
+
+def convert_to_json_serializable(obj: Any) -> Any:
+    """
+    Convert numpy types and other non-JSON-serializable types to native Python types.
+
+    Args:
+        obj: Object to convert
+
+    Returns:
+        JSON-serializable version of the object
+    """
+    if isinstance(obj, dict):
+        return {k: convert_to_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_to_json_serializable(item) for item in obj]
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64)):
+        return int(obj)
+    elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return convert_to_json_serializable(obj.tolist())
+    else:
+        return obj
 
 
 @app.on_event("startup")
@@ -167,17 +194,23 @@ async def preprocess_column(request: PreprocessRequest):
 
         # Convert to response format
         alternatives = [
-            AlternativeAction(action=action.value, confidence=conf)
+            AlternativeAction(
+                action=action.value,
+                confidence=float(conf) if isinstance(conf, (np.floating, np.float_)) else conf
+            )
             for action, conf in result.alternatives
         ]
 
+        # Convert parameters to JSON-serializable types
+        json_safe_parameters = convert_to_json_serializable(result.parameters)
+
         return PreprocessResponse(
             action=result.action.value,
-            confidence=result.confidence,
+            confidence=float(result.confidence),
             source=result.source,
             explanation=result.explanation,
             alternatives=alternatives,
-            parameters=result.parameters,
+            parameters=json_safe_parameters,
             decision_id=result.decision_id
         )
 
@@ -240,22 +273,29 @@ async def batch_preprocess(request: BatchPreprocessRequest):
             if result.action.value.lower() == 'keep':
                 continue
 
+            # Convert alternatives to JSON-serializable format
             alternatives = [
-                AlternativeAction(action=action.value, confidence=conf)
+                AlternativeAction(
+                    action=action.value,
+                    confidence=float(conf) if isinstance(conf, (np.floating, np.float_)) else conf
+                )
                 for action, conf in result.alternatives
             ]
 
+            # Convert parameters to JSON-serializable types
+            json_safe_parameters = convert_to_json_serializable(result.parameters)
+
             results[col_name] = PreprocessResponse(
                 action=result.action.value,
-                confidence=result.confidence,
+                confidence=float(result.confidence),
                 source=result.source,
                 explanation=result.explanation,
                 alternatives=alternatives,
-                parameters=result.parameters,
+                parameters=json_safe_parameters,
                 decision_id=result.decision_id
             )
 
-            total_confidence += result.confidence
+            total_confidence += float(result.confidence)
             source_breakdown[result.source] = source_breakdown.get(result.source, 0) + 1
             processed_count += 1
 
@@ -335,19 +375,26 @@ async def explain_decision(decision_id: str):
     cached = decision_cache[decision_id]
     result = cached["result"]
 
+    # Convert alternatives to JSON-serializable format
     alternatives = [
-        AlternativeAction(action=action.value, confidence=conf)
+        AlternativeAction(
+            action=action.value,
+            confidence=float(conf) if isinstance(conf, (np.floating, np.float_)) else conf
+        )
         for action, conf in result.alternatives
     ]
+
+    # Convert context to JSON-serializable types
+    json_safe_context = convert_to_json_serializable(result.context) if result.context else None
 
     return ExplanationResponse(
         decision_id=decision_id,
         action=result.action.value,
-        confidence=result.confidence,
+        confidence=float(result.confidence),
         source=result.source,
         explanation=result.explanation,
         alternatives=alternatives,
-        context=result.context
+        context=json_safe_context
     )
 
 
