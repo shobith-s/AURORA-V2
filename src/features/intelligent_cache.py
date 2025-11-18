@@ -172,16 +172,16 @@ class MultiLevelCache:
 
         # Convert numpy types to native Python types for JSON serialization
         def convert_for_json(obj):
-            """Convert numpy types to native Python types."""
+            """Convert numpy types to native Python types (NumPy 2.0 compatible)."""
             if isinstance(obj, dict):
                 return {k: convert_for_json(v) for k, v in obj.items()}
             elif isinstance(obj, (list, tuple)):
                 return [convert_for_json(item) for item in obj]
             elif isinstance(obj, np.bool_):
                 return bool(obj)
-            elif isinstance(obj, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64)):
+            elif isinstance(obj, (np.integer,)):  # Abstract base class for all numpy ints
                 return int(obj)
-            elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+            elif isinstance(obj, (np.floating,)):  # Abstract base class for all numpy floats
                 return float(obj)
             elif isinstance(obj, np.ndarray):
                 return convert_for_json(obj.tolist())
