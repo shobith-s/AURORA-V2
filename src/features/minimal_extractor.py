@@ -343,7 +343,7 @@ class MinimalFeatureExtractor:
             r'\d+\.\d+',  # Decimal
             r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',  # Email
             r'https?://',  # URL
-            r'[$¬£¥]',  # Currency
+            r'[$Â£â‚¬Â¥]',  # Currency symbols
             r'%',  # Percentage
             r'\(\d{3}\)',  # Phone
         ]
