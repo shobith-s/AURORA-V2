@@ -63,6 +63,13 @@ logs/
 .ipynb_checkpoints/
 *.ipynb
 
+# Frontend/Next.js
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+frontend/.turbo/
+frontend/dist/
+
 # mypy
 .mypy_cache/
 .dmypy.json
