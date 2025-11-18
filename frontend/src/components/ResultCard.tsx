@@ -1,4 +1,4 @@
-import { TrendingUp, Target, Clock, Sparkles, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { TrendingUp, Target, Clock, Sparkles, ThumbsUp, ThumbsDown, Edit2 } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -66,16 +66,25 @@ export default function ResultCard({ result }: ResultCardProps) {
 
       {/* Main Action */}
       <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 border border-blue-100">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
-            <Sparkles className="w-6 h-6 text-blue-600" />
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm text-slate-600">Recommended Action</p>
+              <h4 className="text-2xl font-bold gradient-text">
+                {result.action.replace(/_/g, ' ').toUpperCase()}
+              </h4>
+            </div>
           </div>
-          <div>
-            <p className="text-sm text-slate-600">Recommended Action</p>
-            <h4 className="text-2xl font-bold gradient-text">
-              {result.action.replace(/_/g, ' ').toUpperCase()}
-            </h4>
-          </div>
+          <button
+            onClick={() => setShowCorrection(!showCorrection)}
+            className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-blue-50 text-blue-600 rounded-lg text-sm font-medium border border-blue-200 transition"
+          >
+            <Edit2 className="w-4 h-4" />
+            Override
+          </button>
         </div>
         <p className="text-sm text-slate-700">{result.explanation}</p>
       </div>
@@ -161,26 +170,46 @@ export default function ResultCard({ result }: ResultCardProps) {
           </div>
         </div>
 
-        {/* Correction Form */}
+        {/* Override/Correction Form */}
         {showCorrection && (
-          <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200 animate-in slide-in-from-top">
-            <p className="text-sm font-medium text-yellow-800 mb-3">
-              Help AURORA learn! What's the correct action?
-            </p>
+          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 animate-in slide-in-from-top mt-3">
+            <div className="flex items-start gap-2 mb-3">
+              <Edit2 className="w-5 h-5 text-blue-600 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-blue-800">Override Recommendation</p>
+                <p className="text-xs text-blue-600 mt-0.5">
+                  Provide the correct action and help AURORA learn from your expertise
+                </p>
+              </div>
+            </div>
             <div className="flex gap-2">
-              <input
-                type="text"
+              <select
                 value={correctAction}
                 onChange={(e) => setCorrectAction(e.target.value)}
-                placeholder="e.g., robust_scale"
-                className="flex-1 px-3 py-2 rounded-lg border border-yellow-300 text-sm"
-              />
+                className="flex-1 px-3 py-2 rounded-lg border border-blue-300 text-sm bg-white"
+              >
+                <option value="">-- Select Action --</option>
+                <option value="keep">Keep (No preprocessing)</option>
+                <option value="standard_scale">Standard Scale</option>
+                <option value="min_max_scale">Min-Max Scale</option>
+                <option value="robust_scale">Robust Scale</option>
+                <option value="log_transform">Log Transform</option>
+                <option value="box_cox">Box-Cox Transform</option>
+                <option value="yeo_johnson">Yeo-Johnson Transform</option>
+                <option value="one_hot_encode">One-Hot Encode</option>
+                <option value="label_encode">Label Encode</option>
+                <option value="target_encode">Target Encode</option>
+                <option value="fill_null_mean">Fill Nulls (Mean)</option>
+                <option value="fill_null_median">Fill Nulls (Median)</option>
+                <option value="fill_null_mode">Fill Nulls (Mode)</option>
+                <option value="drop_column">Drop Column</option>
+              </select>
               <button
                 onClick={handleCorrection}
-                disabled={isSubmitting}
-                className="px-4 py-2 bg-yellow-600 text-white rounded-lg text-sm font-medium hover:bg-yellow-700 transition"
+                disabled={isSubmitting || !correctAction}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Submit
+                {isSubmitting ? 'Submitting...' : 'Apply Override'}
               </button>
             </div>
           </div>

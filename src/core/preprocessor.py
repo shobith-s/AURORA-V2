@@ -14,6 +14,7 @@ from ..symbolic.engine import SymbolicEngine
 from ..neural.oracle import NeuralOracle, get_neural_oracle
 from ..learning.pattern_learner import LocalPatternLearner
 from ..features.minimal_extractor import MinimalFeatureExtractor, get_feature_extractor
+from ..features.intelligent_cache import get_cache
 from .actions import PreprocessingAction, PreprocessingResult
 
 
@@ -30,7 +31,8 @@ class IntelligentPreprocessor:
         confidence_threshold: float = 0.9,
         use_neural_oracle: bool = True,
         enable_learning: bool = True,
-        neural_model_path: Optional[Path] = None
+        neural_model_path: Optional[Path] = None,
+        enable_cache: bool = True
     ):
         """
         Initialize the intelligent preprocessor.
@@ -40,15 +42,18 @@ class IntelligentPreprocessor:
             use_neural_oracle: Whether to use neural oracle for low-confidence cases
             enable_learning: Whether to enable pattern learning
             neural_model_path: Path to neural oracle model
+            enable_cache: Whether to enable intelligent caching
         """
         self.confidence_threshold = confidence_threshold
         self.use_neural_oracle = use_neural_oracle
         self.enable_learning = enable_learning
+        self.enable_cache = enable_cache
 
         # Initialize components
         self.symbolic_engine = SymbolicEngine(confidence_threshold=confidence_threshold)
         self.pattern_learner = LocalPatternLearner() if enable_learning else None
         self.feature_extractor = get_feature_extractor()
+        self.cache = get_cache() if enable_cache else None
 
         # Initialize neural oracle (lazy loading)
         self._neural_oracle: Optional[NeuralOracle] = None
@@ -61,6 +66,7 @@ class IntelligentPreprocessor:
             'symbolic_decisions': 0,
             'neural_decisions': 0,
             'high_confidence_decisions': 0,
+            'cache_hits': 0,
             'total_time_ms': 0.0
         }
 
@@ -108,6 +114,34 @@ class IntelligentPreprocessor:
         # Generate decision ID
         decision_id = str(uuid.uuid4())
 
+        # LAYER 0: Check intelligent cache (ultra-fast - <0.1ms for L1 hits)
+        if self.enable_cache and self.cache:
+            # Compute stats for cache lookup
+            stats = self.symbolic_engine.compute_column_statistics(
+                column, column_name, target_available
+            )
+            stats_dict = stats.to_dict()
+
+            # Check cache
+            cached_decision, cache_level = self.cache.get(stats_dict, column_name)
+            if cached_decision:
+                self.stats['cache_hits'] += 1
+                self.stats['high_confidence_decisions'] += 1
+
+                elapsed_ms = (time.time() - start_time) * 1000
+                self.stats['total_time_ms'] += elapsed_ms
+
+                return PreprocessingResult(
+                    action=cached_decision,
+                    confidence=0.98,  # Very high confidence for cached decisions
+                    source='learned',
+                    explanation=f"Cached decision from {cache_level} (previously seen similar column)",
+                    alternatives=[],
+                    parameters={},
+                    context=stats_dict,
+                    decision_id=decision_id
+                )
+
         # LAYER 1: Check learned patterns first (fastest - <1ms)
         if self.enable_learning and self.pattern_learner:
             # We need column stats for pattern matching
@@ -123,6 +157,10 @@ class IntelligentPreprocessor:
 
                 elapsed_ms = (time.time() - start_time) * 1000
                 self.stats['total_time_ms'] += elapsed_ms
+
+                # Update cache with learned decision
+                if self.enable_cache and self.cache:
+                    self.cache.set(stats_dict, learned_action, column_name)
 
                 return PreprocessingResult(
                     action=learned_action,
@@ -147,6 +185,10 @@ class IntelligentPreprocessor:
 
             elapsed_ms = (time.time() - start_time) * 1000
             self.stats['total_time_ms'] += elapsed_ms
+
+            # Update cache with symbolic decision
+            if self.enable_cache and self.cache and symbolic_result.context:
+                self.cache.set(symbolic_result.context, symbolic_result.action, column_name)
 
             symbolic_result.decision_id = decision_id
             return symbolic_result
@@ -187,6 +229,10 @@ class IntelligentPreprocessor:
                     key=lambda x: x[1],
                     reverse=True
                 )[:3]
+
+                # Update cache with neural decision
+                if self.enable_cache and self.cache and symbolic_result.context:
+                    self.cache.set(symbolic_result.context, action, column_name)
 
                 return PreprocessingResult(
                     action=action,
@@ -377,6 +423,7 @@ class IntelligentPreprocessor:
             'symbolic_decisions': 0,
             'neural_decisions': 0,
             'high_confidence_decisions': 0,
+            'cache_hits': 0,
             'total_time_ms': 0.0
         }
         self.symbolic_engine.reset_stats()

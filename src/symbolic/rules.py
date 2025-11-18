@@ -91,14 +91,21 @@ def create_data_quality_rules() -> List[Rule]:
         priority=90
     ))
 
-    # Rule 4: Remove duplicates
+    # Rule 4: Remove duplicates (CONSERVATIVE - only for extreme cases)
+    # Only trigger when column has >70% duplicates AND very low cardinality
+    # This avoids false positives on categorical columns with natural duplicates
     rules.append(Rule(
         name="REMOVE_DUPLICATES",
         category=RuleCategory.DATA_QUALITY,
         action=PreprocessingAction.REMOVE_DUPLICATES,
-        condition=lambda stats: stats.get("duplicate_ratio", 0) > 0.1,
-        confidence_fn=lambda stats: min(0.95, 0.7 + stats.get("duplicate_ratio", 0) * 0.25),
-        explanation_fn=lambda stats: f"Column has {stats.get('duplicate_ratio', 0):.1%} duplicate values",
+        condition=lambda stats: (
+            stats.get("duplicate_ratio", 0) > 0.7 and
+            stats.get("unique_ratio", 1.0) < 0.1 and
+            not stats.get("is_categorical", False) and
+            stats.get("row_count", 0) > 100
+        ),
+        confidence_fn=lambda stats: min(0.85, 0.6 + stats.get("duplicate_ratio", 0) * 0.25),
+        explanation_fn=lambda stats: f"Column has excessive duplicates ({stats.get('duplicate_ratio', 0):.1%}) with very low cardinality",
         priority=85
     ))
 
