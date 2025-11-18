@@ -8,6 +8,7 @@ __version__ = "1.0.0"
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 import pandas as pd
 from pathlib import Path
 from typing import Dict, Any
@@ -204,15 +205,20 @@ async def preprocess_column(request: PreprocessRequest):
         # Convert parameters to JSON-serializable types
         json_safe_parameters = convert_to_json_serializable(result.parameters)
 
-        return PreprocessResponse(
+        response = PreprocessResponse(
             action=result.action.value,
             confidence=float(result.confidence),
             source=result.source,
             explanation=result.explanation,
             alternatives=alternatives,
             parameters=json_safe_parameters,
-            decision_id=result.decision_id
+            decision_id=result.decision_id,
+            enhanced_features=None,  # Phase 1 field - not yet implemented
+            cache_info=None  # Phase 1 field - not yet implemented
         )
+
+        # Use FastAPI's jsonable_encoder to ensure ALL types are JSON-safe
+        return JSONResponse(content=jsonable_encoder(response))
 
     except Exception as e:
         logger.error(f"Error preprocessing column: {e}")
@@ -285,6 +291,7 @@ async def batch_preprocess(request: BatchPreprocessRequest):
             # Convert parameters to JSON-serializable types
             json_safe_parameters = convert_to_json_serializable(result.parameters)
 
+            # Create response with all fields explicitly set and converted
             results[col_name] = PreprocessResponse(
                 action=result.action.value,
                 confidence=float(result.confidence),
@@ -292,28 +299,40 @@ async def batch_preprocess(request: BatchPreprocessRequest):
                 explanation=result.explanation,
                 alternatives=alternatives,
                 parameters=json_safe_parameters,
-                decision_id=result.decision_id
+                decision_id=result.decision_id,
+                enhanced_features=None,  # Phase 1 field - not yet implemented
+                cache_info=None  # Phase 1 field - not yet implemented
             )
 
             total_confidence += float(result.confidence)
             source_breakdown[result.source] = source_breakdown.get(result.source, 0) + 1
             processed_count += 1
 
-        # Create summary
+        # Create summary - ensure all values are JSON-serializable
         summary = {
-            "total_columns": len(results_dict),  # Total columns analyzed
-            "processed_columns": processed_count,  # Columns that need preprocessing
-            "avg_confidence": total_confidence / processed_count if processed_count > 0 else 0.0,
-            "source_breakdown": source_breakdown
+            "total_columns": int(len(results_dict)),  # Total columns analyzed
+            "processed_columns": int(processed_count),  # Columns that need preprocessing
+            "avg_confidence": float(total_confidence / processed_count) if processed_count > 0 else 0.0,
+            "source_breakdown": {k: int(v) for k, v in source_breakdown.items()}
         }
 
-        return BatchPreprocessResponse(
+        # Convert summary to JSON-safe format just to be absolutely sure
+        json_safe_summary = convert_to_json_serializable(summary)
+
+        # Create response
+        response = BatchPreprocessResponse(
             results=results,
-            summary=summary
+            summary=json_safe_summary
         )
 
+        # Use FastAPI's jsonable_encoder to ensure ALL types are JSON-safe
+        # This catches any numpy types that might have slipped through
+        return JSONResponse(content=jsonable_encoder(response))
+
     except Exception as e:
+        import traceback
         logger.error(f"Error in batch preprocessing: {e}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Batch preprocessing failed: {str(e)}"
@@ -387,7 +406,7 @@ async def explain_decision(decision_id: str):
     # Convert context to JSON-serializable types
     json_safe_context = convert_to_json_serializable(result.context) if result.context else None
 
-    return ExplanationResponse(
+    response = ExplanationResponse(
         decision_id=decision_id,
         action=result.action.value,
         confidence=float(result.confidence),
@@ -396,6 +415,9 @@ async def explain_decision(decision_id: str):
         alternatives=alternatives,
         context=json_safe_context
     )
+
+    # Use FastAPI's jsonable_encoder to ensure ALL types are JSON-safe
+    return JSONResponse(content=jsonable_encoder(response))
 
 
 @app.get("/statistics", response_model=StatisticsResponse)
