@@ -1,7 +1,9 @@
 """
 FastAPI server for AURORA preprocessing system.
-Provides REST API for intelligent data preprocessing.
+Provides REST API for intelligent data preprocessing with real-time recommendations.
 """
+
+__version__ = "1.0.0"
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,7 +40,7 @@ monitor = get_monitor()
 app = FastAPI(
     title="AURORA - Intelligent Data Preprocessing System",
     description="Production-ready intelligent data preprocessing with symbolic rules, neural intelligence, and privacy-preserving learning",
-    version="1.0.0",
+    version=__version__,
     docs_url="/docs",
     redoc_url="/redoc"
 )
