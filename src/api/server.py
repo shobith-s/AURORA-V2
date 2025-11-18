@@ -198,7 +198,7 @@ async def preprocess_column(request: PreprocessRequest):
         alternatives = [
             AlternativeAction(
                 action=action.value,
-                confidence=float(conf) if isinstance(conf, (np.floating, np.float_)) else conf
+                confidence=float(conf) if isinstance(conf, (np.floating,)) else conf
             )
             for action, conf in result.alternatives
         ]
@@ -284,7 +284,7 @@ async def batch_preprocess(request: BatchPreprocessRequest):
             alternatives = [
                 AlternativeAction(
                     action=action.value,
-                    confidence=float(conf) if isinstance(conf, (np.floating, np.float_)) else conf
+                    confidence=float(conf) if isinstance(conf, (np.floating,)) else conf
                 )
                 for action, conf in result.alternatives
             ]
@@ -399,7 +399,7 @@ async def explain_decision(decision_id: str):
     alternatives = [
         AlternativeAction(
             action=action.value,
-            confidence=float(conf) if isinstance(conf, (np.floating, np.float_)) else conf
+            confidence=float(conf) if isinstance(conf, (np.floating,)) else conf
         )
         for action, conf in result.alternatives
     ]
