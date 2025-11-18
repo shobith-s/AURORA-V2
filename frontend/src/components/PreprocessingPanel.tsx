@@ -56,10 +56,14 @@ export default function PreprocessingPanel() {
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',').map(v => v.trim());
       headers.forEach((header, index) => {
-        const value = values[index] || null;
+        const value = values[index] || '';
         // Try to parse as number
-        const num = parseFloat(value);
-        columns[header].push(isNaN(num) ? value : num);
+        if (value === '') {
+          columns[header].push(null);
+        } else {
+          const num = parseFloat(value);
+          columns[header].push(isNaN(num) ? value : num);
+        }
       });
     }
 
