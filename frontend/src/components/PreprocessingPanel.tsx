@@ -344,7 +344,7 @@ export default function PreprocessingPanel() {
                 <div className="text-3xl font-bold text-green-600">
                   {batchResults.summary.processed_columns}
                 </div>
-                <div className="text-sm text-slate-600 mt-1">Processed</div>
+                <div className="text-sm text-slate-600 mt-1">Need Preprocessing</div>
               </div>
               <div className="text-center">
                 <div className="text-3xl font-bold text-purple-600">
@@ -353,15 +353,23 @@ export default function PreprocessingPanel() {
                 <div className="text-sm text-slate-600 mt-1">Avg Confidence</div>
               </div>
             </div>
+            {Object.keys(batchResults.results).length === 0 && (
+              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-700 text-center">
+                  🎉 All columns are clean! No preprocessing needed.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Results for Each Column */}
-          <div className="glass-card p-6">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">
-              Column Recommendations
-            </h3>
-            <div className="space-y-4">
-              {Object.entries(batchResults.results).map(([columnName, columnResult]) => (
+          {Object.keys(batchResults.results).length > 0 && (
+            <div className="glass-card p-6">
+              <h3 className="text-lg font-bold text-slate-800 mb-4">
+                Columns Needing Preprocessing ({Object.keys(batchResults.results).length})
+              </h3>
+              <div className="space-y-4">
+                {Object.entries(batchResults.results).map(([columnName, columnResult]) => (
                 <div key={columnName} className="border border-slate-200 rounded-lg p-4 bg-white/50">
                   <div className="flex items-start justify-between mb-3">
                     <div>
@@ -412,9 +420,10 @@ export default function PreprocessingPanel() {
                     </div>
                   )}
                 </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
