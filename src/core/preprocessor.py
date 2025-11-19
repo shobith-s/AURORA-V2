@@ -115,6 +115,7 @@ class IntelligentPreprocessor:
         decision_id = str(uuid.uuid4())
 
         # LAYER 0: Check intelligent cache (ultra-fast - <0.1ms for L1 hits)
+        # NOTE: Cache confidence reduced and validated to prevent overconfident incorrect decisions
         if self.enable_cache and self.cache:
             # Compute stats for cache lookup
             stats = self.symbolic_engine.compute_column_statistics(
@@ -126,23 +127,41 @@ class IntelligentPreprocessor:
             cached_decision, cache_level = self.cache.get(stats_dict, column_name)
             if cached_decision:
                 self.stats['cache_hits'] += 1
-                self.stats['high_confidence_decisions'] += 1
 
                 elapsed_ms = (time.time() - start_time) * 1000
                 self.stats['total_time_ms'] += elapsed_ms
 
+                # Get validation-adjusted confidence
+                validation_adj = self.cache.get_validation_confidence(stats_dict)
+
+                # Base confidence depends on cache level
+                if cache_level == 'l1':
+                    base_confidence = 0.85  # Exact match - high but not overconfident
+                elif cache_level == 'l2':
+                    base_confidence = 0.75  # Similar (98% cosine) - moderate confidence
+                else:  # l3
+                    base_confidence = 0.65  # Pattern match - lower confidence
+
+                # Apply validation adjustment
+                final_confidence = max(0.4, min(0.95, base_confidence + validation_adj))
+
+                # Only count as high confidence if >= threshold
+                if final_confidence >= self.confidence_threshold:
+                    self.stats['high_confidence_decisions'] += 1
+
                 return PreprocessingResult(
                     action=cached_decision,
-                    confidence=0.98,  # Very high confidence for cached decisions
+                    confidence=final_confidence,
                     source='learned',
-                    explanation=f"Cached decision from {cache_level} (previously seen similar column)",
+                    explanation=f"Cached decision from {cache_level} (validated: {validation_adj:+.2f} confidence adjustment)",
                     alternatives=[],
                     parameters={},
                     context=stats_dict,
                     decision_id=decision_id
                 )
 
-        # LAYER 1: Check learned patterns first (fastest - <1ms)
+        # LAYER 1: Check learned patterns (fastest - <1ms)
+        # NOTE: Learned pattern confidence now dynamically adjusted based on validation
         if self.enable_learning and self.pattern_learner:
             # We need column stats for pattern matching
             stats = self.symbolic_engine.compute_column_statistics(
@@ -153,20 +172,32 @@ class IntelligentPreprocessor:
             learned_action = self.pattern_learner.check_patterns(stats_dict)
             if learned_action:
                 self.stats['learned_decisions'] += 1
-                self.stats['high_confidence_decisions'] += 1
 
                 elapsed_ms = (time.time() - start_time) * 1000
                 self.stats['total_time_ms'] += elapsed_ms
 
-                # Update cache with learned decision
+                # Find which rule matched to get its dynamic confidence
+                rule_confidence = 0.7  # Default if rule not found
+                rule_name = "Unknown"
+                for rule in self.pattern_learner.learned_rules:
+                    if rule.condition(stats_dict) and rule.action == learned_action:
+                        rule_confidence = rule.confidence_fn(stats_dict)
+                        rule_name = rule.name
+                        break
+
+                # Only count as high confidence if >= threshold
+                if rule_confidence >= self.confidence_threshold:
+                    self.stats['high_confidence_decisions'] += 1
+
+                # Update cache with learned decision (but cache will use its own confidence)
                 if self.enable_cache and self.cache:
                     self.cache.set(stats_dict, learned_action, column_name)
 
                 return PreprocessingResult(
                     action=learned_action,
-                    confidence=0.95,  # High confidence for learned patterns
+                    confidence=rule_confidence,  # Dynamic confidence based on validation
                     source='learned',
-                    explanation=f"Matched learned pattern from user corrections",
+                    explanation=f"Matched {rule_name} (confidence adjusted by validation feedback)",
                     alternatives=[],
                     parameters={},
                     context=stats_dict,
@@ -333,6 +364,11 @@ class IntelligentPreprocessor:
 
         pattern = self.pattern_learner.extract_pattern(stats_dict, column_name)
 
+        # IMPORTANT: Invalidate cache if the decision was cached
+        # This prevents reusing incorrect decisions
+        if self.enable_cache and self.cache:
+            self.cache.invalidate_decision(stats_dict, column_name)
+
         # Learn from correction
         new_rule = self.pattern_learner.learn_correction(
             pattern=pattern,
@@ -344,7 +380,8 @@ class IntelligentPreprocessor:
         result = {
             'learned': True,
             'pattern_recorded': True,
-            'new_rule_created': new_rule is not None
+            'new_rule_created': new_rule is not None,
+            'cache_invalidated': True  # Inform user that bad cache entry was removed
         }
 
         # If a new rule was created, add it to symbolic engine

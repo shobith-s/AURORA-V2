@@ -141,16 +141,16 @@ class LocalPatternLearner:
 
     def __init__(
         self,
-        similarity_threshold: float = 0.8,
-        min_pattern_support: int = 3,
+        similarity_threshold: float = 0.85,  # Increased from 0.8 for stricter matching
+        min_pattern_support: int = 5,  # Increased from 3 to require more evidence
         privacy_level: str = "high"
     ):
         """
         Initialize the pattern learner.
 
         Args:
-            similarity_threshold: Minimum similarity to consider patterns related
-            min_pattern_support: Minimum occurrences to generalize into rule
+            similarity_threshold: Minimum similarity to consider patterns related (increased to 0.85 for more accuracy)
+            min_pattern_support: Minimum occurrences to generalize into rule (increased to 5 for better generalization)
             privacy_level: 'low', 'medium', or 'high' privacy
         """
         self.similarity_threshold = similarity_threshold
@@ -165,6 +165,9 @@ class LocalPatternLearner:
 
         # Pattern clusters
         self.pattern_clusters: Dict[str, List[CorrectionRecord]] = defaultdict(list)
+
+        # Validation tracking - track rule performance
+        self.rule_validation: Dict[str, Dict[str, int]] = {}  # rule_name -> {correct: N, incorrect: N}
 
     def extract_pattern(
         self,
@@ -392,24 +395,91 @@ class LocalPatternLearner:
 
             return matches
 
-        # Calculate confidence based on pattern support
+        # Calculate confidence based on pattern support (more conservative)
         support = len(records)
-        confidence = min(0.9, 0.6 + (support - self.min_pattern_support) * 0.1)
+        # Start at 0.5 instead of 0.6, increase slowly
+        base_confidence = 0.5 + min(0.25, (support - self.min_pattern_support) * 0.05)
 
         # Create rule
         rule_name = f"LEARNED_{action.value.upper()}_{len(self.learned_rules)}"
+
+        # Initialize validation tracking for this rule
+        self.rule_validation[rule_name] = {'correct': 0, 'incorrect': 0}
+
+        def dynamic_confidence_fn(stats: Dict[str, Any]) -> float:
+            """Confidence adjusted by validation performance."""
+            # Get validation stats
+            validation = self.rule_validation.get(rule_name, {'correct': 0, 'incorrect': 0})
+            total_validations = validation['correct'] + validation['incorrect']
+
+            if total_validations == 0:
+                # No validations yet, use base confidence
+                return base_confidence
+
+            # Adjust confidence based on success rate
+            success_rate = validation['correct'] / total_validations
+            # Confidence between 0.5 and 0.8 based on validation
+            adjusted = 0.5 + (success_rate * 0.3)
+
+            # Penalty if too many failures
+            if validation['incorrect'] > 3:
+                adjusted -= 0.1
+
+            return max(0.4, min(0.8, adjusted))
 
         rule = Rule(
             name=rule_name,
             category=RuleCategory.DATA_QUALITY,
             action=action,
             condition=condition,
-            confidence_fn=lambda stats: confidence,
-            explanation_fn=lambda stats: f"Learned from {support} similar user corrections",
-            priority=85  # High priority for learned rules
+            confidence_fn=dynamic_confidence_fn,
+            explanation_fn=lambda stats: f"Learned from {support} corrections (validated: {self.rule_validation[rule_name]['correct']} ✓, {self.rule_validation[rule_name]['incorrect']} ✗)",
+            priority=75  # Reduced from 85 - learned rules should not override strong symbolic rules
         )
 
         return rule
+
+    def validate_rule(self, rule_name: str, is_correct: bool):
+        """
+        Record validation feedback for a learned rule.
+
+        Args:
+            rule_name: Name of the rule
+            is_correct: Whether the rule's recommendation was correct
+        """
+        if rule_name not in self.rule_validation:
+            self.rule_validation[rule_name] = {'correct': 0, 'incorrect': 0}
+
+        if is_correct:
+            self.rule_validation[rule_name]['correct'] += 1
+        else:
+            self.rule_validation[rule_name]['incorrect'] += 1
+
+    def invalidate_poor_rules(self, min_success_rate: float = 0.6):
+        """
+        Remove learned rules that perform poorly.
+
+        Args:
+            min_success_rate: Minimum success rate to keep a rule (default 60%)
+        """
+        rules_to_remove = []
+
+        for rule in self.learned_rules:
+            validation = self.rule_validation.get(rule.name, {'correct': 0, 'incorrect': 0})
+            total = validation['correct'] + validation['incorrect']
+
+            # Only evaluate rules that have been validated at least 5 times
+            if total >= 5:
+                success_rate = validation['correct'] / total
+                if success_rate < min_success_rate:
+                    rules_to_remove.append(rule)
+
+        # Remove poor-performing rules
+        for rule in rules_to_remove:
+            self.learned_rules.remove(rule)
+            del self.rule_validation[rule.name]
+
+        return len(rules_to_remove)
 
     def check_patterns(self, column_stats: Dict[str, Any]) -> Optional[PreprocessingAction]:
         """
