@@ -742,14 +742,33 @@ def create_domain_specific_rules() -> List[Rule]:
 # RULE REGISTRY
 # =============================================================================
 
-def get_all_rules() -> List[Rule]:
-    """Get all rules sorted by priority."""
+def get_all_rules(include_extended: bool = True) -> List[Rule]:
+    """
+    Get all rules sorted by priority.
+
+    Args:
+        include_extended: Whether to include extended rules for universal coverage
+
+    Returns:
+        List of rules sorted by priority (highest first)
+    """
     all_rules = []
+
+    # Base rules (~100 rules)
     all_rules.extend(create_data_quality_rules())
     all_rules.extend(create_type_detection_rules())
     all_rules.extend(create_statistical_rules())
     all_rules.extend(create_categorical_rules())
     all_rules.extend(create_domain_specific_rules())
+
+    # Extended rules for universal coverage (~65 rules)
+    if include_extended:
+        try:
+            from .extended_rules import get_extended_rules
+            all_rules.extend(get_extended_rules())
+        except ImportError:
+            # Extended rules not available, continue with base rules
+            pass
 
     # Sort by priority (higher first)
     all_rules.sort(key=lambda r: r.priority, reverse=True)
