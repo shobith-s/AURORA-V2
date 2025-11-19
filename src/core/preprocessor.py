@@ -11,6 +11,7 @@ import uuid
 import time
 
 from ..symbolic.engine import SymbolicEngine
+from ..symbolic.meta_learner import get_meta_learner, MetaLearner
 from ..neural.oracle import NeuralOracle, get_neural_oracle
 from ..learning.pattern_learner import LocalPatternLearner
 from ..features.minimal_extractor import MinimalFeatureExtractor, get_feature_extractor
@@ -20,10 +21,12 @@ from .actions import PreprocessingAction, PreprocessingResult
 
 class IntelligentPreprocessor:
     """
-    Main preprocessing pipeline with three-layer architecture:
-    1. Learned patterns (fastest)
-    2. Symbolic engine (fast)
-    3. NeuralOracle (for edge cases)
+    Main preprocessing pipeline with four-layer architecture for universal coverage:
+    1. Cache (validated decisions) - Layer 0
+    2. Learned patterns (user corrections) - Layer 1
+    3. Symbolic rules (165+ rules) - Layer 2
+    4. Meta-learning (statistical heuristics) - Layer 2.5
+    5. NeuralOracle (last resort) - Layer 3
     """
 
     def __init__(
@@ -32,7 +35,8 @@ class IntelligentPreprocessor:
         use_neural_oracle: bool = True,
         enable_learning: bool = True,
         neural_model_path: Optional[Path] = None,
-        enable_cache: bool = True
+        enable_cache: bool = True,
+        enable_meta_learning: bool = True
     ):
         """
         Initialize the intelligent preprocessor.
@@ -43,15 +47,18 @@ class IntelligentPreprocessor:
             enable_learning: Whether to enable pattern learning
             neural_model_path: Path to neural oracle model
             enable_cache: Whether to enable intelligent caching
+            enable_meta_learning: Whether to enable meta-learning (statistical heuristics)
         """
         self.confidence_threshold = confidence_threshold
         self.use_neural_oracle = use_neural_oracle
         self.enable_learning = enable_learning
         self.enable_cache = enable_cache
+        self.enable_meta_learning = enable_meta_learning
 
         # Initialize components
         self.symbolic_engine = SymbolicEngine(confidence_threshold=confidence_threshold)
         self.pattern_learner = LocalPatternLearner() if enable_learning else None
+        self.meta_learner = get_meta_learner() if enable_meta_learning else None
         self.feature_extractor = get_feature_extractor()
         self.cache = get_cache() if enable_cache else None
 
@@ -64,6 +71,7 @@ class IntelligentPreprocessor:
             'total_decisions': 0,
             'learned_decisions': 0,
             'symbolic_decisions': 0,
+            'meta_learning_decisions': 0,
             'neural_decisions': 0,
             'high_confidence_decisions': 0,
             'cache_hits': 0,
@@ -115,6 +123,7 @@ class IntelligentPreprocessor:
         decision_id = str(uuid.uuid4())
 
         # LAYER 0: Check intelligent cache (ultra-fast - <0.1ms for L1 hits)
+        # NOTE: Cache confidence reduced and validated to prevent overconfident incorrect decisions
         if self.enable_cache and self.cache:
             # Compute stats for cache lookup
             stats = self.symbolic_engine.compute_column_statistics(
@@ -126,23 +135,41 @@ class IntelligentPreprocessor:
             cached_decision, cache_level = self.cache.get(stats_dict, column_name)
             if cached_decision:
                 self.stats['cache_hits'] += 1
-                self.stats['high_confidence_decisions'] += 1
 
                 elapsed_ms = (time.time() - start_time) * 1000
                 self.stats['total_time_ms'] += elapsed_ms
 
+                # Get validation-adjusted confidence
+                validation_adj = self.cache.get_validation_confidence(stats_dict)
+
+                # Base confidence depends on cache level
+                if cache_level == 'l1':
+                    base_confidence = 0.85  # Exact match - high but not overconfident
+                elif cache_level == 'l2':
+                    base_confidence = 0.75  # Similar (98% cosine) - moderate confidence
+                else:  # l3
+                    base_confidence = 0.65  # Pattern match - lower confidence
+
+                # Apply validation adjustment
+                final_confidence = max(0.4, min(0.95, base_confidence + validation_adj))
+
+                # Only count as high confidence if >= threshold
+                if final_confidence >= self.confidence_threshold:
+                    self.stats['high_confidence_decisions'] += 1
+
                 return PreprocessingResult(
                     action=cached_decision,
-                    confidence=0.98,  # Very high confidence for cached decisions
+                    confidence=final_confidence,
                     source='learned',
-                    explanation=f"Cached decision from {cache_level} (previously seen similar column)",
+                    explanation=f"Cached decision from {cache_level} (validated: {validation_adj:+.2f} confidence adjustment)",
                     alternatives=[],
                     parameters={},
                     context=stats_dict,
                     decision_id=decision_id
                 )
 
-        # LAYER 1: Check learned patterns first (fastest - <1ms)
+        # LAYER 1: Check learned patterns (fastest - <1ms)
+        # NOTE: Learned pattern confidence now dynamically adjusted based on validation
         if self.enable_learning and self.pattern_learner:
             # We need column stats for pattern matching
             stats = self.symbolic_engine.compute_column_statistics(
@@ -153,20 +180,32 @@ class IntelligentPreprocessor:
             learned_action = self.pattern_learner.check_patterns(stats_dict)
             if learned_action:
                 self.stats['learned_decisions'] += 1
-                self.stats['high_confidence_decisions'] += 1
 
                 elapsed_ms = (time.time() - start_time) * 1000
                 self.stats['total_time_ms'] += elapsed_ms
 
-                # Update cache with learned decision
+                # Find which rule matched to get its dynamic confidence
+                rule_confidence = 0.7  # Default if rule not found
+                rule_name = "Unknown"
+                for rule in self.pattern_learner.learned_rules:
+                    if rule.condition(stats_dict) and rule.action == learned_action:
+                        rule_confidence = rule.confidence_fn(stats_dict)
+                        rule_name = rule.name
+                        break
+
+                # Only count as high confidence if >= threshold
+                if rule_confidence >= self.confidence_threshold:
+                    self.stats['high_confidence_decisions'] += 1
+
+                # Update cache with learned decision (but cache will use its own confidence)
                 if self.enable_cache and self.cache:
                     self.cache.set(stats_dict, learned_action, column_name)
 
                 return PreprocessingResult(
                     action=learned_action,
-                    confidence=0.95,  # High confidence for learned patterns
+                    confidence=rule_confidence,  # Dynamic confidence based on validation
                     source='learned',
-                    explanation=f"Matched learned pattern from user corrections",
+                    explanation=f"Matched {rule_name} (confidence adjusted by validation feedback)",
                     alternatives=[],
                     parameters={},
                     context=stats_dict,
@@ -192,6 +231,31 @@ class IntelligentPreprocessor:
 
             symbolic_result.decision_id = decision_id
             return symbolic_result
+
+        # LAYER 2.5: Try meta-learning (statistical heuristics) for universal coverage
+        # This bridges the gap between symbolic rules and neural oracle
+        if self.enable_meta_learning and self.meta_learner:
+            # Use the same stats computed for symbolic engine
+            stats_dict = symbolic_result.context if symbolic_result.context else {}
+
+            meta_result = self.meta_learner.decide(stats_dict, column_name)
+            if meta_result and meta_result.confidence >= (self.confidence_threshold - 0.1):
+                # Accept meta-learning if confidence is close to threshold
+                # (e.g., threshold=0.9, accept >=0.8)
+                self.stats['meta_learning_decisions'] += 1
+
+                if meta_result.confidence >= self.confidence_threshold:
+                    self.stats['high_confidence_decisions'] += 1
+
+                elapsed_ms = (time.time() - start_time) * 1000
+                self.stats['total_time_ms'] += elapsed_ms
+
+                # Update cache with meta-learning decision
+                if self.enable_cache and self.cache:
+                    self.cache.set(stats_dict, meta_result.action, column_name)
+
+                meta_result.decision_id = decision_id
+                return meta_result
 
         # LAYER 3: Use NeuralOracle for ambiguous cases (<5ms)
         if self.use_neural_oracle and self.neural_oracle:
@@ -250,13 +314,27 @@ class IntelligentPreprocessor:
                 # Fall back to symbolic result
                 pass
 
-        # Fallback: Use symbolic result even if confidence is low
-        self.stats['symbolic_decisions'] += 1
+        # LAYER 4: Ultra-conservative fallback
+        # When all layers are uncertain, make the safest possible decision
         elapsed_ms = (time.time() - start_time) * 1000
         self.stats['total_time_ms'] += elapsed_ms
 
-        symbolic_result.decision_id = decision_id
-        return symbolic_result
+        # If symbolic had some confidence, use it with a warning
+        if symbolic_result.confidence > 0.5:
+            self.stats['symbolic_decisions'] += 1
+            symbolic_result.decision_id = decision_id
+            symbolic_result.explanation = f"[LOW CONFIDENCE] {symbolic_result.explanation}"
+            return symbolic_result
+
+        # Otherwise, use ultra-conservative fallback
+        stats_dict = symbolic_result.context if symbolic_result.context else {}
+        fallback_result = self._ultra_conservative_fallback(stats_dict, column_name)
+        fallback_result.decision_id = decision_id
+
+        elapsed_ms = (time.time() - start_time) * 1000
+        self.stats['total_time_ms'] += elapsed_ms
+
+        return fallback_result
 
     def _blend_decisions(
         self,
@@ -291,6 +369,126 @@ class IntelligentPreprocessor:
                 neural_pred.action,
                 neural_pred.confidence * 0.9,
                 f"Neural oracle ({neural_pred.confidence:.2f}) vs symbolic ({symbolic_result.confidence:.2f})"
+            )
+
+    def _ultra_conservative_fallback(
+        self,
+        column_stats: Dict[str, Any],
+        column_name: str
+    ) -> PreprocessingResult:
+        """
+        Ultra-conservative fallback for truly ambiguous cases.
+        Prioritizes safety: preserves data, doesn't introduce artifacts, reversible.
+
+        Args:
+            column_stats: Column statistics
+            column_name: Column name
+
+        Returns:
+            PreprocessingResult with safe default action
+        """
+        # Determine safe action based on basic statistics
+        is_numeric = column_stats.get('is_numeric', False)
+        is_categorical = column_stats.get('is_categorical', False)
+        null_pct = column_stats.get('null_pct', 0)
+        range_size = column_stats.get('range_size', 0)
+        cardinality = column_stats.get('cardinality', 0)
+
+        # High nulls → keep but flag for review
+        if null_pct > 0.5:
+            return PreprocessingResult(
+                action=PreprocessingAction.KEEP_AS_IS,
+                confidence=0.60,
+                source='conservative_fallback',
+                explanation=f"[REVIEW NEEDED] High null percentage ({null_pct:.1%}): keeping as-is for safety, manual review recommended",
+                alternatives=[],
+                parameters={},
+                context=column_stats
+            )
+
+        # Numeric data
+        if is_numeric:
+            # Large range → scale with robust method (handles outliers)
+            if range_size > 1000:
+                return PreprocessingResult(
+                    action=PreprocessingAction.ROBUST_SCALE,
+                    confidence=0.65,
+                    source='conservative_fallback',
+                    explanation=f"[CONSERVATIVE] Large numeric range ({range_size:.0f}): using robust scaling as safe default",
+                    alternatives=[
+                        (PreprocessingAction.STANDARD_SCALE, 0.60),
+                        (PreprocessingAction.KEEP_AS_IS, 0.55)
+                    ],
+                    parameters={},
+                    context=column_stats
+                )
+            # Reasonable range → keep as-is
+            else:
+                return PreprocessingResult(
+                    action=PreprocessingAction.KEEP_AS_IS,
+                    confidence=0.70,
+                    source='conservative_fallback',
+                    explanation=f"[CONSERVATIVE] Numeric with reasonable range: keeping as-is to preserve information",
+                    alternatives=[
+                        (PreprocessingAction.STANDARD_SCALE, 0.65)
+                    ],
+                    parameters={},
+                    context=column_stats
+                )
+
+        # Categorical data
+        elif is_categorical:
+            # Very low cardinality → one-hot (safe and interpretable)
+            if cardinality <= 10:
+                return PreprocessingResult(
+                    action=PreprocessingAction.ONEHOT_ENCODE,
+                    confidence=0.68,
+                    source='conservative_fallback',
+                    explanation=f"[CONSERVATIVE] Categorical with {cardinality} categories: one-hot encoding as safe default",
+                    alternatives=[
+                        (PreprocessingAction.LABEL_ENCODE, 0.60)
+                    ],
+                    parameters={},
+                    context=column_stats
+                )
+            # Medium cardinality → frequency encoding
+            elif cardinality <= 50:
+                return PreprocessingResult(
+                    action=PreprocessingAction.FREQUENCY_ENCODE,
+                    confidence=0.65,
+                    source='conservative_fallback',
+                    explanation=f"[CONSERVATIVE] Categorical with {cardinality} categories: frequency encoding balances information and dimensionality",
+                    alternatives=[
+                        (PreprocessingAction.ONEHOT_ENCODE, 0.55),
+                        (PreprocessingAction.HASH_ENCODE, 0.60)
+                    ],
+                    parameters={},
+                    context=column_stats
+                )
+            # High cardinality → hash encoding
+            else:
+                return PreprocessingResult(
+                    action=PreprocessingAction.HASH_ENCODE,
+                    confidence=0.68,
+                    source='conservative_fallback',
+                    explanation=f"[CONSERVATIVE] High cardinality ({cardinality}): hash encoding prevents dimensionality explosion",
+                    alternatives=[
+                        (PreprocessingAction.FREQUENCY_ENCODE, 0.62)
+                    ],
+                    parameters={},
+                    context=column_stats
+                )
+
+        # Unknown type → absolute safest option is keep as-is
+        else:
+            return PreprocessingResult(
+                action=PreprocessingAction.KEEP_AS_IS,
+                confidence=0.60,
+                source='conservative_fallback',
+                explanation=f"[REVIEW NEEDED] Ambiguous data type: keeping as-is to preserve information, manual review recommended",
+                alternatives=[],
+                parameters={},
+                context=column_stats
             )
 
     def process_correction(
@@ -333,6 +531,11 @@ class IntelligentPreprocessor:
 
         pattern = self.pattern_learner.extract_pattern(stats_dict, column_name)
 
+        # IMPORTANT: Invalidate cache if the decision was cached
+        # This prevents reusing incorrect decisions
+        if self.enable_cache and self.cache:
+            self.cache.invalidate_decision(stats_dict, column_name)
+
         # Learn from correction
         new_rule = self.pattern_learner.learn_correction(
             pattern=pattern,
@@ -344,7 +547,8 @@ class IntelligentPreprocessor:
         result = {
             'learned': True,
             'pattern_recorded': True,
-            'new_rule_created': new_rule is not None
+            'new_rule_created': new_rule is not None,
+            'cache_invalidated': True  # Inform user that bad cache entry was removed
         }
 
         # If a new rule was created, add it to symbolic engine
@@ -403,6 +607,7 @@ class IntelligentPreprocessor:
             **self.stats,
             'learned_pct': self.stats['learned_decisions'] / total * 100 if total > 0 else 0,
             'symbolic_pct': self.stats['symbolic_decisions'] / total * 100 if total > 0 else 0,
+            'meta_learning_pct': self.stats['meta_learning_decisions'] / total * 100 if total > 0 else 0,
             'neural_pct': self.stats['neural_decisions'] / total * 100 if total > 0 else 0,
             'high_confidence_pct': self.stats['high_confidence_decisions'] / total * 100 if total > 0 else 0,
             'avg_time_ms': self.stats['total_time_ms'] / total if total > 0 else 0,
@@ -413,6 +618,10 @@ class IntelligentPreprocessor:
         if self.pattern_learner:
             stats['learning'] = self.pattern_learner.get_statistics()
 
+        # Add meta-learning statistics if available
+        if self.meta_learner:
+            stats['meta_learning'] = self.meta_learner.get_statistics()
+
         return stats
 
     def reset_statistics(self):
@@ -421,12 +630,15 @@ class IntelligentPreprocessor:
             'total_decisions': 0,
             'learned_decisions': 0,
             'symbolic_decisions': 0,
+            'meta_learning_decisions': 0,
             'neural_decisions': 0,
             'high_confidence_decisions': 0,
             'cache_hits': 0,
             'total_time_ms': 0.0
         }
         self.symbolic_engine.reset_stats()
+        if self.meta_learner:
+            self.meta_learner.reset_statistics()
 
     def save_learned_patterns(self, path: Path):
         """

@@ -61,6 +61,13 @@ class ColumnStatistics:
     duplicate_ratio: float = 0.0
     null_has_pattern: bool = False
 
+    # NEW: Additional statistical metrics for universal coverage
+    cv: Optional[float] = None  # Coefficient of variation
+    entropy: Optional[float] = None  # Shannon entropy (information content)
+    target_correlation: Optional[float] = None  # Correlation with target (if available)
+    range_size: Optional[float] = None  # Max - Min
+    iqr: Optional[float] = None  # Interquartile range
+
     # Pattern matching
     matches_iso_datetime: float = 0.0
     matches_date_pattern: float = 0.0
@@ -118,6 +125,11 @@ class ColumnStatistics:
             "is_ordinal": self.is_ordinal,
             "duplicate_ratio": self.duplicate_ratio,
             "null_has_pattern": self.null_has_pattern,
+            "cv": self.cv,
+            "entropy": self.entropy,
+            "target_correlation": self.target_correlation,
+            "range_size": self.range_size,
+            "iqr": self.iqr,
             "matches_iso_datetime": self.matches_iso_datetime,
             "matches_date_pattern": self.matches_date_pattern,
             "matches_boolean_tf": self.matches_boolean_tf,
@@ -216,10 +228,20 @@ class SymbolicEngine:
             stats.all_positive = stats.min_value > 0
             stats.has_zeros = (non_null == 0).any()
 
+            # NEW: Additional statistical metrics
+            stats.range_size = stats.max_value - stats.min_value
+
+            # Coefficient of variation (CV = std / mean) - measures relative variability
+            if stats.mean != 0:
+                stats.cv = abs(stats.std / stats.mean)
+            else:
+                stats.cv = 0.0
+
             # Outlier detection using IQR
             q1 = non_null.quantile(0.25)
             q3 = non_null.quantile(0.75)
             iqr = q3 - q1
+            stats.iqr = float(iqr)
             lower_bound = q1 - 1.5 * iqr
             upper_bound = q3 + 1.5 * iqr
             outliers = (non_null < lower_bound) | (non_null > upper_bound)
@@ -285,6 +307,19 @@ class SymbolicEngine:
         if row_count > 0:
             duplicates = row_count - unique_count
             stats.duplicate_ratio = duplicates / row_count
+
+        # NEW: Compute Shannon entropy (information content)
+        # Works for both categorical and numeric (discretized)
+        if row_count > 0:
+            value_counts = column.value_counts(normalize=True, dropna=True)
+            if len(value_counts) > 0:
+                # Shannon entropy: -sum(p * log2(p))
+                entropy = -np.sum(value_counts * np.log2(value_counts + 1e-10))
+                # Normalize by max entropy (log2(n)) to get 0-1 scale
+                max_entropy = np.log2(len(value_counts))
+                stats.entropy = float(entropy / max_entropy) if max_entropy > 0 else 0.0
+            else:
+                stats.entropy = 0.0
 
         # Check for ordinal pattern
         if is_categorical:

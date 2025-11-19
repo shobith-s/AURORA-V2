@@ -42,16 +42,16 @@ class MultiLevelCache:
     L3: Pattern match (O(p) where p = number of patterns)
     """
 
-    def __init__(self, max_size: int = 10000, similarity_threshold: float = 0.95):
+    def __init__(self, max_size: int = 10000, similarity_threshold: float = 0.98):
         """
         Initialize cache.
 
         Args:
             max_size: Maximum number of entries to cache
-            similarity_threshold: Minimum cosine similarity for L2 cache hit
+            similarity_threshold: Minimum cosine similarity for L2 cache hit (increased from 0.95 to 0.98 for more accuracy)
         """
         self.max_size = max_size
-        self.similarity_threshold = similarity_threshold
+        self.similarity_threshold = similarity_threshold  # Now 0.98 for stricter matching
 
         # L1: Exact match cache (hash -> CacheEntry)
         self.exact_cache: Dict[str, CacheEntry] = {}
@@ -62,13 +62,17 @@ class MultiLevelCache:
         # L3: Pattern cache (pattern -> decision)
         self.pattern_cache: Dict[str, Any] = {}
 
+        # Validation tracking - track if cached decisions were overridden/corrected
+        self.validation_scores: Dict[str, Dict[str, Any]] = {}  # hash -> {success_count, fail_count, confidence_adj}
+
         # Statistics
         self.stats = {
             'l1_hits': 0,
             'l2_hits': 0,
             'l3_hits': 0,
             'misses': 0,
-            'total_queries': 0
+            'total_queries': 0,
+            'invalidations': 0  # Track how many cached decisions were invalidated
         }
 
     def get(self, features: Any, column_name: str = "") -> Tuple[Optional[Any], Optional[str]]:
@@ -360,11 +364,101 @@ class MultiLevelCache:
             'pattern_rules': len(self.pattern_cache)
         }
 
+    def invalidate_decision(self, features: Any, column_name: str = ""):
+        """
+        Invalidate a cached decision that was incorrect.
+        This provides feedback to prevent reusing bad decisions.
+
+        Args:
+            features: Features of the column
+            column_name: Name of the column
+        """
+        # Convert features
+        if hasattr(features, 'to_dict'):
+            features_dict = features.to_dict()
+        elif isinstance(features, dict):
+            features_dict = features
+        else:
+            features_dict = {}
+
+        feature_hash = self._hash_features(features_dict)
+
+        # Remove from exact cache if exists
+        if feature_hash in self.exact_cache:
+            del self.exact_cache[feature_hash]
+            self.stats['invalidations'] += 1
+
+        # Track validation failure
+        if feature_hash not in self.validation_scores:
+            self.validation_scores[feature_hash] = {'success': 0, 'fail': 1, 'confidence_adj': -0.1}
+        else:
+            self.validation_scores[feature_hash]['fail'] += 1
+            # Reduce confidence adjustment more with each failure
+            self.validation_scores[feature_hash]['confidence_adj'] = max(-0.3,
+                self.validation_scores[feature_hash]['confidence_adj'] - 0.05)
+
+        # Remove from feature vectors
+        self.feature_vectors = [
+            (h, f) for h, f in self.feature_vectors if h != feature_hash
+        ]
+
+    def validate_decision(self, features: Any, column_name: str = ""):
+        """
+        Mark a cached decision as correct/validated.
+
+        Args:
+            features: Features of the column
+            column_name: Name of the column
+        """
+        # Convert features
+        if hasattr(features, 'to_dict'):
+            features_dict = features.to_dict()
+        elif isinstance(features, dict):
+            features_dict = features
+        else:
+            features_dict = {}
+
+        feature_hash = self._hash_features(features_dict)
+
+        # Track validation success
+        if feature_hash not in self.validation_scores:
+            self.validation_scores[feature_hash] = {'success': 1, 'fail': 0, 'confidence_adj': 0.0}
+        else:
+            self.validation_scores[feature_hash]['success'] += 1
+            # Increase confidence slightly with each success
+            self.validation_scores[feature_hash]['confidence_adj'] = min(0.05,
+                self.validation_scores[feature_hash]['confidence_adj'] + 0.01)
+
+    def get_validation_confidence(self, features: Any) -> float:
+        """
+        Get confidence adjustment based on validation history.
+
+        Args:
+            features: Features of the column
+
+        Returns:
+            Confidence adjustment (-0.3 to +0.05)
+        """
+        if hasattr(features, 'to_dict'):
+            features_dict = features.to_dict()
+        elif isinstance(features, dict):
+            features_dict = features
+        else:
+            features_dict = {}
+
+        feature_hash = self._hash_features(features_dict)
+
+        if feature_hash in self.validation_scores:
+            return self.validation_scores[feature_hash]['confidence_adj']
+
+        return 0.0  # No history, neutral confidence
+
     def clear(self):
         """Clear all caches."""
         self.exact_cache.clear()
         self.feature_vectors.clear()
         self.pattern_cache.clear()
+        self.validation_scores.clear()
         self.stats = {k: 0 for k in self.stats}
 
     def warm_up(self, columns_and_decisions: List[Tuple[Any, Any, str]]):
