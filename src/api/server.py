@@ -33,7 +33,7 @@ from .schemas import (
     DriftStatus
 )
 from ..core.preprocessor import IntelligentPreprocessor, get_preprocessor
-from ..utils.monitor import get_monitor, PerformanceTimer
+from ..utils.monitor import get_monitor
 from ..database.connection import init_db
 from ..learning.adaptive_engine import AdaptiveLearningEngine
 import time

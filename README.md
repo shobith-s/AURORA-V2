@@ -1,48 +1,58 @@
-# AURORA: Intelligent Data Preprocessing System
+# AURORA V2/V3: Intelligent Data Preprocessing System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
-AURORA is a production-ready intelligent data preprocessing system that combines symbolic rules, neural intelligence, and privacy-preserving federated learning to automate data preprocessing decisions.
+AURORA is an intelligent data preprocessing system that combines symbolic rules, neural intelligence, and privacy-preserving adaptive learning to automate data preprocessing decisions.
+
+## 🚀 **Quick Start**
+
+👉 **[Read IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)** for complete setup instructions and current status.
 
 ## 🌟 Key Features
 
-- **Three-Layer Architecture**: Symbolic rules (80%) + Neural oracle (20%) + Privacy-preserving learning
-- **Lightning Fast**: <100μs for most decisions via symbolic engine
-- **Privacy First**: Never stores raw data, uses differential privacy for pattern learning
-- **Self-Learning**: Learns generalizable patterns from user corrections
-- **Production Ready**: <50MB memory footprint, comprehensive error handling
-- **Real-time API**: RESTful API with interactive documentation
+- **Secure & Robust**: JWT authentication, CORS whitelisting, handles ANY CSV format
+- **Persistent Learning**: System learns from corrections and survives restarts
+- **Privacy-Preserving**: Only stores statistical fingerprints, never raw data
+- **Three-Layer Architecture**: Learned rules → Symbolic rules (165+) → Meta-learner
+- **Production Ready**: SQLite (dev) / PostgreSQL (prod), comprehensive error handling
+- **Real-time API**: RESTful API with interactive Swagger documentation
 
-## 🏗️ Architecture
+## 🏗️ Current Implementation
 
-### Layer 1: Symbolic Engine
-- 100+ deterministic rules with confidence scores
-- Zero ML overhead for obvious cases
-- Nanosecond latency, fully explainable
+### ✅ **Option A: Security & Robustness** (COMPLETED)
+- Fixed CORS vulnerability (no more `allow_origins=["*"]`)
+- JWT authentication system
+- Robust CSV parser (handles any format)
+- Environment-based security configuration
 
-### Layer 2: NeuralOracle
-- Pre-trained on ambiguous cases only
-- Lightweight XGBoost (50 trees, <5MB)
-- Only activated when symbolic confidence < 0.9
-
-### Layer 3: Pattern Learner
-- Privacy-preserving pattern extraction
-- Learns from user corrections without storing data
-- Federated learning with differential privacy
+### ✅ **Option B: Persistent Learning** (COMPLETED)
+- Database infrastructure (SQLite dev / PostgreSQL prod)
+- Adaptive learning that survives restarts
+- Privacy-preserving correction storage
+- Automatic rule creation (after 5+ similar corrections)
 
 ## 🚀 Quick Start
 
 ```bash
-# Install dependencies
+# 1. Install dependencies
 pip install -r requirements.txt
 
-# Run the API server
-python -m uvicorn src.api.server:app --reload
+# 2. Configure environment
+cp .env.example .env
+# Edit .env and set JWT_SECRET_KEY and ALLOWED_ORIGINS
 
-# Or use the CLI
-python -m src.core.preprocessor --file data.csv
+# 3. Start the server (database auto-initializes)
+uvicorn src.api.server:app --reload --port 8000
+
+# 4. Check health
+curl http://localhost:8000/health
+
+# 5. View interactive docs
+# Open http://localhost:8000/docs in your browser
 ```
+
+**📖 For detailed setup, testing, and troubleshooting, see [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)**
 
 ## 📊 Usage
 
@@ -179,11 +189,18 @@ python scripts/evaluate_system.py
 
 ## 📖 Documentation
 
-- [Architecture Guide](docs/architecture.md)
-- [Rule Development Guide](docs/rules.md)
-- [Privacy & Security](docs/privacy.md)
-- [API Reference](docs/api.md)
-- [Contributing Guidelines](CONTRIBUTING.md)
+### Getting Started
+- **[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)** - Current status, setup guide, and testing instructions
+
+### V3 Architecture & Roadmap
+- **[docs/ARCHITECTURE_V3_PROPOSAL.md](docs/ARCHITECTURE_V3_PROPOSAL.md)** - Complete V3 architecture design
+- **[docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md)** - 12-week implementation plan
+- **[docs/QUICK_START_V3.md](docs/QUICK_START_V3.md)** - Quick start guide with 3 options
+- **[docs/SUMMARY_FOR_IMPROVEMENT.md](docs/SUMMARY_FOR_IMPROVEMENT.md)** - Improvement overview and competitive analysis
+
+### API Documentation
+- **Interactive Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 
 ## 🎯 Success Criteria
 
