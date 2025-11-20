@@ -117,7 +117,7 @@ class MetaLearner:
             ),
             action=PreprocessingAction.ROBUST_SCALE,
             confidence=0.87,
-            reasoning=f"High coefficient of variation (CV={s.get('cv', 0):.2f}): indicates outliers, robust scaling optimal" if 's' in locals() else "High CV: robust scaling handles outliers",
+            reasoning="High coefficient of variation (CV > 2.0): indicates outliers, robust scaling optimal",
             priority=73
         ))
 
@@ -152,7 +152,7 @@ class MetaLearner:
             ),
             action=PreprocessingAction.DROP_COLUMN,
             confidence=0.86,
-            reasoning=f"Very low entropy ({s.get('entropy', 0):.2f}): Shannon information theory indicates minimal information content" if 's' in locals() else "Low entropy: minimal information",
+            reasoning="Very low entropy (<15%): Shannon information theory indicates minimal information content",
             priority=78
         ))
 
@@ -186,7 +186,7 @@ class MetaLearner:
             ),
             action=PreprocessingAction.ONEHOT_ENCODE,
             confidence=0.93,
-            reasoning=f"Very low cardinality ({s.get('cardinality', 0)}): one-hot encoding is computationally efficient" if 's' in locals() else "Low cardinality: one-hot optimal",
+            reasoning="Very low cardinality (≤5): one-hot encoding is computationally efficient",
             priority=77
         ))
 
@@ -201,7 +201,7 @@ class MetaLearner:
             ),
             action=PreprocessingAction.HASH_ENCODE,
             confidence=0.84,
-            reasoning=f"High cardinality ({s.get('cardinality', 0)}): hash encoding prevents dimensionality explosion",
+            reasoning="High cardinality (>500): hash encoding prevents dimensionality explosion",
             priority=71
         ))
 
@@ -219,7 +219,7 @@ class MetaLearner:
             ),
             action=PreprocessingAction.WINSORIZE,
             confidence=0.85,
-            reasoning=f"Significant outliers ({s.get('outlier_pct', 0):.1%}): winsorization preserves distribution while capping extremes" if 's' in locals() else "Many outliers: winsorize",
+            reasoning="Significant outliers (10-25%): winsorization preserves distribution while capping extremes",
             priority=74
         ))
 
@@ -268,7 +268,7 @@ class MetaLearner:
             ),
             action=PreprocessingAction.ROBUST_SCALE,
             confidence=0.84,
-            reasoning=f"Large range ({s.get('range_size', 0):.0f}): scaling prevents numerical instability" if 's' in locals() else "Large range: scaling needed",
+            reasoning="Large range (>1000): scaling prevents numerical instability in gradient descent",
             priority=71
         ))
 
@@ -287,7 +287,7 @@ class MetaLearner:
             ),
             action=PreprocessingAction.FILL_NULL_MEDIAN,
             confidence=0.86,
-            reasoning=f"Moderate nulls ({s.get('null_pct', 0):.1%}) with outliers: median imputation is robust" if 's' in locals() else "Moderate nulls: median robust",
+            reasoning="Moderate nulls (10-30%) with outliers: median imputation is robust",
             priority=69
         ))
 
