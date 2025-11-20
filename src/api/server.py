@@ -13,6 +13,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict, Any
 import logging
+import os
 
 from .schemas import (
     PreprocessRequest,
@@ -52,13 +53,19 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+# Configure CORS - environment-based for security
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://localhost:8000"  # Default for development
+).split(",")
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=ALLOWED_ORIGINS,  # ✅ SECURE: Whitelist only
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],  # Explicit methods only
+    allow_headers=["Authorization", "Content-Type"],  # Explicit headers only
 )
 
 # Global preprocessor instance

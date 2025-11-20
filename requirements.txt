@@ -14,11 +14,17 @@ numba>=0.57.0
 # Privacy & Security
 opacus>=1.4.0  # Differential privacy
 pycryptodome>=3.18.0
+python-jose[cryptography]>=3.3.0  # JWT authentication
+passlib[bcrypt]>=1.7.4  # Password hashing
+python-multipart>=0.0.6  # Form data handling
 
 # API
 fastapi>=0.104.0
 uvicorn>=0.24.0
 pydantic>=2.0.0
+
+# CSV parsing
+chardet>=5.2.0  # Encoding detection
 
 # Data validation
 pydantic>=2.0.0
