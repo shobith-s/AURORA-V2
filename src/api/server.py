@@ -1183,6 +1183,216 @@ async def set_drift_reference(request: PreprocessRequest):
         )
 
 
+@app.get("/metrics/neural_oracle")
+async def get_neural_oracle_metrics():
+    """
+    Get neural oracle specific metrics and training status.
+
+    Returns:
+        Neural oracle performance, model info, and learning statistics
+    """
+    try:
+        from pathlib import Path
+        import json
+
+        metrics = {
+            "model_loaded": preprocessor.neural_oracle.model is not None if preprocessor.neural_oracle else False,
+            "model_info": {},
+            "training_history": {},
+            "usage_stats": {}
+        }
+
+        # Get model information
+        if preprocessor.neural_oracle and preprocessor.neural_oracle.model:
+            oracle = preprocessor.neural_oracle
+
+            metrics["model_info"] = {
+                "model_size_kb": oracle.get_model_size() / 1024,
+                "num_actions": len(oracle.action_encoder),
+                "feature_names": oracle.feature_names,
+                "top_features": [
+                    {"name": name, "importance": importance}
+                    for name, importance in oracle.get_top_features(top_k=5)
+                ]
+            }
+
+            # Load training metadata if available
+            model_path = Path(__file__).parent.parent.parent / "models" / "neural_oracle_v1.json"
+            if model_path.exists():
+                with open(model_path, 'r') as f:
+                    metrics["training_history"] = json.load(f)
+
+        # Get usage statistics from monitor
+        component_stats = monitor.get_component_metrics('neural_oracle')
+        if component_stats:
+            metrics["usage_stats"] = {
+                "total_calls": component_stats.total_calls,
+                "avg_latency_ms": component_stats.avg_latency_ms,
+                "p95_latency_ms": component_stats.p95_latency_ms,
+                "success_rate": (component_stats.successful_calls / component_stats.total_calls * 100)
+                                if component_stats.total_calls > 0 else 0
+            }
+
+        return metrics
+
+    except Exception as e:
+        logger.error(f"Error getting neural oracle metrics: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get neural oracle metrics: {str(e)}"
+        )
+
+
+@app.get("/metrics/learning")
+async def get_learning_metrics():
+    """
+    Get adaptive learning progress and correction statistics.
+
+    Returns:
+        Learning engine statistics, correction counts, rule creation progress
+    """
+    try:
+        from ..database.connection import SessionLocal
+        from ..database.models import CorrectionRecord, LearnedRule
+        from sqlalchemy import func
+
+        db = SessionLocal()
+        try:
+            # Get correction statistics
+            total_corrections = db.query(func.count(CorrectionRecord.id)).scalar() or 0
+
+            # Get action distribution of corrections
+            corrections_by_action = db.query(
+                CorrectionRecord.correct_action,
+                func.count(CorrectionRecord.id).label('count')
+            ).group_by(CorrectionRecord.correct_action).all()
+
+            # Get learned rules
+            total_rules = db.query(func.count(LearnedRule.id)).scalar() or 0
+            active_rules = db.query(func.count(LearnedRule.id)).filter(
+                LearnedRule.is_active == True
+            ).scalar() or 0
+
+            # Get top learned rules by support
+            top_rules = db.query(LearnedRule).order_by(
+                LearnedRule.support_count.desc()
+            ).limit(10).all()
+
+            # Calculate learning velocity (corrections per day)
+            from datetime import datetime, timedelta
+            last_week = datetime.utcnow() - timedelta(days=7)
+            recent_corrections = db.query(func.count(CorrectionRecord.id)).filter(
+                CorrectionRecord.timestamp >= last_week
+            ).scalar() or 0
+
+            return {
+                "corrections": {
+                    "total": total_corrections,
+                    "last_7_days": recent_corrections,
+                    "velocity_per_day": recent_corrections / 7,
+                    "by_action": [
+                        {"action": action, "count": count}
+                        for action, count in corrections_by_action
+                    ]
+                },
+                "learned_rules": {
+                    "total": total_rules,
+                    "active": active_rules,
+                    "inactive": total_rules - active_rules,
+                    "top_rules": [
+                        {
+                            "rule_name": rule.rule_name,
+                            "action": rule.recommended_action,
+                            "support_count": rule.support_count,
+                            "confidence": rule.base_confidence,
+                            "accuracy": (rule.validation_successes /
+                                       (rule.validation_successes + rule.validation_failures) * 100)
+                                      if (rule.validation_successes + rule.validation_failures) > 0 else 0
+                        }
+                        for rule in top_rules
+                    ]
+                },
+                "learning_engine": {
+                    "enabled": learning_engine is not None,
+                    "min_support": learning_engine.min_support if learning_engine else 5,
+                    "similarity_threshold": learning_engine.similarity_threshold if learning_engine else 0.85
+                }
+            }
+
+        finally:
+            db.close()
+
+    except Exception as e:
+        logger.error(f"Error getting learning metrics: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get learning metrics: {str(e)}"
+        )
+
+
+@app.get("/metrics/dashboard")
+async def get_dashboard_metrics():
+    """
+    Get comprehensive dashboard metrics for UI display.
+
+    Returns:
+        All key metrics in one response for dashboard rendering
+    """
+    try:
+        # Get all metrics in parallel
+        performance = await get_performance_metrics()
+        neural_oracle = await get_neural_oracle_metrics()
+        learning = await get_learning_metrics()
+        realtime = await get_realtime_metrics()
+
+        # Get decision source breakdown
+        from ..database.connection import SessionLocal
+        db = SessionLocal()
+        try:
+            # Use preprocessor stats for source breakdown
+            stats = preprocessor.get_statistics()
+
+            decision_sources = {
+                "learned": stats.get('learned_patterns_used', 0),
+                "symbolic": stats.get('symbolic_decisions', 0),
+                "neural": stats.get('neural_decisions', 0)
+            }
+
+            total_decisions = sum(decision_sources.values())
+            decision_percentages = {
+                source: (count / total_decisions * 100) if total_decisions > 0 else 0
+                for source, count in decision_sources.items()
+            }
+
+        finally:
+            db.close()
+
+        return {
+            "timestamp": time.time(),
+            "overview": {
+                "total_decisions": performance.get('overview', {}).get('total_decisions', 0),
+                "avg_latency_ms": performance.get('overview', {}).get('avg_latency_ms', 0),
+                "system_cpu": realtime.get('cpu_percent', 0),
+                "system_memory": realtime.get('memory_percent', 0),
+                "uptime_hours": (time.time() - preprocessor.get_statistics().get('start_time', time.time())) / 3600
+            },
+            "decision_sources": {
+                "counts": decision_sources,
+                "percentages": decision_percentages
+            },
+            "neural_oracle": neural_oracle,
+            "learning": learning,
+            "performance_by_component": performance.get('components', {})
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting dashboard metrics: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get dashboard metrics: {str(e)}"
+        )
+
+
 @app.post("/drift/check")
 async def check_drift(request: PreprocessRequest):
     """
