@@ -34,6 +34,8 @@ from .schemas import (
 )
 from ..core.preprocessor import IntelligentPreprocessor, get_preprocessor
 from ..utils.monitor import get_monitor, PerformanceTimer
+from ..database.connection import init_db
+from ..learning.adaptive_engine import AdaptiveLearningEngine
 import time
 import numpy as np
 
@@ -71,6 +73,9 @@ app.add_middleware(
 # Global preprocessor instance
 preprocessor: IntelligentPreprocessor = None
 
+# Global learning engine instance (for Option B - MVP with Learning)
+learning_engine: AdaptiveLearningEngine = None
+
 # Decision cache (for explanations)
 decision_cache: Dict[str, Dict[str, Any]] = {}
 MAX_CACHE_SIZE = 1000
@@ -105,10 +110,32 @@ def convert_to_json_serializable(obj: Any) -> Any:
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize the preprocessor on startup."""
-    global preprocessor
+    """Initialize the preprocessor and learning system on startup."""
+    global preprocessor, learning_engine
     logger.info("Starting AURORA preprocessing system...")
 
+    # Initialize database
+    try:
+        logger.info("Initializing database...")
+        init_db()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.warning(f"Database initialization failed: {e}. Using in-memory storage.")
+
+    # Initialize learning engine
+    try:
+        db_url = os.getenv("DATABASE_URL", "sqlite:///./aurora.db")
+        learning_engine = AdaptiveLearningEngine(
+            db_url=db_url,
+            min_support=5,
+            similarity_threshold=0.85,
+            epsilon=1.0
+        )
+        logger.info("Adaptive learning engine initialized")
+    except Exception as e:
+        logger.warning(f"Learning engine initialization failed: {e}")
+
+    # Initialize preprocessor
     try:
         preprocessor = get_preprocessor(
             confidence_threshold=0.9,
@@ -696,13 +723,17 @@ async def submit_correction(request: CorrectionRequest):
     """
     Submit a correction to learn from (privacy-preserving).
 
+    This endpoint records corrections persistently and creates learned rules
+    after seeing similar patterns 5+ times.
+
     Args:
         request: Correction with wrong and correct actions
 
     Returns:
-        Learning result
+        Learning result with information about rule creation
     """
     try:
+        # Process correction with in-memory pattern learner
         result = preprocessor.process_correction(
             column=request.column_data,
             column_name=request.column_name,
@@ -710,6 +741,41 @@ async def submit_correction(request: CorrectionRequest):
             correct_action=request.correct_action,
             confidence=request.confidence
         )
+
+        # ALSO record in persistent learning engine (Option B - MVP with Learning)
+        if learning_engine:
+            # Compute statistics for privacy-preserved storage
+            import pandas as pd
+            column = pd.Series(request.column_data, name=request.column_name)
+            stats = preprocessor.symbolic_engine.compute_column_statistics(
+                column, request.column_name
+            )
+            stats_dict = stats.to_dict()
+
+            # Record correction persistently (with privacy preservation)
+            user_id = "default_user"  # TODO: Get from JWT when auth is enabled
+            learning_result = learning_engine.record_correction(
+                user_id=user_id,
+                column_stats=stats_dict,  # Privacy-preserved stats only!
+                wrong_action=request.wrong_action,
+                correct_action=request.correct_action,
+                confidence=request.confidence
+            )
+
+            # Add persistent learning info to response
+            result['persistent_learning'] = {
+                'recorded': learning_result.get('recorded', False),
+                'new_rule_created': learning_result.get('new_rule_created', False),
+                'pattern_hash': learning_result.get('pattern_hash'),
+            }
+
+            if learning_result.get('new_rule_created'):
+                result['rule_info'] = {
+                    'rule_name': learning_result.get('rule_name'),
+                    'rule_confidence': learning_result.get('rule_confidence'),
+                    'rule_support': learning_result.get('rule_support'),
+                }
+                logger.info(f"✨ New rule created: {learning_result.get('rule_name')}")
 
         return CorrectionResponse(**result)
 
