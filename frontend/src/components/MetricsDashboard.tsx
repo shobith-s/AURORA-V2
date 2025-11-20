@@ -82,6 +82,12 @@ export default function MetricsDashboard() {
 
   const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b'];
 
+  // Calculate total decisions
+  const totalDecisions = Object.values(decision_sources?.counts || {}).reduce(
+    (sum: number, count: any) => sum + Number(count),
+    0
+  );
+
   // Cache level data for chart
   const cacheData = cacheStats ? [
     { name: 'L1 (Exact)', hits: cacheStats.l1_hits, fill: '#10b981' },
@@ -451,7 +457,7 @@ export default function MetricsDashboard() {
             </PieChart>
           </ResponsiveContainer>
           <div className="mt-4 text-center text-xs text-slate-600">
-            Total: {Object.values(decision_sources.counts).reduce((a: any, b: any) => a + b, 0)} decisions
+            Total: {totalDecisions} decisions
           </div>
         </div>
 
