@@ -152,9 +152,9 @@ def auto_label_column(column: pd.Series, features: MinimalFeatures) -> Preproces
 
     if features.null_percentage > 0.1:
         if features.detected_dtype in [0, 1]:  # numeric
-            return PreprocessingAction.IMPUTE_MEDIAN
+            return PreprocessingAction.FILL_NULL_MEDIAN
         else:
-            return PreprocessingAction.IMPUTE_MODE
+            return PreprocessingAction.FILL_NULL_MODE
 
     # Categorical column
     if features.unique_ratio < 0.05 or features.cardinality_bucket <= 2:
