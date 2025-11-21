@@ -1,25 +1,34 @@
 #!/usr/bin/env python3
 """
-System evaluation script for AURORA.
-Evaluates accuracy, coverage, and quality of preprocessing recommendations.
+⚠️ DEPRECATED - This script is for AURORA V1
+
+This script uses the old V1 API (AuroraPreprocessor) which no longer exists.
+
+For AURORA V2, use instead:
+  python scripts/evaluate_neural_oracle.py --model models/neural_oracle_v1.pkl
 """
 
 import sys
 from pathlib import Path
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+print("=" * 80)
+print("⚠️  DEPRECATED SCRIPT - AURORA V1 ONLY")
+print("=" * 80)
+print()
+print("This evaluation script is for AURORA V1 and won't work with V2.")
+print()
+print("For AURORA V2, use the new evaluation script:")
+print("  python scripts/evaluate_neural_oracle.py")
+print()
+print("If you don't have it yet, pull the latest changes:")
+print("  git pull")
+print()
+print("Or run complete system tests:")
+print("  pytest tests/test_complete_system.py -v -s")
+print()
+print("=" * 80)
 
-import numpy as np
-import pandas as pd
-from typing import Dict, List, Any, Tuple
-import json
-from datetime import datetime
-from collections import defaultdict
-
-from src.core.preprocessor import AuroraPreprocessor
-from src.core.actions import PreprocessingAction
-from src.data.generator import generate_synthetic_data
+sys.exit(1)
 
 
 class SystemEvaluator:
