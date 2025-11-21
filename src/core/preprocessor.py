@@ -181,8 +181,15 @@ class IntelligentPreprocessor:
                 return self._add_confidence_warnings(result)
 
         # LAYER 1: Check learned patterns (fastest - <1ms)
-        # NOTE: Learned pattern confidence now dynamically adjusted based on validation
+        # NOTE: Learned patterns require minimum corrections to be reliable
+        learned_result = None
+        learned_confidence = 0.0
+
         if self.enable_learning and self.pattern_learner:
+            # Safety check: require minimum corrections for reliable patterns
+            total_corrections = len(self.pattern_learner.correction_records)
+            MIN_CORRECTIONS_FOR_TRUST = 20  # Need substantial data before trusting learned patterns
+
             # We need column stats for pattern matching
             stats = self.symbolic_engine.compute_column_statistics(
                 column, column_name, target_available
@@ -191,13 +198,8 @@ class IntelligentPreprocessor:
 
             learned_action = self.pattern_learner.check_patterns(stats_dict)
             if learned_action:
-                self.stats['learned_decisions'] += 1
-
-                elapsed_ms = (time.time() - start_time) * 1000
-                self.stats['total_time_ms'] += elapsed_ms
-
                 # Find which rule matched to get its dynamic confidence
-                rule_confidence = 0.7  # Default if rule not found
+                rule_confidence = 0.5  # Default conservative confidence
                 rule_name = "Unknown"
                 for rule in self.pattern_learner.learned_rules:
                     if rule.condition(stats_dict) and rule.action == learned_action:
@@ -205,30 +207,62 @@ class IntelligentPreprocessor:
                         rule_name = rule.name
                         break
 
-                # Only count as high confidence if >= threshold
-                if rule_confidence >= self.confidence_threshold:
-                    self.stats['high_confidence_decisions'] += 1
+                # Apply confidence penalty if insufficient training data
+                if total_corrections < MIN_CORRECTIONS_FOR_TRUST:
+                    # Reduce confidence based on how far from minimum
+                    penalty_factor = total_corrections / MIN_CORRECTIONS_FOR_TRUST
+                    rule_confidence = rule_confidence * penalty_factor
+                    warning_note = f" (⚠ Limited training: {total_corrections}/{MIN_CORRECTIONS_FOR_TRUST} corrections)"
+                else:
+                    warning_note = ""
 
-                # Update cache with learned decision (but cache will use its own confidence)
-                if self.enable_cache and self.cache:
-                    self.cache.set(stats_dict, learned_action, column_name)
-
-                result = PreprocessingResult(
+                # Store learned result for comparison with symbolic
+                learned_result = PreprocessingResult(
                     action=learned_action,
-                    confidence=rule_confidence,  # Dynamic confidence based on validation
+                    confidence=rule_confidence,
                     source='learned',
-                    explanation=f"Matched {rule_name} (confidence adjusted by validation feedback)",
+                    explanation=f"Matched {rule_name} (confidence adjusted by validation feedback){warning_note}",
                     alternatives=[],
                     parameters={},
                     context=stats_dict,
                     decision_id=decision_id
                 )
-                return self._add_confidence_warnings(result)
+                learned_confidence = rule_confidence
 
         # LAYER 2: Try symbolic engine (fast - <100us)
         symbolic_result = self.symbolic_engine.evaluate(
             column, column_name, target_available
         )
+
+        # SAFETY CHECK: Compare learned vs symbolic confidence
+        # Only use learned if it has significantly higher confidence OR both are low
+        if learned_result:
+            # Use learned ONLY if:
+            # 1. Learned confidence is higher than symbolic AND above threshold, OR
+            # 2. Both are below threshold but learned is substantially better (0.2+ higher)
+            use_learned = False
+
+            if learned_confidence >= self.confidence_threshold and learned_confidence > symbolic_result.confidence:
+                # Learned is confident and better than symbolic
+                use_learned = True
+            elif learned_confidence < self.confidence_threshold and symbolic_result.confidence < self.confidence_threshold:
+                # Both are uncertain, use learned only if significantly better
+                if learned_confidence > symbolic_result.confidence + 0.2:
+                    use_learned = True
+
+            if use_learned:
+                self.stats['learned_decisions'] += 1
+                if learned_confidence >= self.confidence_threshold:
+                    self.stats['high_confidence_decisions'] += 1
+
+                elapsed_ms = (time.time() - start_time) * 1000
+                self.stats['total_time_ms'] += elapsed_ms
+
+                # Update cache with learned decision
+                if self.enable_cache and self.cache and learned_result.context:
+                    self.cache.set(learned_result.context, learned_result.action, column_name)
+
+                return self._add_confidence_warnings(learned_result)
 
         # If symbolic engine has high confidence, use it
         if symbolic_result.confidence >= self.confidence_threshold:
