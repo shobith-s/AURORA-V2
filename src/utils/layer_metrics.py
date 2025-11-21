@@ -52,6 +52,7 @@ class LayerMetrics:
     - symbolic: Symbolic rule engine
     - neural: Neural oracle
     - meta_learning: Meta-learning heuristics
+    - conservative_fallback: Ultra-conservative fallback (when all else fails)
     """
 
     def __init__(self, persistence_file: Optional[Path] = None):
@@ -59,7 +60,8 @@ class LayerMetrics:
             'learned': LayerStats(),
             'symbolic': LayerStats(),
             'neural': LayerStats(),
-            'meta_learning': LayerStats()
+            'meta_learning': LayerStats(),
+            'conservative_fallback': LayerStats()
         }
         self.persistence_file = persistence_file
 
@@ -77,12 +79,13 @@ class LayerMetrics:
         Record a decision from a layer.
 
         Args:
-            layer: Which layer made the decision ('learned', 'symbolic', 'neural', 'meta_learning')
+            layer: Which layer made the decision
             confidence: Decision confidence (0-1)
             was_correct: Whether it was correct (None if unknown)
         """
+        # Auto-create stats for unknown layers (defensive programming)
         if layer not in self.stats:
-            raise ValueError(f"Unknown layer: {layer}")
+            self.stats[layer] = LayerStats()
 
         stats = self.stats[layer]
         stats.total_decisions += 1
