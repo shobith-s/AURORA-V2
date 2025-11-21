@@ -13,10 +13,17 @@ export default function ResultCard({ result }: ResultCardProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const getSourceColor = (source: string) => {
+    // Check if learned pattern has limited training
+    const isLimitedTraining = source === 'learned' && result.explanation?.includes('Limited training');
+
     const colors = {
       symbolic: 'bg-blue-100 text-blue-700 border-blue-200',
       neural: 'bg-purple-100 text-purple-700 border-purple-200',
-      learned: 'bg-green-100 text-green-700 border-green-200'
+      learned: isLimitedTraining
+        ? 'bg-amber-100 text-amber-700 border-amber-200'  // Warning color for limited training
+        : 'bg-green-100 text-green-700 border-green-200',
+      meta_learning: 'bg-slate-100 text-slate-700 border-slate-200',
+      conservative_fallback: 'bg-gray-100 text-gray-700 border-gray-200'
     };
     return colors[source as keyof typeof colors] || 'bg-gray-100 text-gray-700';
   };
@@ -88,6 +95,36 @@ export default function ResultCard({ result }: ResultCardProps) {
         </div>
         <p className="text-sm text-slate-700">{result.explanation}</p>
       </div>
+
+      {/* Learned Pattern Training Warning */}
+      {result.source === 'learned' && result.explanation?.includes('Limited training') && (
+        <div className="rounded-lg p-4 border bg-amber-50 border-amber-300">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-amber-100">
+              <span className="text-lg">🎓</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-800">
+                Limited Training Data
+              </p>
+              <p className="text-xs mt-1 text-amber-700">
+                This learned pattern is based on limited corrections (&lt;20). The system has reduced its confidence accordingly. Consider reviewing this recommendation carefully and submit corrections to improve future predictions.
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <div className="flex-1 bg-amber-200 rounded-full h-2">
+                  <div
+                    className="bg-amber-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(100, (parseInt(result.explanation.match(/(\d+)\/20/)?.[1] || '0') / 20) * 100)}%` }}
+                  />
+                </div>
+                <span className="text-xs font-medium text-amber-700">
+                  {result.explanation.match(/(\d+)\/20/)?.[1] || '?'}/20
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confidence Warning (Phase 3) */}
       {result.warning && (
