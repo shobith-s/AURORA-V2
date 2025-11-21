@@ -44,6 +44,10 @@ class AnonymizationUtils:
         Returns:
             Bin index (0 to bins-1)
         """
+        # Handle NaN/None values (common for categorical columns)
+        if value is None or (isinstance(value, float) and np.isnan(value)):
+            return 0  # Default to first bin for undefined values
+
         if value_range is None:
             # Auto-range
             value_range = (value - abs(value), value + abs(value))
