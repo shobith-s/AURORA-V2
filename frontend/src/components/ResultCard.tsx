@@ -89,6 +89,35 @@ export default function ResultCard({ result }: ResultCardProps) {
         <p className="text-sm text-slate-700">{result.explanation}</p>
       </div>
 
+      {/* Confidence Warning (Phase 3) */}
+      {result.warning && (
+        <div className={`rounded-lg p-4 border ${
+          result.require_manual_review
+            ? 'bg-red-50 border-red-300'
+            : 'bg-yellow-50 border-yellow-300'
+        }`}>
+          <div className="flex items-start gap-3">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              result.require_manual_review ? 'bg-red-100' : 'bg-yellow-100'
+            }`}>
+              <span className="text-lg">{result.require_manual_review ? '⚠️' : '⚡'}</span>
+            </div>
+            <div className="flex-1">
+              <p className={`text-sm font-semibold ${
+                result.require_manual_review ? 'text-red-800' : 'text-yellow-800'
+              }`}>
+                {result.require_manual_review ? 'Manual Review Required' : 'Low Confidence Warning'}
+              </p>
+              <p className={`text-xs mt-1 ${
+                result.require_manual_review ? 'text-red-700' : 'text-yellow-700'
+              }`}>
+                {result.warning}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 gap-4">
         {/* Confidence */}

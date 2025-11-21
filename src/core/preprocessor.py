@@ -17,6 +17,12 @@ from ..learning.pattern_learner import LocalPatternLearner
 from ..features.minimal_extractor import MinimalFeatureExtractor, get_feature_extractor
 from ..features.intelligent_cache import get_cache
 from .actions import PreprocessingAction, PreprocessingResult
+from ..utils.layer_metrics import LayerMetrics
+
+# Confidence thresholds for decision quality
+CONFIDENCE_HIGH = 0.9      # Auto-apply decision (highly confident)
+CONFIDENCE_MEDIUM = 0.7    # Show warning (moderate confidence)
+CONFIDENCE_LOW = 0.5       # Require manual review (low confidence)
 
 
 class IntelligentPreprocessor:
@@ -65,6 +71,11 @@ class IntelligentPreprocessor:
         # Initialize neural oracle (lazy loading)
         self._neural_oracle: Optional[NeuralOracle] = None
         self.neural_model_path = neural_model_path
+
+        # Initialize layer metrics tracker (Phase 4)
+        self.layer_metrics = LayerMetrics(
+            persistence_file=Path("data/layer_metrics.json")
+        )
 
         # Statistics
         self.stats = {
@@ -157,7 +168,7 @@ class IntelligentPreprocessor:
                 if final_confidence >= self.confidence_threshold:
                     self.stats['high_confidence_decisions'] += 1
 
-                return PreprocessingResult(
+                result = PreprocessingResult(
                     action=cached_decision,
                     confidence=final_confidence,
                     source='learned',
@@ -167,6 +178,7 @@ class IntelligentPreprocessor:
                     context=stats_dict,
                     decision_id=decision_id
                 )
+                return self._add_confidence_warnings(result)
 
         # LAYER 1: Check learned patterns (fastest - <1ms)
         # NOTE: Learned pattern confidence now dynamically adjusted based on validation
@@ -201,7 +213,7 @@ class IntelligentPreprocessor:
                 if self.enable_cache and self.cache:
                     self.cache.set(stats_dict, learned_action, column_name)
 
-                return PreprocessingResult(
+                result = PreprocessingResult(
                     action=learned_action,
                     confidence=rule_confidence,  # Dynamic confidence based on validation
                     source='learned',
@@ -211,6 +223,7 @@ class IntelligentPreprocessor:
                     context=stats_dict,
                     decision_id=decision_id
                 )
+                return self._add_confidence_warnings(result)
 
         # LAYER 2: Try symbolic engine (fast - <100us)
         symbolic_result = self.symbolic_engine.evaluate(
@@ -230,7 +243,7 @@ class IntelligentPreprocessor:
                 self.cache.set(symbolic_result.context, symbolic_result.action, column_name)
 
             symbolic_result.decision_id = decision_id
-            return symbolic_result
+            return self._add_confidence_warnings(symbolic_result)
 
         # LAYER 2.5: Try meta-learning (statistical heuristics) for universal coverage
         # This bridges the gap between symbolic rules and neural oracle
@@ -255,59 +268,121 @@ class IntelligentPreprocessor:
                     self.cache.set(stats_dict, meta_result.action, column_name)
 
                 meta_result.decision_id = decision_id
-                return meta_result
+                return self._add_confidence_warnings(meta_result)
 
         # LAYER 3: Use NeuralOracle for ambiguous cases (<5ms)
         if self.use_neural_oracle and self.neural_oracle:
             # Extract minimal features
             features = self.feature_extractor.extract(column, column_name)
 
-            # Get neural prediction
+            # Get neural prediction with SHAP explanation
             try:
-                neural_pred = self.neural_oracle.predict(
-                    features,
-                    return_probabilities=True,
-                    return_feature_importance=False
-                )
+                # Try SHAP-enabled prediction first
+                try:
+                    neural_shap_result = self.neural_oracle.predict_with_shap(features, top_k=3)
 
-                # Blend symbolic and neural if both have medium confidence
-                if symbolic_result.confidence > 0.5:
-                    action, confidence, explanation = self._blend_decisions(
-                        symbolic_result, neural_pred
+                    # Blend symbolic and neural if both have medium confidence
+                    if symbolic_result.confidence > 0.5:
+                        action, confidence, base_explanation = self._blend_decisions_shap(
+                            symbolic_result, neural_shap_result
+                        )
+                    else:
+                        action = neural_shap_result['action']
+                        confidence = neural_shap_result['confidence']
+                        base_explanation = f"Neural oracle prediction (symbolic confidence too low: {symbolic_result.confidence:.2f})"
+
+                    # Build enhanced explanation with SHAP insights
+                    shap_explanation = "\n".join(f"  • {exp}" for exp in neural_shap_result['explanation'])
+                    explanation = f"{base_explanation}\n\nKey factors:\n{shap_explanation}"
+
+                    self.stats['neural_decisions'] += 1
+                    if confidence >= self.confidence_threshold:
+                        self.stats['high_confidence_decisions'] += 1
+
+                    elapsed_ms = (time.time() - start_time) * 1000
+                    self.stats['total_time_ms'] += elapsed_ms
+
+                    # Get alternatives from neural probabilities
+                    alternatives = sorted(
+                        [(a, p) for a, p in neural_shap_result['action_probabilities'].items() if a != action],
+                        key=lambda x: x[1],
+                        reverse=True
+                    )[:3]
+
+                    # Update cache with neural decision
+                    if self.enable_cache and self.cache and symbolic_result.context:
+                        self.cache.set(symbolic_result.context, action, column_name)
+
+                    # Build context with SHAP values
+                    enhanced_context = symbolic_result.context.copy() if symbolic_result.context else {}
+                    enhanced_context['shap_values'] = neural_shap_result['shap_values']
+                    enhanced_context['top_features'] = neural_shap_result['top_features']
+                    if symbolic_result.confidence > 0.5:
+                        enhanced_context['symbolic_fallback'] = {
+                            'action': symbolic_result.action.value,
+                            'confidence': symbolic_result.confidence,
+                            'reasoning': symbolic_result.explanation
+                        }
+
+                    result = PreprocessingResult(
+                        action=action,
+                        confidence=confidence,
+                        source='neural',
+                        explanation=explanation,
+                        alternatives=alternatives,
+                        parameters={},
+                        context=enhanced_context,
+                        decision_id=decision_id
                     )
-                else:
-                    action = neural_pred.action
-                    confidence = neural_pred.confidence
-                    explanation = f"Neural oracle prediction (symbolic confidence too low: {symbolic_result.confidence:.2f})"
+                    return self._add_confidence_warnings(result)
 
-                self.stats['neural_decisions'] += 1
-                if confidence >= self.confidence_threshold:
-                    self.stats['high_confidence_decisions'] += 1
+                except ImportError:
+                    # SHAP not available, fall back to regular prediction
+                    neural_pred = self.neural_oracle.predict(
+                        features,
+                        return_probabilities=True,
+                        return_feature_importance=False
+                    )
 
-                elapsed_ms = (time.time() - start_time) * 1000
-                self.stats['total_time_ms'] += elapsed_ms
+                    # Blend symbolic and neural if both have medium confidence
+                    if symbolic_result.confidence > 0.5:
+                        action, confidence, explanation = self._blend_decisions(
+                            symbolic_result, neural_pred
+                        )
+                    else:
+                        action = neural_pred.action
+                        confidence = neural_pred.confidence
+                        explanation = f"Neural oracle prediction (symbolic confidence too low: {symbolic_result.confidence:.2f})"
 
-                # Get alternatives from neural probabilities
-                alternatives = sorted(
-                    [(a, p) for a, p in neural_pred.action_probabilities.items() if a != action],
-                    key=lambda x: x[1],
-                    reverse=True
-                )[:3]
+                    self.stats['neural_decisions'] += 1
+                    if confidence >= self.confidence_threshold:
+                        self.stats['high_confidence_decisions'] += 1
 
-                # Update cache with neural decision
-                if self.enable_cache and self.cache and symbolic_result.context:
-                    self.cache.set(symbolic_result.context, action, column_name)
+                    elapsed_ms = (time.time() - start_time) * 1000
+                    self.stats['total_time_ms'] += elapsed_ms
 
-                return PreprocessingResult(
-                    action=action,
-                    confidence=confidence,
-                    source='neural',
-                    explanation=explanation,
-                    alternatives=alternatives,
-                    parameters={},
-                    context=symbolic_result.context,
-                    decision_id=decision_id
-                )
+                    # Get alternatives from neural probabilities
+                    alternatives = sorted(
+                        [(a, p) for a, p in neural_pred.action_probabilities.items() if a != action],
+                        key=lambda x: x[1],
+                        reverse=True
+                    )[:3]
+
+                    # Update cache with neural decision
+                    if self.enable_cache and self.cache and symbolic_result.context:
+                        self.cache.set(symbolic_result.context, action, column_name)
+
+                    result = PreprocessingResult(
+                        action=action,
+                        confidence=confidence,
+                        source='neural',
+                        explanation=explanation,
+                        alternatives=alternatives,
+                        parameters={},
+                        context=symbolic_result.context,
+                        decision_id=decision_id
+                    )
+                    return self._add_confidence_warnings(result)
 
             except Exception as e:
                 print(f"Warning: Neural oracle failed: {e}")
@@ -324,7 +399,7 @@ class IntelligentPreprocessor:
             self.stats['symbolic_decisions'] += 1
             symbolic_result.decision_id = decision_id
             symbolic_result.explanation = f"[LOW CONFIDENCE] {symbolic_result.explanation}"
-            return symbolic_result
+            return self._add_confidence_warnings(symbolic_result)
 
         # Otherwise, use ultra-conservative fallback
         stats_dict = symbolic_result.context if symbolic_result.context else {}
@@ -334,7 +409,7 @@ class IntelligentPreprocessor:
         elapsed_ms = (time.time() - start_time) * 1000
         self.stats['total_time_ms'] += elapsed_ms
 
-        return fallback_result
+        return self._add_confidence_warnings(fallback_result)
 
     def _blend_decisions(
         self,
@@ -370,6 +445,77 @@ class IntelligentPreprocessor:
                 neural_pred.confidence * 0.9,
                 f"Neural oracle ({neural_pred.confidence:.2f}) vs symbolic ({symbolic_result.confidence:.2f})"
             )
+
+    def _blend_decisions_shap(
+        self,
+        symbolic_result: PreprocessingResult,
+        neural_shap_result: Dict[str, Any]
+    ) -> tuple:
+        """
+        Blend symbolic and neural decisions with SHAP explanations.
+
+        Args:
+            symbolic_result: Result from symbolic engine
+            neural_shap_result: SHAP-enabled prediction from neural oracle
+
+        Returns:
+            (action, confidence, explanation) tuple
+        """
+        neural_action = neural_shap_result['action']
+        neural_confidence = neural_shap_result['confidence']
+
+        # If both agree, high confidence
+        if symbolic_result.action == neural_action:
+            confidence = min(0.95, (symbolic_result.confidence + neural_confidence) / 2 + 0.1)
+            explanation = f"Both symbolic and neural agree on {symbolic_result.action.value}"
+            return symbolic_result.action, confidence, explanation
+
+        # If they disagree, use the one with higher confidence
+        if symbolic_result.confidence > neural_confidence:
+            return (
+                symbolic_result.action,
+                symbolic_result.confidence * 0.9,  # Slight penalty for disagreement
+                f"Symbolic engine ({symbolic_result.confidence:.2f}) vs neural ({neural_confidence:.2f})"
+            )
+        else:
+            return (
+                neural_action,
+                neural_confidence * 0.9,
+                f"Neural oracle ({neural_confidence:.2f}) vs symbolic ({symbolic_result.confidence:.2f})"
+            )
+
+    def _add_confidence_warnings(self, result: PreprocessingResult) -> PreprocessingResult:
+        """
+        Add warnings based on confidence level and record metrics.
+
+        Args:
+            result: Preprocessing result to enhance with warnings
+
+        Returns:
+            Enhanced result with appropriate warnings
+        """
+        # Add confidence warnings
+        if result.confidence < CONFIDENCE_LOW:
+            result.warning = "⚠️ Very low confidence - manual review strongly recommended"
+            result.require_manual_review = True
+        elif result.confidence < CONFIDENCE_MEDIUM:
+            result.warning = "⚠️ Low confidence - consider reviewing this decision"
+        # No warning needed for confidence >= CONFIDENCE_MEDIUM
+
+        # Record layer metrics (Phase 4)
+        if hasattr(self, 'layer_metrics'):
+            self.layer_metrics.record_decision(
+                layer=result.source,
+                confidence=result.confidence
+            )
+
+            # Save metrics periodically (every 100 decisions)
+            if self.layer_metrics.stats.get(result.source):
+                total = self.layer_metrics.stats[result.source].total_decisions
+                if total % 100 == 0:
+                    self.layer_metrics.save()
+
+        return result
 
     def _ultra_conservative_fallback(
         self,

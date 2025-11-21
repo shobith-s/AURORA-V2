@@ -198,6 +198,95 @@ class NeuralOracle:
             feature_importance=feature_importance
         )
 
+    def predict_with_shap(
+        self,
+        features: MinimalFeatures,
+        top_k: int = 3
+    ) -> Dict[str, Any]:
+        """
+        Predict with SHAP explanation.
+
+        SHAP (SHapley Additive exPlanations) shows which features
+        contributed to this specific prediction and by how much.
+
+        Args:
+            features: Extracted features from column
+            top_k: Number of top contributing features to return
+
+        Returns:
+            Dictionary with:
+            - action: Predicted preprocessing action
+            - confidence: Prediction confidence (0-1)
+            - explanation: Human-readable explanation
+            - shap_values: Feature contributions
+            - top_features: Top K contributing features
+            - action_probabilities: Probabilities for all actions
+        """
+        try:
+            import shap
+        except ImportError:
+            raise ImportError(
+                "SHAP is required for explainable predictions. "
+                "Install with: pip install shap"
+            )
+
+        if self.model is None:
+            raise ValueError("Model not trained or loaded.")
+
+        # Get base prediction
+        prediction = self.predict(features, return_probabilities=True)
+
+        # Calculate SHAP values
+        X = features.to_array().reshape(1, -1)
+        explainer = shap.TreeExplainer(self.model)
+
+        # Get SHAP values for the predicted class
+        shap_values = explainer.shap_values(X)
+
+        # Handle multi-class output
+        if isinstance(shap_values, list):
+            # Get SHAP values for predicted class
+            predicted_idx = np.argmax(self.model.predict(
+                xgb.DMatrix(X, feature_names=self.feature_names)
+            )[0])
+            class_shap_values = shap_values[predicted_idx][0]
+        else:
+            class_shap_values = shap_values[0]
+
+        # Create feature contribution dictionary
+        contributions = {
+            name: float(class_shap_values[idx])
+            for idx, name in enumerate(self.feature_names)
+        }
+
+        # Get top contributing features
+        top_features = sorted(
+            contributions.items(),
+            key=lambda x: abs(x[1]),
+            reverse=True
+        )[:top_k]
+
+        # Build human-readable explanation
+        explanation_parts = []
+        for feature, impact in top_features:
+            direction = "increases" if impact > 0 else "decreases"
+            explanation_parts.append(
+                f"{feature.replace('_', ' ')} {direction} confidence "
+                f"(impact: {impact:+.2f})"
+            )
+
+        return {
+            'action': prediction.action,
+            'confidence': prediction.confidence,
+            'explanation': explanation_parts,
+            'shap_values': contributions,
+            'top_features': [
+                {'feature': name, 'impact': impact}
+                for name, impact in top_features
+            ],
+            'action_probabilities': prediction.action_probabilities
+        }
+
     def predict_batch(
         self,
         features_list: List[MinimalFeatures]

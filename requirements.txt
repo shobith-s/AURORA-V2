@@ -56,3 +56,6 @@ pre-commit>=3.5.0
 # Data generation
 faker>=20.0.0
 mimesis>=11.0.0
+
+# HTTP client (for dataset collection)
+requests>=2.31.0

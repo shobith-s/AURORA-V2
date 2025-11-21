@@ -237,6 +237,8 @@ class PreprocessingResult:
     parameters: Dict[str, Any]
     context: Optional[Dict[str, Any]] = None
     decision_id: Optional[str] = None
+    warning: Optional[str] = None  # Warning message for low confidence
+    require_manual_review: bool = False  # Whether manual review is strongly recommended
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert result to dictionary."""
@@ -247,7 +249,9 @@ class PreprocessingResult:
             "explanation": self.explanation,
             "alternatives": [(a.value, c) for a, c in self.alternatives],
             "parameters": self.parameters,
-            "decision_id": self.decision_id
+            "decision_id": self.decision_id,
+            "warning": self.warning,
+            "require_manual_review": self.require_manual_review
         }
 
 

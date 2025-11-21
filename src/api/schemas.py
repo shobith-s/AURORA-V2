@@ -72,6 +72,15 @@ class PreprocessResponse(BaseModel):
         None,
         description="Cache hit information (level, similarity)"
     )
+    # Phase 3: Confidence warnings
+    warning: Optional[str] = Field(
+        None,
+        description="Warning message for low confidence decisions"
+    )
+    require_manual_review: bool = Field(
+        default=False,
+        description="Whether this decision requires manual review"
+    )
 
     class Config:
         json_schema_extra = {
