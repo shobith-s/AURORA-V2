@@ -196,7 +196,7 @@ class SymbolicEngine:
 
         # Type detection
         is_numeric = pd.api.types.is_numeric_dtype(column)
-        is_categorical = pd.api.types.is_categorical_dtype(column) or \
+        is_categorical = isinstance(column.dtype, pd.CategoricalDtype) or \
                         (pd.api.types.is_object_dtype(column) and unique_ratio < 0.5)
         is_text = pd.api.types.is_string_dtype(column) or pd.api.types.is_object_dtype(column)
 
