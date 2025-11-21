@@ -384,11 +384,20 @@ class NeuralOracle:
         if self.model is None:
             return 0
 
-        # Serialize to bytes to get size
-        import io
-        buffer = io.BytesIO()
-        self.model.save_model(buffer)
-        return len(buffer.getvalue())
+        # Use temporary file to get size (XGBoost doesn't support BytesIO in all versions)
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as tmp_file:
+            tmp_path = tmp_file.name
+
+        try:
+            self.model.save_model(tmp_path)
+            size = os.path.getsize(tmp_path)
+            return size
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
     def benchmark_inference(
         self,
