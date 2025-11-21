@@ -30,7 +30,9 @@ from .schemas import (
     AlternativeAction,
     CacheStatsResponse,
     DriftMonitoringResponse,
-    DriftStatus
+    DriftStatus,
+    ChatQueryRequest,
+    ChatQueryResponse
 )
 from ..core.preprocessor import IntelligentPreprocessor, get_preprocessor
 from ..utils.monitor import get_monitor
@@ -1468,4 +1470,144 @@ async def check_drift(request: PreprocessRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to check drift: {str(e)}"
+        )
+
+
+# =============================================================================
+# Intelligent Assistant / Chatbot Endpoints
+# =============================================================================
+
+# Global assistant instance (initialized with preprocessor context)
+assistant_instance = None
+
+def get_assistant():
+    """Get or create assistant instance."""
+    global assistant_instance
+    if assistant_instance is None:
+        from ..ai.intelligent_assistant import IntelligentAssistant
+        assistant_instance = IntelligentAssistant(preprocessor=preprocessor)
+    return assistant_instance
+
+
+@app.post("/chat/query", response_model=ChatQueryResponse)
+async def chat_query(request: ChatQueryRequest):
+    """
+    Query the intelligent assistant.
+    
+    The assistant can answer questions about:
+    - Column-level statistics and analysis
+    - Dataset-level insights
+    - SHAP explanations
+    - Preprocessing techniques
+    - Statistical queries
+    
+    Args:
+        request: Query request with question and optional context
+        
+    Returns:
+        Answer with confidence and suggestions
+    """
+    try:
+        assistant = get_assistant()
+        
+        # Update context if provided
+        if request.context:
+            # Create dummy dataframe from context if provided
+            if 'columns' in request.context and 'data' in request.context:
+                try:
+                    import pandas as pd
+                    df = pd.DataFrame(request.context['data'])
+                    assistant.set_context(df)
+                except:
+                    pass
+        
+        # Get answer
+        answer = assistant.query(request.question)
+        
+        # Generate suggestions based on question
+        suggestions = []
+        q = request.question.lower()
+        
+        if 'column' in q or 'statistics' in q:
+            suggestions = [
+                "What preprocessing do you recommend for this column?",
+                "Why did you make this recommendation?",
+                "Show me SHAP explanation"
+            ]
+        elif 'dataset' in q or 'data' in q:
+            suggestions = [
+                "What data quality issues do we have?",
+                "Show me all columns",
+                "What's the distribution analysis?"
+            ]
+        elif 'why' in q or 'explain' in q:
+            suggestions = [
+                "What is SHAP?",
+                "How confident are you?",
+                "What are the alternatives?"
+            ]
+        else:
+            suggestions = [
+                "What are my capabilities?",
+                "Give me a dataset summary",
+                "Explain SHAP values"
+            ]
+        
+        return ChatQueryResponse(
+            answer=answer,
+            confidence=0.95,  # High confidence for built-in knowledge
+            suggestions=suggestions[:3]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in chat query: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process query: {str(e)}"
+        )
+
+
+@app.post("/chat/set_context")
+async def set_chat_context(
+    columns: List[str] = None,
+    row_count: int = 0,
+    dataframe: Optional[Dict[str, List[Any]]] = None
+):
+    """
+    Set context for the chat assistant.
+    
+    This allows the assistant to answer questions about the current dataset.
+    
+    Args:
+        columns: List of column names
+        row_count: Number of rows
+        dataframe: Optional dataframe as dict of lists
+        
+    Returns:
+        Success status
+    """
+    try:
+        assistant = get_assistant()
+        
+        if dataframe:
+            import pandas as pd
+            df = pd.DataFrame(dataframe)
+            assistant.set_context(df)
+            
+            return {
+                "success": True,
+                "message": f"Context set: {len(df.columns)} columns, {len(df)} rows",
+                "columns": list(df.columns)
+            }
+        else:
+            return {
+                "success": False,
+                "message": "No dataframe provided"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error setting chat context: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to set context: {str(e)}"
         )
