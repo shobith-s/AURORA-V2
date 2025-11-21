@@ -8,14 +8,17 @@ export default function MetricsDashboard() {
   const [realtime, setRealtime] = useState<any>(null);
   const [cacheStats, setCacheStats] = useState<any>(null);
   const [driftStatus, setDriftStatus] = useState<any>(null);
+  const [layerMetrics, setLayerMetrics] = useState<any>(null);
 
   useEffect(() => {
     fetchDashboardMetrics();
     fetchCacheStats();
     fetchDriftStatus();
+    fetchLayerMetrics();
     const interval = setInterval(() => {
       fetchRealtime();
       fetchCacheStats();
+      fetchLayerMetrics();
     }, 2000);
     return () => clearInterval(interval);
   }, []);
@@ -53,6 +56,15 @@ export default function MetricsDashboard() {
       setDriftStatus(response.data);
     } catch (error) {
       // Silently fail - drift status is not critical
+    }
+  };
+
+  const fetchLayerMetrics = async () => {
+    try {
+      const response = await axios.get('/api/metrics/layers');
+      setLayerMetrics(response.data);
+    } catch (error) {
+      // Silently fail - layer metrics are not critical
     }
   };
 
@@ -489,6 +501,89 @@ export default function MetricsDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Layer Metrics (Phase 4) */}
+      {layerMetrics && (
+        <div className="glass-card p-6 mt-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <GraduationCap className="w-5 h-5 text-blue-600" />
+              Layer Performance Metrics
+            </h3>
+            <span className="text-xs text-slate-600">
+              Total: {layerMetrics.total_decisions} decisions
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {Object.entries(layerMetrics.layers || {}).map(([layer, stats]: [string, any]) => {
+              if (stats.decisions === 0) return null;
+
+              const getLayerIcon = (layer: string) => {
+                switch(layer) {
+                  case 'symbolic': return <Zap className="w-5 h-5" />;
+                  case 'neural': return <Brain className="w-5 h-5" />;
+                  case 'learned': return <BookOpen className="w-5 h-5" />;
+                  case 'meta_learning': return <Sparkles className="w-5 h-5" />;
+                  default: return <Activity className="w-5 h-5" />;
+                }
+              };
+
+              const getLayerColor = (layer: string) => {
+                switch(layer) {
+                  case 'symbolic': return 'blue';
+                  case 'neural': return 'purple';
+                  case 'learned': return 'green';
+                  case 'meta_learning': return 'yellow';
+                  default: return 'gray';
+                }
+              };
+
+              const color = getLayerColor(layer);
+
+              return (
+                <div key={layer} className={`bg-${color}-50 border border-${color}-200 rounded-lg p-4`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className={`text-${color}-600`}>
+                      {getLayerIcon(layer)}
+                    </div>
+                    <span className={`text-sm font-semibold text-${color}-800 capitalize`}>
+                      {layer.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div>
+                      <div className="text-xs text-slate-600">Usage</div>
+                      <div className={`text-lg font-bold text-${color}-700`}>
+                        {stats.usage_percentage}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-slate-600">Avg Confidence</div>
+                      <div className="text-sm font-semibold text-slate-700">
+                        {stats.avg_confidence}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-slate-600">Decisions</div>
+                      <div className="text-sm font-medium text-slate-600">
+                        {stats.decisions}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 text-center text-xs text-slate-600">
+            Overall System Accuracy: <span className="font-semibold">{layerMetrics.overall_accuracy}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

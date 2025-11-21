@@ -1330,6 +1330,43 @@ async def get_learning_metrics():
         )
 
 
+@app.get("/metrics/layers")
+async def get_layer_metrics():
+    """
+    Get layer-by-layer performance metrics.
+
+    Shows which layers are used most and their accuracy.
+    Helps identify which components are working well and which need improvement.
+
+    Returns:
+        Layer-wise decision statistics including usage, accuracy, and confidence
+    """
+    try:
+        summary = preprocessor.layer_metrics.get_summary()
+
+        return {
+            "total_decisions": summary['total_decisions'],
+            "overall_accuracy": f"{summary['overall_accuracy']:.1f}%",
+            "layers": {
+                layer: {
+                    "decisions": stats['decisions'],
+                    "usage_percentage": f"{stats['usage_pct']:.1f}%",
+                    "accuracy_percentage": f"{stats['accuracy_pct']:.1f}%",
+                    "avg_confidence": f"{stats['avg_confidence']:.2f}"
+                }
+                for layer, stats in summary['by_layer'].items()
+            },
+            "timestamp": time.time()
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting layer metrics: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get layer metrics: {str(e)}"
+        )
+
+
 @app.get("/metrics/dashboard")
 async def get_dashboard_metrics():
     """
