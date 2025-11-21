@@ -1,6 +1,6 @@
 """
-Main Preprocessing Pipeline - Integrates all three layers.
-Symbolic Engine -> NeuralOracle -> Pattern Learner
+Main Preprocessing Pipeline - Integrates all layers.
+Symbolic Engine (with adaptive learning) -> Meta-Learning -> NeuralOracle
 """
 
 from typing import Any, Dict, List, Optional, Union
@@ -14,6 +14,7 @@ from ..symbolic.engine import SymbolicEngine
 from ..symbolic.meta_learner import get_meta_learner, MetaLearner
 from ..neural.oracle import NeuralOracle, get_neural_oracle
 from ..learning.pattern_learner import LocalPatternLearner
+from ..learning.adaptive_rules import AdaptiveSymbolicRules
 from ..features.minimal_extractor import MinimalFeatureExtractor, get_feature_extractor
 from ..features.intelligent_cache import get_cache
 from .actions import PreprocessingAction, PreprocessingResult
@@ -27,12 +28,18 @@ CONFIDENCE_LOW = 0.5       # Require manual review (low confidence)
 
 class IntelligentPreprocessor:
     """
-    Main preprocessing pipeline with four-layer architecture for universal coverage:
-    1. Cache (validated decisions) - Layer 0
-    2. Learned patterns (user corrections) - Layer 1
-    3. Symbolic rules (165+ rules) - Layer 2
-    4. Meta-learning (statistical heuristics) - Layer 2.5
-    5. NeuralOracle (last resort) - Layer 3
+    Main preprocessing pipeline with adaptive learning architecture:
+
+    0. Cache (validated decisions) - Instant lookup
+    1. Symbolic rules (165+ rules) - Primary decision layer
+       └─ Enhanced by adaptive learning from corrections
+    2. Meta-learning (statistical heuristics) - Bridge layer
+    3. NeuralOracle (ML predictions) - Ambiguous cases
+
+    Learning Approach:
+    - Corrections fine-tune symbolic rule parameters (NOT direct decisions)
+    - Prevents overgeneralization from limited data
+    - Maintains symbolic reliability while learning preferences
     """
 
     def __init__(
@@ -63,7 +70,12 @@ class IntelligentPreprocessor:
 
         # Initialize components
         self.symbolic_engine = SymbolicEngine(confidence_threshold=confidence_threshold)
-        self.pattern_learner = LocalPatternLearner() if enable_learning else None
+        self.pattern_learner = LocalPatternLearner() if enable_learning else None  # Legacy - being phased out
+        self.adaptive_rules = AdaptiveSymbolicRules(
+            min_corrections_for_adjustment=5,
+            max_confidence_delta=0.15,
+            persistence_file=Path("data/adaptive_rules.json")
+        ) if enable_learning else None
         self.meta_learner = get_meta_learner() if enable_meta_learning else None
         self.feature_extractor = get_feature_extractor()
         self.cache = get_cache() if enable_cache else None
@@ -180,91 +192,31 @@ class IntelligentPreprocessor:
                 )
                 return self._add_confidence_warnings(result)
 
-        # LAYER 1: Check learned patterns (fastest - <1ms)
-        # NOTE: Learned patterns require minimum corrections to be reliable
-        learned_result = None
-        learned_confidence = 0.0
-
-        if self.enable_learning and self.pattern_learner:
-            # Safety check: require minimum corrections for reliable patterns
-            total_corrections = len(self.pattern_learner.correction_records)
-            MIN_CORRECTIONS_FOR_TRUST = 20  # Need substantial data before trusting learned patterns
-
-            # We need column stats for pattern matching
-            stats = self.symbolic_engine.compute_column_statistics(
-                column, column_name, target_available
-            )
-            stats_dict = stats.to_dict()
-
-            learned_action = self.pattern_learner.check_patterns(stats_dict)
-            if learned_action:
-                # Find which rule matched to get its dynamic confidence
-                rule_confidence = 0.5  # Default conservative confidence
-                rule_name = "Unknown"
-                for rule in self.pattern_learner.learned_rules:
-                    if rule.condition(stats_dict) and rule.action == learned_action:
-                        rule_confidence = rule.confidence_fn(stats_dict)
-                        rule_name = rule.name
-                        break
-
-                # Apply confidence penalty if insufficient training data
-                if total_corrections < MIN_CORRECTIONS_FOR_TRUST:
-                    # Reduce confidence based on how far from minimum
-                    penalty_factor = total_corrections / MIN_CORRECTIONS_FOR_TRUST
-                    rule_confidence = rule_confidence * penalty_factor
-                    warning_note = f" (⚠ Limited training: {total_corrections}/{MIN_CORRECTIONS_FOR_TRUST} corrections)"
-                else:
-                    warning_note = ""
-
-                # Store learned result for comparison with symbolic
-                learned_result = PreprocessingResult(
-                    action=learned_action,
-                    confidence=rule_confidence,
-                    source='learned',
-                    explanation=f"Matched {rule_name} (confidence adjusted by validation feedback){warning_note}",
-                    alternatives=[],
-                    parameters={},
-                    context=stats_dict,
-                    decision_id=decision_id
-                )
-                learned_confidence = rule_confidence
-
-        # LAYER 2: Try symbolic engine (fast - <100us)
+        # LAYER 1: Symbolic engine with adaptive learning
+        # Corrections fine-tune symbolic rules instead of creating separate patterns
         symbolic_result = self.symbolic_engine.evaluate(
             column, column_name, target_available
         )
 
-        # SAFETY CHECK: Compare learned vs symbolic confidence
-        # Only use learned if it has significantly higher confidence OR both are low
-        if learned_result:
-            # Use learned ONLY if:
-            # 1. Learned confidence is higher than symbolic AND above threshold, OR
-            # 2. Both are below threshold but learned is substantially better (0.2+ higher)
-            use_learned = False
+        # Apply adaptive learning adjustments to confidence (if enabled)
+        original_confidence = symbolic_result.confidence
+        if self.enable_learning and self.adaptive_rules and symbolic_result.context:
+            adjusted_confidence = self.adaptive_rules.adjust_confidence(
+                symbolic_result.action,
+                original_confidence,
+                symbolic_result.context
+            )
 
-            if learned_confidence >= self.confidence_threshold and learned_confidence > symbolic_result.confidence:
-                # Learned is confident and better than symbolic
-                use_learned = True
-            elif learned_confidence < self.confidence_threshold and symbolic_result.confidence < self.confidence_threshold:
-                # Both are uncertain, use learned only if significantly better
-                if learned_confidence > symbolic_result.confidence + 0.2:
-                    use_learned = True
+            # Update explanation if confidence was adjusted
+            if abs(adjusted_confidence - original_confidence) > 0.01:
+                adjustment = self.adaptive_rules.get_adjustment(symbolic_result.context)
+                if adjustment:
+                    delta = adjusted_confidence - original_confidence
+                    symbolic_result.explanation += f" [Adapted: {delta:+.2f} from {adjustment.correction_count} corrections]"
 
-            if use_learned:
-                self.stats['learned_decisions'] += 1
-                if learned_confidence >= self.confidence_threshold:
-                    self.stats['high_confidence_decisions'] += 1
+            symbolic_result.confidence = adjusted_confidence
 
-                elapsed_ms = (time.time() - start_time) * 1000
-                self.stats['total_time_ms'] += elapsed_ms
-
-                # Update cache with learned decision
-                if self.enable_cache and self.cache and learned_result.context:
-                    self.cache.set(learned_result.context, learned_result.action, column_name)
-
-                return self._add_confidence_warnings(learned_result)
-
-        # If symbolic engine has high confidence, use it
+        # If symbolic engine has high confidence (possibly boosted by adaptive learning), use it
         if symbolic_result.confidence >= self.confidence_threshold:
             self.stats['symbolic_decisions'] += 1
             self.stats['high_confidence_decisions'] += 1
@@ -680,19 +632,24 @@ class IntelligentPreprocessor:
         confidence: float = 0.0
     ) -> Dict[str, Any]:
         """
-        Process a user correction to learn from it (privacy-preserving).
+        Process a user correction to adapt symbolic rules (privacy-preserving).
+
+        NEW APPROACH (V2.1):
+        Instead of creating separate learned patterns, corrections are used to
+        fine-tune symbolic rule parameters and confidence scores. This prevents
+        overgeneralization while still learning from user feedback.
 
         Args:
-            column: Column data (only used to extract pattern, not stored)
+            column: Column data (only used to extract stats, not stored)
             column_name: Column name
             wrong_action: Action that was incorrect
             correct_action: Correct action
             confidence: Confidence of the wrong prediction
 
         Returns:
-            Learning result
+            Learning result with adaptive rule information
         """
-        if not self.enable_learning or not self.pattern_learner:
+        if not self.enable_learning or not self.adaptive_rules:
             return {'learned': False, 'reason': 'Learning disabled'}
 
         # Convert to pandas Series if needed
@@ -705,46 +662,41 @@ class IntelligentPreprocessor:
         if isinstance(correct_action, str):
             correct_action = PreprocessingAction(correct_action)
 
-        # Extract privacy-preserving pattern
+        # Extract column statistics (privacy-preserving)
         stats = self.symbolic_engine.compute_column_statistics(column, column_name)
         stats_dict = stats.to_dict()
-
-        pattern = self.pattern_learner.extract_pattern(stats_dict, column_name)
 
         # IMPORTANT: Invalidate cache if the decision was cached
         # This prevents reusing incorrect decisions
         if self.enable_cache and self.cache:
             self.cache.invalidate_decision(stats_dict, column_name)
 
-        # Learn from correction
-        new_rule = self.pattern_learner.learn_correction(
-            pattern=pattern,
+        # Record correction to adapt symbolic rules
+        self.adaptive_rules.record_correction(
+            column_stats=stats_dict,
             wrong_action=wrong_action,
-            correct_action=correct_action,
-            confidence=confidence
+            correct_action=correct_action
         )
+
+        # Get adjustment information
+        adjustment = self.adaptive_rules.get_adjustment(stats_dict)
+        stats = self.adaptive_rules.get_statistics()
 
         result = {
             'learned': True,
-            'pattern_recorded': True,
-            'new_rule_created': new_rule is not None,
-            'cache_invalidated': True  # Inform user that bad cache entry was removed
+            'approach': 'adaptive_rules',  # NEW: Fine-tuning instead of separate patterns
+            'pattern_category': self.adaptive_rules._identify_pattern(stats_dict),
+            'cache_invalidated': True,
+            'adjustment_active': adjustment is not None,
+            'total_corrections': stats['total_corrections'],
+            'patterns_tracked': stats['patterns_tracked']
         }
 
-        # If a new rule was created, add it to symbolic engine
-        if new_rule:
-            self.symbolic_engine.add_rule(new_rule)
-            result['rule_name'] = new_rule.name
-            result['rule_confidence'] = new_rule.confidence_fn({})
-
-        # Get learning statistics
-        if new_rule:
-            similar = self.pattern_learner.find_similar_patterns(
-                pattern,
-                self.pattern_learner.similarity_threshold
-            )
-            result['similar_patterns_count'] = len(similar)
-            result['applicable_to'] = f"~{len(similar)} similar cases"
+        if adjustment:
+            result['confidence_boost'] = f"+{adjustment.confidence_delta:.3f}"
+            result['preferred_action'] = adjustment.action.value
+            result['correction_support'] = adjustment.correction_count
+            result['applicable_to'] = f"Similar columns matching '{adjustment.rule_category}' pattern"
 
         return result
 
