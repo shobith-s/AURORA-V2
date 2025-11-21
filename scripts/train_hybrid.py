@@ -86,11 +86,13 @@ def load_correction_data() -> Tuple[List[MinimalFeatures], List[PreprocessingAct
 
 def load_open_datasets(datasets_dir: str) -> Tuple[List[MinimalFeatures], List[PreprocessingAction]]:
     """Load and process open datasets."""
-    print(f"\n2. Loading open datasets from {datasets_dir}...")
+    # Normalize path to handle Windows/Unix differences
+    datasets_path = Path(datasets_dir).resolve()
 
-    datasets_path = Path(datasets_dir)
+    print(f"\n2. Loading open datasets from {datasets_path}...")
+
     if not datasets_path.exists():
-        print(f"   ⚠ Directory not found: {datasets_dir}")
+        print(f"   ⚠ Directory not found: {datasets_path}")
         return [], []
 
     extractor = MinimalFeatureExtractor()
