@@ -621,7 +621,26 @@ User: "Show me SHAP for my data"
 - `0315472`: Initial fix for detected_dtype
 - `345a9cb`: Complete fix for all attribute names
 
-**Status**: ✅ All tests should now pass
+**Status**: ✅ Fixed
+
+### Fix 2: Query Routing Priority (Nov 22, 2025)
+
+**Issue**: `test_chatbot_recommendation` was failing - queries like "What preprocessing do you recommend for revenue?" were returning statistics instead of recommendations.
+
+**Root Cause**: The routing logic was checking for the generic pattern ` for ` before checking for specific intent keywords like `recommend`.
+
+**Solution**: Reordered query routing to check specific intents first:
+1. Check for `recommend`, `suggest`, `preprocess` (most specific)
+2. Check for `why`, `explain` (explanations)
+3. Check for `statistics`, `stats`, ` for ` (generic)
+
+**Files Fixed**:
+- `src/ai/intelligent_assistant.py` (lines 73-84)
+
+**Commits**:
+- `9157698`: Reorder query routing to prioritize specific intents
+
+**Status**: ✅ All 18 tests now pass
 
 ---
 
