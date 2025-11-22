@@ -132,9 +132,9 @@ class IntelligentAssistant:
 
             response = f"📊 **Statistics for '{column_name}'**\n\n"
             response += f"**Basic Info:**\n"
-            response += f"• Type: {stats.detected_dtype}\n"
+            response += f"• Type: {stats.dtype}\n"
             response += f"• Total values: {stats.row_count:,}\n"
-            response += f"• Missing: {stats.null_count:,} ({stats.null_percentage*100:.1f}%)\n"
+            response += f"• Missing: {stats.null_count:,} ({stats.null_pct*100:.1f}%)\n"
             response += f"• Unique: {stats.unique_count:,} ({stats.unique_ratio*100:.1f}%)\n\n"
 
             if stats.is_numeric:
@@ -142,10 +142,11 @@ class IntelligentAssistant:
                 response += f"• Mean: {stats.mean:.2f}\n"
                 response += f"• Median: {stats.median:.2f}\n"
                 response += f"• Std Dev: {stats.std:.2f}\n"
-                response += f"• Range: [{stats.min:.2f}, {stats.max:.2f}]\n"
+                response += f"• Range: [{stats.min_value:.2f}, {stats.max_value:.2f}]\n"
                 response += f"• Skewness: {stats.skewness:.2f}\n"
                 response += f"• Kurtosis: {stats.kurtosis:.2f}\n"
-                response += f"• Outliers: {stats.outlier_count} ({stats.outlier_percentage*100:.1f}%)\n"
+                outlier_count = int(stats.outlier_pct * stats.row_count)
+                response += f"• Outliers: {outlier_count} ({stats.outlier_pct*100:.1f}%)\n"
 
             return response
         else:
@@ -232,11 +233,11 @@ class IntelligentAssistant:
 
                     if stats.is_numeric:
                         response += f"• Skewness: {stats.skewness:.2f} {'(highly skewed)' if abs(stats.skewness) > 2 else '(moderate)'}\n"
-                        response += f"• Outliers: {stats.outlier_percentage*100:.1f}%\n"
-                        response += f"• Missing: {stats.null_percentage*100:.1f}%\n"
+                        response += f"• Outliers: {stats.outlier_pct*100:.1f}%\n"
+                        response += f"• Missing: {stats.null_pct*100:.1f}%\n"
                     else:
                         response += f"• Unique values: {stats.unique_count:,} ({stats.unique_ratio*100:.1f}%)\n"
-                        response += f"• Missing: {stats.null_percentage*100:.1f}%\n"
+                        response += f"• Missing: {stats.null_pct*100:.1f}%\n"
 
                     return response
 

@@ -597,4 +597,32 @@ User: "Show me SHAP for my data"
    - In `frontend/src/pages/index.tsx`
    - Replace `<ChatbotPanel />` with `<ChatbotPanelEnhanced dataContext={...} />`
 
+---
+
+## 🐛 Bug Fixes Applied
+
+### Fix 1: ColumnStatistics Attribute Names (Nov 22, 2025)
+
+**Issue**: Tests were failing with `AttributeError: 'ColumnStatistics' object has no attribute 'detected_dtype'`
+
+**Root Cause**: The intelligent assistant was using incorrect attribute names for the `ColumnStatistics` object.
+
+**Fixed Attributes**:
+- `detected_dtype` → `dtype`
+- `null_percentage` → `null_pct`
+- `min`/`max` → `min_value`/`max_value`
+- `outlier_percentage` → `outlier_pct`
+- `outlier_count` → calculated from `outlier_pct * row_count`
+
+**Files Fixed**:
+- `src/ai/intelligent_assistant.py` (lines 135-149, 234-240)
+
+**Commits**:
+- `0315472`: Initial fix for detected_dtype
+- `345a9cb`: Complete fix for all attribute names
+
+**Status**: ✅ All tests should now pass
+
+---
+
 The intelligent assistant is **ready for production use**! 🎉
