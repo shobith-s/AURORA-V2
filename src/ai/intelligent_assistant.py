@@ -72,12 +72,13 @@ class IntelligentAssistant:
         # Column-specific queries (by column name or keywords)
         if column_name:
             # We detected a column name, route to appropriate handler
-            if 'statistics' in q or 'stats' in q or 'summary' in q or 'about' in q or ' for ' in q:
-                return self._get_column_statistics_answer(q)
-            elif 'recommend' in q or 'suggest' in q or 'preprocess' in q:
+            # Check specific intents first (recommend, why) before generic patterns
+            if 'recommend' in q or 'suggest' in q or 'preprocess' in q:
                 return self._get_column_recommendation_answer(q)
             elif 'why' in q or 'explain' in q:
                 return self._explain_column_decision(q)
+            elif 'statistics' in q or 'stats' in q or 'summary' in q or 'about' in q or ' for ' in q:
+                return self._get_column_statistics_answer(q)
             else:
                 # Default to statistics if column name is mentioned
                 return self._get_column_statistics_answer(q)
