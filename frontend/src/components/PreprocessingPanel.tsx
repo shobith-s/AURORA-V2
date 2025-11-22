@@ -203,7 +203,24 @@ export default function PreprocessingPanel() {
         confidence: confidence
       });
 
-      toast.success(`✓ Learned correction for "${columnName}"!`);
+      // Update the UI to reflect the corrected action
+      if (batchResults) {
+        setBatchResults({
+          ...batchResults,
+          results: {
+            ...batchResults.results,
+            [columnName]: {
+              ...batchResults.results[columnName],
+              action: correctAction,
+              confidence: 1.0,
+              source: 'user_override',
+              explanation: `User override: ${wrongAction} → ${correctAction}`
+            }
+          }
+        });
+      }
+
+      toast.success(`✓ Learned correction for "${columnName}"! UI updated.`);
       setShowCorrectionFor(null);
       setCorrectActions(prev => {
         const newActions = { ...prev };
@@ -682,30 +699,32 @@ export default function PreprocessingPanel() {
             )}
           </div>
 
-          {/* EXPANDABLE PANEL: Data Health Dashboard */}
-          {batchResults.health && (
-            <div className="glass-card overflow-hidden">
-              <button
-                onClick={() => togglePanel('dataHealth')}
-                className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <Activity className="w-6 h-6 text-blue-600" />
-                  <h3 className="text-lg font-bold text-slate-800">Data Health Analysis</h3>
-                  <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                    batchResults.health.overall_health_score >= 80 ? 'bg-green-100 text-green-700' :
-                    batchResults.health.overall_health_score >= 50 ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-red-100 text-red-700'
-                  }`}>
-                    {batchResults.health.overall_health_score.toFixed(0)}/100
-                  </span>
-                </div>
-                {expandedPanels.dataHealth ? (
-                  <ChevronDown className="w-5 h-5 text-slate-600" />
-                ) : (
-                  <ChevronRight className="w-5 h-5 text-slate-600" />
-                )}
-              </button>
+          {/* Side-by-side: Data Health & Column Recommendations */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* EXPANDABLE PANEL: Data Health Dashboard */}
+            {batchResults.health && (
+              <div className="glass-card overflow-hidden">
+                <button
+                  onClick={() => togglePanel('dataHealth')}
+                  className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Activity className="w-6 h-6 text-blue-600" />
+                    <h3 className="text-lg font-bold text-slate-800">Data Health</h3>
+                    <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                      batchResults.health.overall_health_score >= 80 ? 'bg-green-100 text-green-700' :
+                      batchResults.health.overall_health_score >= 50 ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {batchResults.health.overall_health_score.toFixed(0)}/100
+                    </span>
+                  </div>
+                  {expandedPanels.dataHealth ? (
+                    <ChevronDown className="w-5 h-5 text-slate-600" />
+                  ) : (
+                    <ChevronRight className="w-5 h-5 text-slate-600" />
+                  )}
+                </button>
 
               {expandedPanels.dataHealth && (
                 <div className="px-6 pb-6 border-t border-slate-200">
@@ -893,28 +912,28 @@ export default function PreprocessingPanel() {
                   </div>
                 </div>
               )}
-            </div>
-          )}
+              </div>
+            )}
 
-          {/* EXPANDABLE PANEL: Column Recommendations */}
-          {Object.keys(batchResults.results).length > 0 && (
-            <div className="glass-card overflow-hidden">
-              <button
-                onClick={() => togglePanel('recommendations')}
-                className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <Target className="w-6 h-6 text-blue-600" />
-                  <h3 className="text-lg font-bold text-slate-800">
-                    Column Recommendations ({Object.keys(batchResults.results).length})
-                  </h3>
-                </div>
-                {expandedPanels.recommendations ? (
-                  <ChevronDown className="w-5 h-5 text-slate-600" />
-                ) : (
-                  <ChevronRight className="w-5 h-5 text-slate-600" />
-                )}
-              </button>
+            {/* EXPANDABLE PANEL: Column Recommendations */}
+            {Object.keys(batchResults.results).length > 0 && (
+              <div className="glass-card overflow-hidden">
+                <button
+                  onClick={() => togglePanel('recommendations')}
+                  className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Target className="w-6 h-6 text-blue-600" />
+                    <h3 className="text-lg font-bold text-slate-800">
+                      Recommendations ({Object.keys(batchResults.results).length})
+                    </h3>
+                  </div>
+                  {expandedPanels.recommendations ? (
+                    <ChevronDown className="w-5 h-5 text-slate-600" />
+                  ) : (
+                    <ChevronRight className="w-5 h-5 text-slate-600" />
+                  )}
+                </button>
 
               {expandedPanels.recommendations && (
                 <div className="px-6 pb-6 border-t border-slate-200">
@@ -956,7 +975,9 @@ export default function PreprocessingPanel() {
                         <div className="flex items-center gap-2">
                           <span className="text-sm text-slate-600">Source:</span>
                           <span className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                            columnResult.source === 'meta_learning'
+                            columnResult.source === 'user_override'
+                              ? 'bg-green-100 text-green-700'
+                              : columnResult.source === 'meta_learning'
                               ? 'bg-orange-100 text-orange-700'
                               : columnResult.source === 'conservative_fallback'
                               ? 'bg-slate-100 text-slate-700'
@@ -1032,8 +1053,9 @@ export default function PreprocessingPanel() {
                   </div>
                 </div>
               )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
