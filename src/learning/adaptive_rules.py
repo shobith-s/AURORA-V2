@@ -120,13 +120,15 @@ class AdaptiveSymbolicRules:
 
         Returns pattern key like: "numeric_high_skewness", "categorical_high_cardinality"
         """
-        dtype = stats.get('detected_dtype', 'unknown')
+        # Handle both old and new field names for compatibility
+        dtype = stats.get('dtype', stats.get('detected_dtype', 'unknown'))
+        is_numeric = stats.get('is_numeric', False)
 
         # Numeric patterns
-        if dtype in ['numeric', 'integer', 'float']:
-            skewness = abs(stats.get('skewness', 0))
-            null_pct = stats.get('null_percentage', 0)
-            outlier_pct = stats.get('outlier_percentage', 0)
+        if is_numeric or dtype in ['numeric', 'integer', 'float', 'int64', 'float64']:
+            skewness = abs(stats.get('skewness', 0) or 0)
+            null_pct = stats.get('null_pct', stats.get('null_percentage', 0))
+            outlier_pct = stats.get('outlier_pct', stats.get('outlier_percentage', 0))
 
             if null_pct > 0.5:
                 return 'numeric_high_nulls'
@@ -142,7 +144,7 @@ class AdaptiveSymbolicRules:
                 return 'numeric_normal'
 
         # Categorical patterns
-        elif dtype in ['categorical', 'object']:
+        elif stats.get('is_categorical') or dtype in ['categorical', 'object']:
             unique_ratio = stats.get('unique_ratio', 0)
             cardinality = stats.get('unique_count', 0)
 
