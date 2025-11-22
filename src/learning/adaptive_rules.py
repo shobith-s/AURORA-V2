@@ -220,7 +220,8 @@ class AdaptiveSymbolicRules:
         """
         pattern_key = self._identify_pattern(column_stats)
         corrections = self.correction_patterns.get(pattern_key, [])
-        return len(corrections) >= self.min_corrections_for_production
+        # Explicit bool conversion to avoid numpy.bool_ issues
+        return bool(len(corrections) >= self.min_corrections_for_production)
 
     def get_adjustment(self, column_stats: Dict[str, Any]) -> Optional[RuleAdjustment]:
         """

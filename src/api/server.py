@@ -853,6 +853,8 @@ async def submit_correction(request: CorrectionRequest):
                     return {k: convert_numpy_types(v) for k, v in obj.items()}
                 elif isinstance(obj, list):
                     return [convert_numpy_types(item) for item in obj]
+                elif isinstance(obj, (np.bool_, bool)):
+                    return bool(obj)
                 elif isinstance(obj, (np.integer, np.int64, np.int32)):
                     return int(obj)
                 elif isinstance(obj, (np.floating, np.float64, np.float32)):
@@ -890,6 +892,28 @@ async def submit_correction(request: CorrectionRequest):
                     'rule_support': learning_result.get('rule_support'),
                 }
                 logger.info(f"✨ New rule created: {learning_result.get('rule_name')}")
+
+        # Convert all numpy types in result to native Python types
+        def convert_numpy_types_in_result(obj):
+            """Recursively convert numpy types to native Python types."""
+            if isinstance(obj, dict):
+                return {k: convert_numpy_types_in_result(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_numpy_types_in_result(item) for item in obj]
+            elif isinstance(obj, (np.bool_, bool)):
+                return bool(obj)
+            elif isinstance(obj, (np.integer, np.int64, np.int32)):
+                return int(obj)
+            elif isinstance(obj, (np.floating, np.float64, np.float32)):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return convert_numpy_types_in_result(obj.tolist())
+            elif pd.isna(obj):
+                return None
+            else:
+                return obj
+
+        result = convert_numpy_types_in_result(result)
 
         # Map preprocessor result to CorrectionResponse schema
         response_data = {
