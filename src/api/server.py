@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 import pandas as pd
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 import logging
 import os
 
