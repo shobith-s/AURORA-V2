@@ -305,6 +305,29 @@ class AdaptiveSymbolicRules:
             }
         }
 
+        # Convert numpy types to native Python types for JSON serialization
+        def convert_numpy_types(obj):
+            """Recursively convert numpy types to native Python types."""
+            import numpy as np
+            import pandas as pd
+
+            if isinstance(obj, dict):
+                return {k: convert_numpy_types(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_numpy_types(item) for item in obj]
+            elif isinstance(obj, (np.integer, np.int64, np.int32)):
+                return int(obj)
+            elif isinstance(obj, (np.floating, np.float64, np.float32)):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return convert_numpy_types(obj.tolist())
+            elif pd.isna(obj):
+                return None
+            else:
+                return obj
+
+        data = convert_numpy_types(data)
+
         with open(self.persistence_file, 'w') as f:
             json.dump(data, f, indent=2)
 
@@ -313,21 +336,40 @@ class AdaptiveSymbolicRules:
         if not self.persistence_file or not self.persistence_file.exists():
             return
 
-        with open(self.persistence_file, 'r') as f:
-            data = json.load(f)
+        try:
+            with open(self.persistence_file, 'r') as f:
+                data = json.load(f)
 
-        # Restore correction patterns
-        self.correction_patterns = defaultdict(list)
-        for pattern, corrections in data.get('correction_patterns', {}).items():
-            self.correction_patterns[pattern] = corrections
+            # Restore correction patterns
+            self.correction_patterns = defaultdict(list)
+            for pattern, corrections in data.get('correction_patterns', {}).items():
+                self.correction_patterns[pattern] = corrections
 
-        # Restore adjustments
-        self.rule_adjustments = {}
-        for pattern, adj_data in data.get('rule_adjustments', {}).items():
-            self.rule_adjustments[pattern] = RuleAdjustment(
-                rule_category=adj_data['rule_category'],
-                action=PreprocessingAction(adj_data['action']),
-                confidence_delta=adj_data['confidence_delta'],
-                threshold_adjustments=adj_data.get('threshold_adjustments', {}),
-                correction_count=adj_data['correction_count']
+            # Restore adjustments
+            self.rule_adjustments = {}
+            for pattern, adj_data in data.get('rule_adjustments', {}).items():
+                self.rule_adjustments[pattern] = RuleAdjustment(
+                    rule_category=adj_data['rule_category'],
+                    action=PreprocessingAction(adj_data['action']),
+                    confidence_delta=adj_data['confidence_delta'],
+                    threshold_adjustments=adj_data.get('threshold_adjustments', {}),
+                    correction_count=adj_data['correction_count']
+                )
+
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            # Corrupted file - backup and start fresh
+            import shutil
+            import logging
+            logger = logging.getLogger(__name__)
+
+            backup_file = self.persistence_file.with_suffix('.json.corrupted')
+            shutil.move(str(self.persistence_file), str(backup_file))
+
+            logger.warning(
+                f"Corrupted adaptive rules file detected. "
+                f"Backed up to {backup_file} and starting fresh. Error: {e}"
             )
+
+            # Initialize with empty state
+            self.correction_patterns = defaultdict(list)
+            self.rule_adjustments = {}
