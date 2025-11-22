@@ -175,15 +175,81 @@ async def root():
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Health check endpoint."""
-    components = {
-        "symbolic_engine": "ok",
-        "pattern_learner": "ok" if preprocessor.enable_learning else "disabled",
-        "neural_oracle": "ok" if preprocessor.use_neural_oracle and preprocessor.neural_oracle else "unavailable"
-    }
+    """
+    Comprehensive health check endpoint for monitoring and load balancers.
+
+    Returns:
+        HealthResponse with overall status and component-level health
+    """
+    components = {}
+    all_healthy = True
+
+    # Check symbolic engine (critical)
+    try:
+        if hasattr(preprocessor, 'symbolic_engine') and preprocessor.symbolic_engine is not None:
+            components["symbolic_engine"] = "ok"
+        else:
+            components["symbolic_engine"] = "unavailable"
+            all_healthy = False
+    except Exception as e:
+        logger.error(f"Health check - symbolic engine error: {e}")
+        components["symbolic_engine"] = "error"
+        all_healthy = False
+
+    # Check pattern learner (optional)
+    try:
+        if preprocessor.enable_learning:
+            components["pattern_learner"] = "ok" if preprocessor.pattern_learner else "initializing"
+        else:
+            components["pattern_learner"] = "disabled"
+    except Exception as e:
+        logger.warning(f"Health check - pattern learner error: {e}")
+        components["pattern_learner"] = "error"
+
+    # Check adaptive rules (optional)
+    try:
+        if preprocessor.enable_learning:
+            components["adaptive_rules"] = "ok" if preprocessor.adaptive_rules else "unavailable"
+        else:
+            components["adaptive_rules"] = "disabled"
+    except Exception as e:
+        logger.warning(f"Health check - adaptive rules error: {e}")
+        components["adaptive_rules"] = "error"
+
+    # Check neural oracle (optional)
+    try:
+        if preprocessor.use_neural_oracle:
+            components["neural_oracle"] = "ok" if preprocessor.neural_oracle else "loading"
+        else:
+            components["neural_oracle"] = "disabled"
+    except Exception as e:
+        logger.warning(f"Health check - neural oracle error: {e}")
+        components["neural_oracle"] = "error"
+
+    # Check database (optional)
+    try:
+        if learning_engine:
+            components["database"] = "ok"
+        else:
+            components["database"] = "disabled"
+    except Exception as e:
+        logger.warning(f"Health check - database error: {e}")
+        components["database"] = "error"
+
+    # Check cache (optional)
+    try:
+        if preprocessor.enable_cache:
+            components["cache"] = "ok" if preprocessor.cache else "unavailable"
+        else:
+            components["cache"] = "disabled"
+    except Exception as e:
+        logger.warning(f"Health check - cache error: {e}")
+        components["cache"] = "error"
+
+    overall_status = "healthy" if all_healthy else "degraded"
 
     return HealthResponse(
-        status="healthy",
+        status=overall_status,
         version="1.0.0",
         components=components
     )
@@ -201,6 +267,31 @@ async def preprocess_column(request: PreprocessRequest):
         Preprocessing recommendation with action, confidence, and explanation
     """
     try:
+        # Input validation
+        if not request.column_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="column_data cannot be empty"
+            )
+
+        if len(request.column_data) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="column_data must contain at least 2 values"
+            )
+
+        if len(request.column_data) > 1000000:  # 1M row limit
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="column_data exceeds maximum size of 1,000,000 rows"
+            )
+
+        if not request.column_name or not request.column_name.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="column_name cannot be empty"
+            )
+
         # Time the operation
         start_time = time.time()
 
