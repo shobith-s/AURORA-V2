@@ -132,7 +132,7 @@ class IntelligentAssistant:
 
             response = f"📊 **Statistics for '{column_name}'**\n\n"
             response += f"**Basic Info:**\n"
-            response += f"• Type: {stats.detected_type}\n"
+            response += f"• Type: {stats.detected_dtype}\n"
             response += f"• Total values: {stats.row_count:,}\n"
             response += f"• Missing: {stats.null_count:,} ({stats.null_percentage*100:.1f}%)\n"
             response += f"• Unique: {stats.unique_count:,} ({stats.unique_ratio*100:.1f}%)\n\n"
