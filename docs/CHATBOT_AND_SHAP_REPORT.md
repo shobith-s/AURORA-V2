@@ -640,6 +640,31 @@ User: "Show me SHAP for my data"
 **Commits**:
 - `9157698`: Reorder query routing to prioritize specific intents
 
+**Status**: ✅ Fixed
+
+### Fix 3: Lowercase Action Names & Query Handling (Nov 22, 2025)
+
+**Issue**: `test_chatbot_recommendation` still failing - test expects lowercase action words like "transform", "scale", etc., but responses had title-cased words like "Transform", "Scale".
+
+**Root Causes**:
+1. Action names were formatted with `.title()` → "Log Transform" instead of "log transform"
+2. Handlers were receiving lowercase `q` instead of original `user_question`
+
+**Solutions**:
+1. Changed action formatting from `.title()` to `.lower()`
+2. Pass `user_question` (original case) to all handler methods instead of `q` (lowercase)
+3. Applied lowercase formatting to both main action and alternatives
+
+**Example**:
+- Before: `**Action:** Log Transform`
+- After: `**Action:** log transform`
+
+**Files Fixed**:
+- `src/ai/intelligent_assistant.py` (lines 77-92, 173-184)
+
+**Commits**:
+- `d452fb1`: Use lowercase action names and pass original query to handlers
+
 **Status**: ✅ All 18 tests now pass
 
 ---

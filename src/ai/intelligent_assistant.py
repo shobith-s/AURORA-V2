@@ -74,22 +74,22 @@ class IntelligentAssistant:
             # We detected a column name, route to appropriate handler
             # Check specific intents first (recommend, why) before generic patterns
             if 'recommend' in q or 'suggest' in q or 'preprocess' in q:
-                return self._get_column_recommendation_answer(q)
+                return self._get_column_recommendation_answer(user_question)
             elif 'why' in q or 'explain' in q:
-                return self._explain_column_decision(q)
+                return self._explain_column_decision(user_question)
             elif 'statistics' in q or 'stats' in q or 'summary' in q or 'about' in q or ' for ' in q:
-                return self._get_column_statistics_answer(q)
+                return self._get_column_statistics_answer(user_question)
             else:
                 # Default to statistics if column name is mentioned
-                return self._get_column_statistics_answer(q)
+                return self._get_column_statistics_answer(user_question)
         elif any(word in q for word in ['column', 'feature', 'variable']):
             # Generic column query without specific column name
             if 'statistics' in q or 'stats' in q:
-                return self._get_column_statistics_answer(q)
+                return self._get_column_statistics_answer(user_question)
             elif 'recommend' in q or 'suggest' in q:
-                return self._get_column_recommendation_answer(q)
+                return self._get_column_recommendation_answer(user_question)
             elif 'why' in q or 'explain' in q:
-                return self._explain_column_decision(q)
+                return self._explain_column_decision(user_question)
 
         # Dataset-level queries
         if any(word in q for word in ['dataset', 'data', 'dataframe', 'table']):
@@ -170,8 +170,9 @@ class IntelligentAssistant:
             col = self.current_dataframe[column_name]
             result = self.preprocessor.preprocess_column(col, column_name)
 
+            action_name = result.action.value.replace('_', ' ').lower()
             response = f"💡 **Recommendation for '{column_name}'**\n\n"
-            response += f"**Action:** {result.action.value.replace('_', ' ').title()}\n"
+            response += f"**Action:** {action_name}\n"
             response += f"**Confidence:** {result.confidence*100:.1f}%\n"
             response += f"**Source:** {result.source.title()}\n\n"
             response += f"**Explanation:**\n{result.explanation}\n\n"
@@ -179,7 +180,8 @@ class IntelligentAssistant:
             if result.alternatives:
                 response += "**Alternatives:**\n"
                 for alt_action, alt_conf in result.alternatives[:3]:
-                    response += f"• {alt_action.value.replace('_', ' ').title()} ({alt_conf*100:.0f}%)\n"
+                    alt_name = alt_action.value.replace('_', ' ').lower()
+                    response += f"• {alt_name} ({alt_conf*100:.0f}%)\n"
 
             if result.warning:
                 response += f"\n⚠️ {result.warning}"
