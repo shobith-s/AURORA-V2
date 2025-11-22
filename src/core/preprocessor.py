@@ -62,32 +62,75 @@ class IntelligentPreprocessor:
             enable_cache: Whether to enable intelligent caching
             enable_meta_learning: Whether to enable meta-learning (statistical heuristics)
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         self.confidence_threshold = confidence_threshold
         self.use_neural_oracle = use_neural_oracle
         self.enable_learning = enable_learning
         self.enable_cache = enable_cache
         self.enable_meta_learning = enable_meta_learning
 
-        # Initialize components
-        self.symbolic_engine = SymbolicEngine(confidence_threshold=confidence_threshold)
-        self.pattern_learner = LocalPatternLearner() if enable_learning else None  # Legacy - being phased out
-        self.adaptive_rules = AdaptiveSymbolicRules(
-            min_corrections_for_adjustment=5,
-            max_confidence_delta=0.15,
-            persistence_file=Path("data/adaptive_rules.json")
-        ) if enable_learning else None
-        self.meta_learner = get_meta_learner() if enable_meta_learning else None
-        self.feature_extractor = get_feature_extractor()
-        self.cache = get_cache() if enable_cache else None
+        # Initialize components with error handling
+        try:
+            self.symbolic_engine = SymbolicEngine(confidence_threshold=confidence_threshold)
+        except Exception as e:
+            logger.error(f"Failed to initialize symbolic engine: {e}")
+            raise RuntimeError(f"Critical component failed: symbolic engine - {e}")
+
+        # Legacy pattern learner (being phased out)
+        try:
+            self.pattern_learner = LocalPatternLearner() if enable_learning else None
+        except Exception as e:
+            logger.warning(f"Pattern learner initialization failed, continuing without it: {e}")
+            self.pattern_learner = None
+
+        # Adaptive rules (with graceful degradation)
+        try:
+            self.adaptive_rules = AdaptiveSymbolicRules(
+                min_corrections_for_adjustment=5,
+                max_confidence_delta=0.15,
+                persistence_file=Path("data/adaptive_rules.json")
+            ) if enable_learning else None
+        except Exception as e:
+            logger.warning(f"Adaptive rules initialization failed, continuing without it: {e}")
+            self.adaptive_rules = None
+            self.enable_learning = False  # Disable learning if adaptive rules fail
+
+        # Meta learner
+        try:
+            self.meta_learner = get_meta_learner() if enable_meta_learning else None
+        except Exception as e:
+            logger.warning(f"Meta learner initialization failed, continuing without it: {e}")
+            self.meta_learner = None
+
+        # Feature extractor (required for neural oracle)
+        try:
+            self.feature_extractor = get_feature_extractor()
+        except Exception as e:
+            logger.warning(f"Feature extractor initialization failed: {e}")
+            self.feature_extractor = None
+            self.use_neural_oracle = False  # Disable neural oracle if feature extractor fails
+
+        # Cache
+        try:
+            self.cache = get_cache() if enable_cache else None
+        except Exception as e:
+            logger.warning(f"Cache initialization failed, continuing without it: {e}")
+            self.cache = None
 
         # Initialize neural oracle (lazy loading)
         self._neural_oracle: Optional[NeuralOracle] = None
         self.neural_model_path = neural_model_path
 
-        # Initialize layer metrics tracker (Phase 4)
-        self.layer_metrics = LayerMetrics(
-            persistence_file=Path("data/layer_metrics.json")
-        )
+        # Initialize layer metrics tracker
+        try:
+            self.layer_metrics = LayerMetrics(
+                persistence_file=Path("data/layer_metrics.json")
+            )
+        except Exception as e:
+            logger.warning(f"Layer metrics initialization failed, continuing without it: {e}")
+            self.layer_metrics = None
 
         # Statistics
         self.stats = {
@@ -103,12 +146,22 @@ class IntelligentPreprocessor:
 
     @property
     def neural_oracle(self) -> Optional[NeuralOracle]:
-        """Lazy load neural oracle."""
+        """Lazy load neural oracle with graceful degradation."""
+        import logging
+        logger = logging.getLogger(__name__)
+
         if self.use_neural_oracle and self._neural_oracle is None:
             try:
                 self._neural_oracle = get_neural_oracle(self.neural_model_path)
-            except (ImportError, FileNotFoundError) as e:
-                print(f"Warning: Could not load neural oracle: {e}")
+                logger.info("Neural oracle loaded successfully")
+            except FileNotFoundError as e:
+                logger.warning(f"Neural oracle model file not found: {e}. Continuing with symbolic rules only.")
+                self.use_neural_oracle = False
+            except ImportError as e:
+                logger.warning(f"Neural oracle dependencies missing: {e}. Install with: pip install xgboost shap")
+                self.use_neural_oracle = False
+            except Exception as e:
+                logger.error(f"Unexpected error loading neural oracle: {e}. Falling back to symbolic rules.")
                 self.use_neural_oracle = False
         return self._neural_oracle
 
@@ -489,17 +542,23 @@ class IntelligentPreprocessor:
         # No warning needed for confidence >= CONFIDENCE_MEDIUM
 
         # Record layer metrics (Phase 4)
-        if hasattr(self, 'layer_metrics'):
-            self.layer_metrics.record_decision(
-                layer=result.source,
-                confidence=result.confidence
-            )
+        if hasattr(self, 'layer_metrics') and self.layer_metrics is not None:
+            try:
+                self.layer_metrics.record_decision(
+                    layer=result.source,
+                    confidence=result.confidence
+                )
 
-            # Save metrics periodically (every 100 decisions)
-            if self.layer_metrics.stats.get(result.source):
-                total = self.layer_metrics.stats[result.source].total_decisions
-                if total % 100 == 0:
-                    self.layer_metrics.save()
+                # Save metrics periodically (every 100 decisions)
+                if self.layer_metrics.stats.get(result.source):
+                    total = self.layer_metrics.stats[result.source].total_decisions
+                    if total % 100 == 0:
+                        self.layer_metrics.save()
+            except Exception as e:
+                # Don't fail preprocessing if metrics recording fails
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to record layer metrics: {e}")
 
         return result
 
