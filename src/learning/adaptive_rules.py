@@ -58,18 +58,21 @@ class AdaptiveSymbolicRules:
         self,
         min_corrections_for_adjustment: int = 5,
         max_confidence_delta: float = 0.15,
+        min_corrections_for_production: int = 10,
         persistence_file: Optional[Path] = None
     ):
         """
         Initialize adaptive rules system.
 
         Args:
-            min_corrections_for_adjustment: Minimum corrections before adjusting rules
+            min_corrections_for_adjustment: Minimum corrections to compute adjustments (training phase)
             max_confidence_delta: Maximum confidence adjustment (+/-)
+            min_corrections_for_production: Minimum corrections before using adjustments in decisions (production phase)
             persistence_file: Where to save/load adjustments
         """
         self.min_corrections_for_adjustment = min_corrections_for_adjustment
         self.max_confidence_delta = max_confidence_delta
+        self.min_corrections_for_production = min_corrections_for_production
         self.persistence_file = persistence_file
 
         # Track corrections by pattern
@@ -205,6 +208,20 @@ class AdaptiveSymbolicRules:
 
         self.rule_adjustments[pattern_key] = adjustment
 
+    def is_production_ready(self, column_stats: Dict[str, Any]) -> bool:
+        """
+        Check if a pattern has enough corrections to use in production decisions.
+
+        Args:
+            column_stats: Column statistics
+
+        Returns:
+            True if pattern has >= min_corrections_for_production, False otherwise
+        """
+        pattern_key = self._identify_pattern(column_stats)
+        corrections = self.correction_patterns.get(pattern_key, [])
+        return len(corrections) >= self.min_corrections_for_production
+
     def get_adjustment(self, column_stats: Dict[str, Any]) -> Optional[RuleAdjustment]:
         """
         Get rule adjustment for a column if one exists.
@@ -227,14 +244,23 @@ class AdaptiveSymbolicRules:
         """
         Adjust confidence of a symbolic rule decision based on corrections.
 
+        Only applies adjustments if pattern is production-ready (has enough corrections).
+        This implements training/production phase separation.
+
         Args:
             action: The action being recommended
             original_confidence: Original confidence from symbolic rule
             column_stats: Column statistics
 
         Returns:
-            Adjusted confidence
+            Adjusted confidence (or original if not production-ready)
         """
+        # Check if pattern has enough corrections for production use
+        if not self.is_production_ready(column_stats):
+            # TRAINING PHASE: Don't affect decisions yet
+            return original_confidence
+
+        # PRODUCTION PHASE: Apply learned adjustments
         adjustment = self.get_adjustment(column_stats)
 
         if not adjustment:

@@ -88,8 +88,9 @@ class IntelligentPreprocessor:
         # Adaptive rules (with graceful degradation)
         try:
             self.adaptive_rules = AdaptiveSymbolicRules(
-                min_corrections_for_adjustment=2,  # REDUCED from 5 to 2 for faster learning
-                max_confidence_delta=0.20,  # INCREASED from 0.15 to 0.20 for stronger adjustments
+                min_corrections_for_adjustment=2,  # Compute adjustments after 2 corrections (TRAINING)
+                max_confidence_delta=0.20,  # Strong adjustments (20% boost/penalty)
+                min_corrections_for_production=10,  # Use adjustments in decisions after 10 corrections (PRODUCTION)
                 persistence_file=Path("data/adaptive_rules.json")
             ) if enable_learning else None
         except Exception as e:
@@ -251,19 +252,22 @@ class IntelligentPreprocessor:
             column, column_name, target_available
         )
 
-        # Apply adaptive learning adjustments to confidence (if enabled)
+        # Apply adaptive learning adjustments to confidence (if enabled and production-ready)
         original_confidence = symbolic_result.confidence
         if self.enable_learning and self.adaptive_rules and symbolic_result.context:
+            # Check if this pattern is ready for production use
+            is_production_ready = self.adaptive_rules.is_production_ready(symbolic_result.context)
+
             adjusted_confidence = self.adaptive_rules.adjust_confidence(
                 symbolic_result.action,
                 original_confidence,
                 symbolic_result.context
             )
 
-            # Update explanation if confidence was adjusted
+            # Update explanation if confidence was adjusted (production phase only)
             if abs(adjusted_confidence - original_confidence) > 0.01:
                 adjustment = self.adaptive_rules.get_adjustment(symbolic_result.context)
-                if adjustment:
+                if adjustment and is_production_ready:
                     delta = adjusted_confidence - original_confidence
                     symbolic_result.explanation += f" [Adapted: {delta:+.2f} from {adjustment.correction_count} corrections]"
 
@@ -746,16 +750,21 @@ class IntelligentPreprocessor:
         pattern_corrections = self.adaptive_rules.correction_patterns.get(pattern_key, [])
         correction_count = len(pattern_corrections)
 
+        # Check production readiness
+        is_production_ready = self.adaptive_rules.is_production_ready(stats_dict)
+
         result = {
             'learned': True,
-            'approach': 'adaptive_rules',  # NEW: Fine-tuning instead of separate patterns
+            'approach': 'adaptive_rules',  # Fine-tuning instead of separate patterns
             'pattern_category': pattern_key,
             'cache_invalidated': True,
             'adjustment_active': adjustment is not None,
+            'production_ready': is_production_ready,  # NEW: Is this pattern ready for production use?
             'total_corrections': stats['total_corrections'],
             'patterns_tracked': stats['patterns_tracked'],
-            'pattern_corrections': correction_count,  # NEW: Show user their progress
-            'corrections_needed': max(0, self.adaptive_rules.min_corrections_for_adjustment - correction_count)  # NEW
+            'pattern_corrections': correction_count,
+            'corrections_needed_for_training': max(0, self.adaptive_rules.min_corrections_for_adjustment - correction_count),
+            'corrections_needed_for_production': max(0, self.adaptive_rules.min_corrections_for_production - correction_count)
         }
 
         if adjustment:
@@ -763,11 +772,24 @@ class IntelligentPreprocessor:
             result['preferred_action'] = adjustment.action.value
             result['correction_support'] = adjustment.correction_count
             result['applicable_to'] = f"Similar columns matching '{adjustment.rule_category}' pattern"
+
+            # Phase-specific messaging
+            if is_production_ready:
+                result['message'] = f"✓ PRODUCTION: Adjustments active! Pattern '{pattern_key}' learned from {correction_count} corrections. " + \
+                                  f"Now boosting '{adjustment.action.value}' by {adjustment.confidence_delta:.0%} for similar columns."
+            else:
+                corrections_left = self.adaptive_rules.min_corrections_for_production - correction_count
+                result['message'] = f"⚙ TRAINING: Adjustment computed from {correction_count} corrections. " + \
+                                  f"{corrections_left} more needed to activate in production decisions."
         else:
             # Provide feedback even if no adjustment yet
             if correction_count > 0:
-                result['message'] = f"Correction recorded! {correction_count}/{self.adaptive_rules.min_corrections_for_adjustment} corrections for this pattern. " + \
-                                  f"{max(1, self.adaptive_rules.min_corrections_for_adjustment - correction_count)} more needed to activate adjustment."
+                corrections_left = self.adaptive_rules.min_corrections_for_adjustment - correction_count
+                result['message'] = f"📝 Recording: {correction_count}/{self.adaptive_rules.min_corrections_for_adjustment} corrections for pattern '{pattern_key}'. " + \
+                                  f"{corrections_left} more needed to compute adjustment."
+            else:
+                result['message'] = f"📝 First correction for pattern '{pattern_key}' recorded. " + \
+                                  f"{self.adaptive_rules.min_corrections_for_adjustment - 1} more needed to compute adjustment."
 
         return result
 
