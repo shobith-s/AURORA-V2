@@ -533,185 +533,154 @@ export default function PreprocessingPanel() {
             </div>
           </div>
 
-          {/* EXPANDABLE PANEL: System Architecture */}
-          <div className="glass-card overflow-hidden">
-            <button
-              onClick={() => togglePanel('architecture')}
-              className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <Layers className="w-6 h-6 text-blue-600" />
-                <h3 className="text-lg font-bold text-slate-800">Universal Preprocessing Architecture</h3>
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
-                  5-Layer System
-                </span>
-              </div>
-              {expandedPanels.architecture ? (
-                <ChevronDown className="w-5 h-5 text-slate-600" />
-              ) : (
-                <ChevronRight className="w-5 h-5 text-slate-600" />
-              )}
-            </button>
+          {/* Intelligent 3-Panel Layout: Architecture + Health + Recommendations */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            {/* PANEL 1: System Architecture (40% on XL screens) */}
+            <div className="xl:col-span-1 glass-card overflow-hidden">
+              <button
+                onClick={() => togglePanel('architecture')}
+                className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
+              >
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-3">
+                    <Layers className="w-6 h-6 text-blue-600" />
+                    <h3 className="text-base font-bold text-slate-800">Architecture</h3>
+                  </div>
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium w-fit">
+                    5-Layer System
+                  </span>
+                </div>
+                {expandedPanels.architecture ? (
+                  <ChevronDown className="w-5 h-5 text-slate-600 flex-shrink-0" />
+                ) : (
+                  <ChevronRight className="w-5 h-5 text-slate-600 flex-shrink-0" />
+                )}
+              </button>
 
             {expandedPanels.architecture && (
-              <div className="px-6 pb-6 border-t border-slate-200">
-                <div className="mt-6 space-y-3">
+              <div className="px-4 pb-4 border-t border-slate-200">
+                <div className="mt-4 space-y-2">
                   {/* Layer 0: Cache */}
-                  <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-green-50 to-green-100 rounded-lg border border-green-200">
-                    <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Zap className="w-6 h-6 text-white" />
+                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-green-50 to-green-100 rounded-lg border border-green-200">
+                    <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Zap className="w-5 h-5 text-white" />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-slate-800">Layer 0: Intelligent Cache</h4>
-                        <span className="text-xl font-bold text-green-600">
+                        <h4 className="font-semibold text-slate-800 text-sm">L0: Cache</h4>
+                        <span className="text-lg font-bold text-green-600">
                           {sourceBreakdown?.cache || 0}
                         </span>
                       </div>
-                      <p className="text-sm text-slate-600">
-                        Ultra-fast validated decisions (&lt;0.1ms). 3-tier cache with similarity matching.
+                      <p className="text-xs text-slate-600">
+                        &lt;0.1ms, 3-tier matching
                       </p>
-                      <div className="mt-2 text-xs text-green-700 font-medium">
-                        Confidence: 65-85% (validation-adjusted)
-                      </div>
                     </div>
                   </div>
 
-                  {/* Layer 1: Learned Patterns */}
-                  <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border border-purple-200">
-                    <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <BookOpen className="w-6 h-6 text-white" />
+                  {/* Layer 1: Learned */}
+                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border border-purple-200">
+                    <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <BookOpen className="w-5 h-5 text-white" />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-slate-800">Layer 1: Learned Patterns</h4>
-                        <span className="text-xl font-bold text-purple-600">
+                        <h4 className="font-semibold text-slate-800 text-sm">L1: Learned</h4>
+                        <span className="text-lg font-bold text-purple-600">
                           {sourceBreakdown?.learned || 0}
                         </span>
                       </div>
-                      <p className="text-sm text-slate-600">
-                        User-specific patterns from corrections. Privacy-preserving learning.
-                      </p>
-                      <div className="mt-2 text-xs text-purple-700 font-medium">
-                        Confidence: 40-80% (dynamic, validation-based)
-                      </div>
+                      <p className="text-xs text-slate-600">User patterns, privacy-first</p>
                     </div>
                   </div>
 
-                  {/* Layer 2: Symbolic Rules */}
-                  <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200">
-                    <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Target className="w-6 h-6 text-white" />
+                  {/* Layer 2: Symbolic */}
+                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200">
+                    <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Target className="w-5 h-5 text-white" />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-slate-800">Layer 2: Symbolic Rules (165+)</h4>
-                        <span className="text-xl font-bold text-blue-600">
+                        <h4 className="font-semibold text-slate-800 text-sm">L2: Symbolic (165+)</h4>
+                        <span className="text-lg font-bold text-blue-600">
                           {sourceBreakdown?.symbolic || 0}
                         </span>
                       </div>
-                      <p className="text-sm text-slate-600">
-                        Expert-crafted rules: 100 base + 65 extended (advanced types, domain-specific, composite).
-                      </p>
-                      <div className="mt-2 text-xs text-blue-700 font-medium">
-                        Confidence: 80-100% | Coverage: 80-90%
-                      </div>
+                      <p className="text-xs text-slate-600">Expert rules, 80-100% conf</p>
                     </div>
                   </div>
 
-                  {/* Layer 2.5: Meta-Learning (NEW!) */}
-                  <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-orange-50 to-orange-100 rounded-lg border border-orange-200 ring-2 ring-orange-300">
-                    <div className="w-12 h-12 bg-orange-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Brain className="w-6 h-6 text-white" />
+                  {/* Layer 2.5: Meta */}
+                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-orange-50 to-orange-100 rounded-lg border border-orange-200">
+                    <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Brain className="w-5 h-5 text-white" />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-slate-800 flex items-center gap-2">
-                          Layer 2.5: Meta-Learning (Universal)
-                          <span className="px-2 py-0.5 bg-orange-200 text-orange-800 text-xs rounded-full font-medium">NEW</span>
-                        </h4>
-                        <span className="text-xl font-bold text-orange-600">
+                        <h4 className="font-semibold text-slate-800 text-sm">L2.5: Meta</h4>
+                        <span className="text-lg font-bold text-orange-600">
                           {sourceBreakdown?.meta_learning || 0}
                         </span>
                       </div>
-                      <p className="text-sm text-slate-600">
-                        20 statistical heuristics based on universal mathematical principles. No training required!
-                      </p>
-                      <div className="mt-2 text-xs text-orange-700 font-medium">
-                        Confidence: 70-90% | Coverage: +5-10% (universal)
-                      </div>
+                      <p className="text-xs text-slate-600">Universal heuristics</p>
                     </div>
                   </div>
 
-                  {/* Layer 3: Neural Oracle */}
-                  <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-pink-50 to-pink-100 rounded-lg border border-pink-200">
-                    <div className="w-12 h-12 bg-pink-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Brain className="w-6 h-6 text-white" />
+                  {/* Layer 3: Neural */}
+                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-pink-50 to-pink-100 rounded-lg border border-pink-200">
+                    <div className="w-10 h-10 bg-pink-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Brain className="w-5 h-5 text-white" />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-slate-800">Layer 3: NeuralOracle (Last Resort)</h4>
-                        <span className="text-xl font-bold text-pink-600">
+                        <h4 className="font-semibold text-slate-800 text-sm">L3: Neural</h4>
+                        <span className="text-lg font-bold text-pink-600">
                           {sourceBreakdown?.neural || 0}
                         </span>
                       </div>
-                      <p className="text-sm text-slate-600">
-                        Deep learning fallback for truly ambiguous cases (&lt;5% usage).
-                      </p>
-                      <div className="mt-2 text-xs text-pink-700 font-medium">
-                        Confidence: 50-70% | Coverage: &lt;5%
-                      </div>
+                      <p className="text-xs text-slate-600">ML fallback, &lt;5% usage</p>
                     </div>
                   </div>
 
-                  {/* Layer 4: Conservative Fallback (NEW!) */}
-                  <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-slate-50 to-slate-100 rounded-lg border border-slate-300 ring-2 ring-slate-400">
-                    <div className="w-12 h-12 bg-slate-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Shield className="w-6 h-6 text-white" />
+                  {/* Layer 4: Fallback */}
+                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-slate-50 to-slate-100 rounded-lg border border-slate-300">
+                    <div className="w-10 h-10 bg-slate-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Shield className="w-5 h-5 text-white" />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-slate-800 flex items-center gap-2">
-                          Layer 4: Conservative Fallback (Safety Net)
-                          <span className="px-2 py-0.5 bg-slate-200 text-slate-800 text-xs rounded-full font-medium">NEW</span>
-                        </h4>
-                        <span className="text-xl font-bold text-slate-600">
+                        <h4 className="font-semibold text-slate-800 text-sm">L4: Safety Net</h4>
+                        <span className="text-lg font-bold text-slate-600">
                           {sourceBreakdown?.conservative_fallback || 0}
                         </span>
                       </div>
-                      <p className="text-sm text-slate-600">
-                        Safe defaults for truly ambiguous cases. Preserves data, never blocks pipeline.
-                      </p>
-                      <div className="mt-2 text-xs text-slate-700 font-medium">
-                        Confidence: 60-70% | Coverage: 100% (never fails)
-                      </div>
+                      <p className="text-xs text-slate-600">100% coverage, never fails</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="text-sm text-blue-800">
-                    <strong>🚀 Universal Coverage:</strong> This 5-layer architecture achieves 95-99% autonomous coverage on ANY CSV data
-                    (financial, medical, IoT, web analytics, e-commerce) without requiring human review.
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-xs text-blue-800">
+                    <strong>95-99% autonomous coverage</strong> on any domain (financial, medical, IoT, web)
                   </p>
                 </div>
               </div>
             )}
-          </div>
+            </div>
 
-          {/* Side-by-side: Data Health & Column Recommendations */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* EXPANDABLE PANEL: Data Health Dashboard */}
+            {/* PANEL 2: Data Health (30% on XL screens) */}
             {batchResults.health && (
-              <div className="glass-card overflow-hidden">
+              <div className="xl:col-span-1 glass-card overflow-hidden">
                 <button
                   onClick={() => togglePanel('dataHealth')}
                   className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
                 >
-                  <div className="flex items-center gap-3">
-                    <Activity className="w-6 h-6 text-blue-600" />
-                    <h3 className="text-lg font-bold text-slate-800">Data Health</h3>
-                    <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-3">
+                      <Activity className="w-6 h-6 text-blue-600" />
+                      <h3 className="text-base font-bold text-slate-800">Health</h3>
+                    </div>
+                    <span className={`px-2 py-1 text-xs rounded-full font-medium w-fit ${
                       batchResults.health.overall_health_score >= 80 ? 'bg-green-100 text-green-700' :
                       batchResults.health.overall_health_score >= 50 ? 'bg-yellow-100 text-yellow-700' :
                       'bg-red-100 text-red-700'
@@ -720,191 +689,83 @@ export default function PreprocessingPanel() {
                     </span>
                   </div>
                   {expandedPanels.dataHealth ? (
-                    <ChevronDown className="w-5 h-5 text-slate-600" />
+                    <ChevronDown className="w-5 h-5 text-slate-600 flex-shrink-0" />
                   ) : (
-                    <ChevronRight className="w-5 h-5 text-slate-600" />
+                    <ChevronRight className="w-5 h-5 text-slate-600 flex-shrink-0" />
                   )}
                 </button>
 
               {expandedPanels.dataHealth && (
-                <div className="px-6 pb-6 border-t border-slate-200">
-                  {/* Overall Health Score */}
-                  <div className="mt-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 border border-blue-100">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-slate-600 mb-1">Overall Dataset Health</p>
-                        <div className="flex items-center gap-3">
-                          <div className="text-4xl font-bold" style={{
-                            color: batchResults.health.overall_health_score >= 80 ? '#10b981' :
-                                   batchResults.health.overall_health_score >= 50 ? '#f59e0b' : '#ef4444'
-                          }}>
-                            {batchResults.health.overall_health_score.toFixed(1)}
-                          </div>
-                          <div className="text-2xl text-slate-400">/100</div>
-                        </div>
+                <div className="px-4 pb-4 border-t border-slate-200">
+                  {/* Overall Health Score - Compact */}
+                  <div className="mt-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-100">
+                    <p className="text-xs text-slate-600 mb-2">Dataset Health</p>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="text-3xl font-bold" style={{
+                        color: batchResults.health.overall_health_score >= 80 ? '#10b981' :
+                               batchResults.health.overall_health_score >= 50 ? '#f59e0b' : '#ef4444'
+                      }}>
+                        {batchResults.health.overall_health_score.toFixed(0)}
                       </div>
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="text-center p-3 bg-white rounded-lg shadow-sm">
-                          <div className="text-2xl font-bold text-green-600">{batchResults.health.healthy_columns}</div>
-                          <div className="text-xs text-slate-600">Healthy</div>
-                        </div>
-                        <div className="text-center p-3 bg-white rounded-lg shadow-sm">
-                          <div className="text-2xl font-bold text-yellow-600">{batchResults.health.warning_columns}</div>
-                          <div className="text-xs text-slate-600">Warning</div>
-                        </div>
-                        <div className="text-center p-3 bg-white rounded-lg shadow-sm">
-                          <div className="text-2xl font-bold text-red-600">{batchResults.health.critical_columns}</div>
-                          <div className="text-xs text-slate-600">Critical</div>
-                        </div>
+                      <div className="text-lg text-slate-400">/100</div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="text-center p-2 bg-white rounded-lg shadow-sm">
+                        <div className="text-lg font-bold text-green-600">{batchResults.health.healthy_columns}</div>
+                        <div className="text-xs text-slate-600">OK</div>
+                      </div>
+                      <div className="text-center p-2 bg-white rounded-lg shadow-sm">
+                        <div className="text-lg font-bold text-yellow-600">{batchResults.health.warning_columns}</div>
+                        <div className="text-xs text-slate-600">Warn</div>
+                      </div>
+                      <div className="text-center p-2 bg-white rounded-lg shadow-sm">
+                        <div className="text-lg font-bold text-red-600">{batchResults.health.critical_columns}</div>
+                        <div className="text-xs text-slate-600">Crit</div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Column Health Details */}
-                  <div className="mt-6 space-y-3">
-                    <h4 className="text-sm font-semibold text-slate-700 mb-3">Column-Level Health Details</h4>
+                  {/* Column Health Details - Compact */}
+                  <div className="mt-4 space-y-2">
+                    <h4 className="text-xs font-semibold text-slate-700">Columns</h4>
                     {Object.values(batchResults.health.column_health).map((health: ColumnHealthMetrics) => (
-                      <div key={health.column_name} className={`border rounded-lg p-4 transition-all ${
+                      <div key={health.column_name} className={`border rounded-lg p-2 transition-all ${
                         health.severity === 'healthy' ? 'border-green-200 bg-green-50/30' :
                         health.severity === 'warning' ? 'border-yellow-200 bg-yellow-50/30' :
                         'border-red-200 bg-red-50/30'
                       }`}>
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-3 flex-1">
-                            {health.severity === 'healthy' && <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />}
-                            {health.severity === 'warning' && <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0" />}
-                            {health.severity === 'critical' && <X className="w-5 h-5 text-red-600 flex-shrink-0" />}
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <h5 className="font-semibold text-slate-800">{health.column_name}</h5>
-                                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-xs">
-                                  {health.data_type}
-                                </span>
-                              </div>
-                              {health.anomalies.length > 0 && (
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {health.anomalies.map((anomaly, idx) => (
-                                    <span key={idx} className={`text-xs px-2 py-0.5 rounded ${
-                                      health.severity === 'critical' ? 'bg-red-100 text-red-700' :
-                                      health.severity === 'warning' ? 'bg-yellow-100 text-yellow-700' :
-                                      'bg-blue-100 text-blue-700'
-                                    }`}>
-                                      {anomaly}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            {health.severity === 'healthy' && <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />}
+                            {health.severity === 'warning' && <AlertCircle className="w-4 h-4 text-yellow-600 flex-shrink-0" />}
+                            {health.severity === 'critical' && <X className="w-4 h-4 text-red-600 flex-shrink-0" />}
+                            <div className="flex-1 min-w-0">
+                              <h5 className="font-semibold text-slate-800 text-xs truncate">{health.column_name}</h5>
+                              <span className="text-xs text-slate-500">{health.data_type}</span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <div className="text-right">
-                              <div className={`text-2xl font-bold ${
-                                health.severity === 'healthy' ? 'text-green-600' :
-                                health.severity === 'warning' ? 'text-yellow-600' :
-                                'text-red-600'
-                              }`}>
-                                {health.health_score.toFixed(0)}
-                              </div>
-                              <div className="text-xs text-slate-500">health</div>
-                            </div>
-                            <button
-                              onClick={() => setExpandedHealthColumn(expandedHealthColumn === health.column_name ? null : health.column_name)}
-                              className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded transition"
-                            >
-                              {expandedHealthColumn === health.column_name ? 'Hide' : 'Details'}
-                            </button>
+                          <div className={`text-lg font-bold ${
+                            health.severity === 'healthy' ? 'text-green-600' :
+                            health.severity === 'warning' ? 'text-yellow-600' :
+                            'text-red-600'
+                          }`}>
+                            {health.health_score.toFixed(0)}
                           </div>
                         </div>
-
-                        {/* Expanded Details */}
-                        {expandedHealthColumn === health.column_name && (
-                          <div className="mt-4 pt-4 border-t border-slate-200">
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                              {/* Quality Metrics */}
-                              <div className="bg-white rounded-lg p-3 shadow-sm">
-                                <div className="text-xs text-slate-600 mb-1">Null Values</div>
-                                <div className="text-lg font-semibold text-slate-800">
-                                  {health.null_pct > 0 ? `${(health.null_pct * 100).toFixed(1)}%` : 'None'}
-                                </div>
-                                <div className="text-xs text-slate-500">{health.null_count} rows</div>
-                              </div>
-
-                              <div className="bg-white rounded-lg p-3 shadow-sm">
-                                <div className="text-xs text-slate-600 mb-1">Unique Values</div>
-                                <div className="text-lg font-semibold text-slate-800">{health.unique_count}</div>
-                                <div className="text-xs text-slate-500">{(health.unique_ratio * 100).toFixed(1)}% unique</div>
-                              </div>
-
-                              <div className="bg-white rounded-lg p-3 shadow-sm">
-                                <div className="text-xs text-slate-600 mb-1">Duplicates</div>
-                                <div className="text-lg font-semibold text-slate-800">
-                                  {health.duplicate_pct > 0 ? `${(health.duplicate_pct * 100).toFixed(1)}%` : 'None'}
-                                </div>
-                                <div className="text-xs text-slate-500">{health.duplicate_count} rows</div>
-                              </div>
-
-                              {/* Numeric-specific */}
-                              {health.data_type === 'numeric' && (
-                                <>
-                                  {health.outlier_pct !== null && health.outlier_pct !== undefined && (
-                                    <div className="bg-white rounded-lg p-3 shadow-sm">
-                                      <div className="text-xs text-slate-600 mb-1">Outliers</div>
-                                      <div className="text-lg font-semibold text-slate-800">
-                                        {(health.outlier_pct * 100).toFixed(1)}%
-                                      </div>
-                                      <div className="text-xs text-slate-500">{health.outlier_count} values</div>
-                                    </div>
-                                  )}
-                                  {health.skewness !== null && health.skewness !== undefined && (
-                                    <div className="bg-white rounded-lg p-3 shadow-sm">
-                                      <div className="text-xs text-slate-600 mb-1">Skewness</div>
-                                      <div className="text-lg font-semibold text-slate-800 flex items-center gap-1">
-                                        {health.skewness.toFixed(2)}
-                                        {health.skewness > 0.5 && <TrendingUp className="w-4 h-4 text-orange-500" />}
-                                        {health.skewness < -0.5 && <TrendingDown className="w-4 h-4 text-blue-500" />}
-                                        {Math.abs(health.skewness) <= 0.5 && <MinusCircle className="w-4 h-4 text-green-500" />}
-                                      </div>
-                                      <div className="text-xs text-slate-500">
-                                        {Math.abs(health.skewness) < 0.5 ? 'Normal' : Math.abs(health.skewness) < 1 ? 'Moderate' : 'High'}
-                                      </div>
-                                    </div>
-                                  )}
-                                  {health.mean !== null && health.mean !== undefined && (
-                                    <div className="bg-white rounded-lg p-3 shadow-sm">
-                                      <div className="text-xs text-slate-600 mb-1">Mean ± Std</div>
-                                      <div className="text-sm font-semibold text-slate-800">
-                                        {health.mean.toFixed(2)} ± {health.std?.toFixed(2) || '0'}
-                                      </div>
-                                      {health.cv && <div className="text-xs text-slate-500">CV: {health.cv.toFixed(2)}</div>}
-                                    </div>
-                                  )}
-                                </>
-                              )}
-
-                              {/* Categorical-specific */}
-                              {health.data_type === 'categorical' && (
-                                <>
-                                  {health.cardinality !== null && health.cardinality !== undefined && (
-                                    <div className="bg-white rounded-lg p-3 shadow-sm">
-                                      <div className="text-xs text-slate-600 mb-1">Cardinality</div>
-                                      <div className="text-lg font-semibold text-slate-800">{health.cardinality}</div>
-                                      <div className="text-xs text-slate-500">categories</div>
-                                    </div>
-                                  )}
-                                  {health.is_imbalanced !== null && health.is_imbalanced !== undefined && (
-                                    <div className="bg-white rounded-lg p-3 shadow-sm">
-                                      <div className="text-xs text-slate-600 mb-1">Balance</div>
-                                      <div className="text-lg font-semibold text-slate-800">
-                                        {health.is_imbalanced ? 'Imbalanced' : 'Balanced'}
-                                      </div>
-                                      <div className="text-xs text-slate-500">
-                                        {health.is_imbalanced ? 'Skewed distribution' : 'Good distribution'}
-                                      </div>
-                                    </div>
-                                  )}
-                                </>
-                              )}
-                            </div>
+                        {health.anomalies.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {health.anomalies.slice(0, 2).map((anomaly, idx) => (
+                              <span key={idx} className={`text-xs px-1 py-0.5 rounded ${
+                                health.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                                health.severity === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-blue-100 text-blue-700'
+                              }`}>
+                                {anomaly}
+                              </span>
+                            ))}
+                            {health.anomalies.length > 2 && (
+                              <span className="text-xs text-slate-500">+{health.anomalies.length - 2}</span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -915,66 +776,57 @@ export default function PreprocessingPanel() {
               </div>
             )}
 
-            {/* EXPANDABLE PANEL: Column Recommendations */}
+            {/* PANEL 3: Column Recommendations (30% on XL screens) */}
             {Object.keys(batchResults.results).length > 0 && (
-              <div className="glass-card overflow-hidden">
+              <div className="xl:col-span-1 glass-card overflow-hidden">
                 <button
                   onClick={() => togglePanel('recommendations')}
                   className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
                 >
-                  <div className="flex items-center gap-3">
-                    <Target className="w-6 h-6 text-blue-600" />
-                    <h3 className="text-lg font-bold text-slate-800">
-                      Recommendations ({Object.keys(batchResults.results).length})
-                    </h3>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-3">
+                      <Target className="w-6 h-6 text-blue-600" />
+                      <h3 className="text-base font-bold text-slate-800">Recommendations</h3>
+                    </div>
+                    <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium w-fit">
+                      {Object.keys(batchResults.results).length} columns
+                    </span>
                   </div>
                   {expandedPanels.recommendations ? (
-                    <ChevronDown className="w-5 h-5 text-slate-600" />
+                    <ChevronDown className="w-5 h-5 text-slate-600 flex-shrink-0" />
                   ) : (
-                    <ChevronRight className="w-5 h-5 text-slate-600" />
+                    <ChevronRight className="w-5 h-5 text-slate-600 flex-shrink-0" />
                   )}
                 </button>
 
               {expandedPanels.recommendations && (
-                <div className="px-6 pb-6 border-t border-slate-200">
-                  <div className="mt-6 space-y-4">
+                <div className="px-4 pb-4 border-t border-slate-200">
+                  <div className="mt-4 space-y-2">
                     {Object.entries(batchResults.results).map(([columnName, columnResult]) => (
-                    <div key={columnName} className="border border-slate-200 rounded-lg p-4 bg-white/50">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-slate-800">{columnName}</h4>
-                          <p className="text-sm text-slate-600 mt-1">{columnResult.explanation}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            columnResult.confidence >= 0.9
-                              ? 'bg-green-100 text-green-700'
-                              : columnResult.confidence >= 0.7
-                              ? 'bg-yellow-100 text-yellow-700'
-                              : 'bg-red-100 text-red-700'
-                          }`}>
-                            {(columnResult.confidence * 100).toFixed(0)}%
-                          </div>
-                          <button
-                            onClick={() => setShowCorrectionFor(showCorrectionFor === columnName ? null : columnName)}
-                            className="flex items-center gap-1 px-2 py-1 bg-white hover:bg-blue-50 text-blue-600 rounded-lg text-xs font-medium border border-blue-200 transition"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                            Override
-                          </button>
+                    <div key={columnName} className="border border-slate-200 rounded-lg p-2 bg-white/50">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <h4 className="font-semibold text-slate-800 text-xs truncate flex-1 min-w-0">{columnName}</h4>
+                        <div className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
+                          columnResult.confidence >= 0.9
+                            ? 'bg-green-100 text-green-700'
+                            : columnResult.confidence >= 0.7
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          {(columnResult.confidence * 100).toFixed(0)}%
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4 flex-wrap mb-3">
+                      <div className="flex flex-col gap-1 mb-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-slate-600">Action:</span>
-                          <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
+                          <span className="text-xs text-slate-600">Action:</span>
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
                             {columnResult.action}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-slate-600">Source:</span>
-                          <span className={`px-3 py-1 rounded-lg text-sm font-medium ${
+                          <span className="text-xs text-slate-600">Source:</span>
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                             columnResult.source === 'user_override'
                               ? 'bg-green-100 text-green-700'
                               : columnResult.source === 'meta_learning'
@@ -988,21 +840,13 @@ export default function PreprocessingPanel() {
                         </div>
                       </div>
 
-                      {columnResult.alternatives && columnResult.alternatives.length > 0 && (
-                        <div className="mb-3 pb-3 border-b border-slate-200">
-                          <p className="text-xs text-slate-600 mb-2">Alternative actions:</p>
-                          <div className="flex gap-2 flex-wrap">
-                            {columnResult.alternatives.slice(0, 3).map((alt: any, idx: number) => (
-                              <span
-                                key={idx}
-                                className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs"
-                              >
-                                {alt.action} ({(alt.confidence * 100).toFixed(0)}%)
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      <button
+                        onClick={() => setShowCorrectionFor(showCorrectionFor === columnName ? null : columnName)}
+                        className="w-full flex items-center justify-center gap-1 px-2 py-1 bg-white hover:bg-blue-50 text-blue-600 rounded text-xs font-medium border border-blue-200 transition"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        Override
+                      </button>
 
                       {/* Override Form */}
                       {showCorrectionFor === columnName && (

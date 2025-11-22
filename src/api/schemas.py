@@ -151,6 +151,12 @@ class CorrectionResponse(BaseModel):
         None,
         description="Description of what the rule applies to"
     )
+    production_ready: bool = Field(False, description="Whether this pattern is production-ready")
+    pattern_corrections: int = Field(0, description="Number of corrections for this pattern")
+    corrections_needed_for_training: int = Field(0, description="Corrections needed to compute adjustment")
+    corrections_needed_for_production: int = Field(0, description="Corrections needed for production use")
+    preferred_action: Optional[str] = Field(None, description="Preferred action learned from corrections")
+    message: Optional[str] = Field(None, description="User-friendly status message")
 
     class Config:
         json_schema_extra = {
@@ -158,10 +164,16 @@ class CorrectionResponse(BaseModel):
                 "learned": True,
                 "pattern_recorded": True,
                 "new_rule_created": True,
-                "rule_name": "LEARNED_LOG_TRANSFORM_5",
-                "rule_confidence": 0.88,
-                "similar_patterns_count": 7,
-                "applicable_to": "~7 similar cases"
+                "rule_name": "numeric_high_skewness",
+                "rule_confidence": 0.20,
+                "similar_patterns_count": 10,
+                "applicable_to": "Similar columns matching 'numeric_high_skewness' pattern",
+                "production_ready": True,
+                "pattern_corrections": 10,
+                "corrections_needed_for_training": 0,
+                "corrections_needed_for_production": 0,
+                "preferred_action": "log_transform",
+                "message": "✓ PRODUCTION: Adjustments active!"
             }
         }
 
