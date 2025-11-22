@@ -748,11 +748,32 @@ async def submit_correction(request: CorrectionRequest):
         if learning_engine:
             # Compute statistics for privacy-preserved storage
             import pandas as pd
+            import numpy as np
             column = pd.Series(request.column_data, name=request.column_name)
             stats = preprocessor.symbolic_engine.compute_column_statistics(
                 column, request.column_name
             )
             stats_dict = stats.to_dict()
+
+            # Convert numpy types to native Python types for JSON serialization
+            def convert_numpy_types(obj):
+                """Recursively convert numpy types to native Python types."""
+                if isinstance(obj, dict):
+                    return {k: convert_numpy_types(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [convert_numpy_types(item) for item in obj]
+                elif isinstance(obj, (np.integer, np.int64, np.int32)):
+                    return int(obj)
+                elif isinstance(obj, (np.floating, np.float64, np.float32)):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return convert_numpy_types(obj.tolist())
+                elif pd.isna(obj):
+                    return None
+                else:
+                    return obj
+
+            stats_dict = convert_numpy_types(stats_dict)
 
             # Record correction persistently (with privacy preservation)
             user_id = "default_user"  # TODO: Get from JWT when auth is enabled

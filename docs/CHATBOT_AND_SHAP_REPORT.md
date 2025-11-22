@@ -683,6 +683,26 @@ User: "Show me SHAP for my data"
 
 **Status**: ✅ Server now starts successfully
 
+### Fix 5: JSON Serialization for Numpy Types (Nov 22, 2025)
+
+**Issue**: Correction endpoint failed with `Object of type int64 is not JSON serializable` when users tried to override decisions
+
+**Root Cause**: The `stats.to_dict()` method returns a dictionary with numpy types (`int64`, `float64`, etc.) which aren't JSON serializable by default.
+
+**Solution**: Added `convert_numpy_types()` helper function that:
+- Recursively converts numpy integers to Python `int`
+- Converts numpy floats to Python `float`
+- Handles nested dictionaries and lists
+- Converts `NaN` values to `None`
+
+**Files Fixed**:
+- `src/api/server.py` (lines 758-776)
+
+**Commits**:
+- `5aca368`: Convert numpy types to native Python types for JSON serialization
+
+**Status**: ✅ Users can now override decisions without errors
+
 ---
 
 The intelligent assistant is **ready for production use**! 🎉
