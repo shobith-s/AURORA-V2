@@ -66,9 +66,24 @@ class IntelligentAssistant:
         """
         q = user_question.lower()
 
-        # Column-specific queries
-        if any(word in q for word in ['column', 'feature', 'variable']):
-            if 'statistics' in q or 'stats' in q or 'summary' in q:
+        # Try to extract column name first
+        column_name = self._extract_column_name(user_question)
+
+        # Column-specific queries (by column name or keywords)
+        if column_name:
+            # We detected a column name, route to appropriate handler
+            if 'statistics' in q or 'stats' in q or 'summary' in q or 'about' in q or ' for ' in q:
+                return self._get_column_statistics_answer(q)
+            elif 'recommend' in q or 'suggest' in q or 'preprocess' in q:
+                return self._get_column_recommendation_answer(q)
+            elif 'why' in q or 'explain' in q:
+                return self._explain_column_decision(q)
+            else:
+                # Default to statistics if column name is mentioned
+                return self._get_column_statistics_answer(q)
+        elif any(word in q for word in ['column', 'feature', 'variable']):
+            # Generic column query without specific column name
+            if 'statistics' in q or 'stats' in q:
                 return self._get_column_statistics_answer(q)
             elif 'recommend' in q or 'suggest' in q:
                 return self._get_column_recommendation_answer(q)
@@ -553,17 +568,33 @@ Start by uploading a CSV file! 📊"""
         if self.current_dataframe is None:
             return None
 
-        # Try to find column name in query
-        for col in self.current_dataframe.columns:
-            if col.lower() in query.lower():
-                return col
-
-        # Try quoted strings
         import re
+
+        query_lower = query.lower()
+
+        # Try quoted strings first (highest confidence)
         quoted = re.findall(r'["\']([^"\']+)["\']', query)
         if quoted:
             for q in quoted:
                 if q in self.current_dataframe.columns:
                     return q
+
+        # Try exact column name matches (case-insensitive)
+        for col in self.current_dataframe.columns:
+            col_lower = col.lower()
+            # Use word boundaries to avoid partial matches
+            # E.g., "revenue" matches but not "reve"
+            pattern = r'\b' + re.escape(col_lower) + r'\b'
+            if re.search(pattern, query_lower):
+                return col
+
+        # Try "for X" or "of X" patterns
+        # E.g., "statistics for revenue" or "mean of age"
+        for_match = re.search(r'\b(?:for|of)\s+(\w+)', query_lower)
+        if for_match:
+            word = for_match.group(1)
+            for col in self.current_dataframe.columns:
+                if col.lower() == word:
+                    return col
 
         return None
