@@ -61,17 +61,18 @@ AdaptiveSymbolicRules(
 **New Configuration:**
 ```python
 AdaptiveSymbolicRules(
-    min_corrections_for_adjustment=2,  # OPTIMAL: Fast but not reckless
+    min_corrections_for_adjustment=2,  # TRAINING: Compute adjustments
     max_confidence_delta=0.20,         # STRONGER: More impactful adjustments
+    min_corrections_for_production=10, # PRODUCTION: Use adjustments in decisions
 )
 ```
 
-**Why 2 is Optimal:**
-- **1 correction:** Too risky, could be a mistake
-- **2 corrections:** Shows consistent preference, safe to adjust
-- **3+ corrections:** Unnecessarily conservative
+**Why These Values:**
+- **2 corrections:** Compute adjustments (training phase starts)
+- **10 corrections:** Activate adjustments (production phase starts)
+- **Separation:** System trains first, deploys later (safe learning)
 
-**Result:** ✅ System learns 2.5× faster
+**Result:** ✅ System learns responsibly without premature decisions
 
 ---
 
@@ -153,7 +154,7 @@ result['message'] = f"Correction recorded! {correction_count}/2 corrections for 
 
 ## How the Optimized Learning System Works
 
-### Architecture
+### Architecture with Training/Production Separation
 
 ```
 User corrects decision
@@ -164,20 +165,31 @@ Records correction to that pattern bucket
     ↓
 If >= 2 corrections for same pattern:
     ↓
-Analyze consensus:
-  - What action do users prefer?
-  - How strong is the preference?
-    ↓
-Create adjustment rule:
-  - If 100% agree on action → boost confidence by +20%
-  - If 80% agree → boost by +16%
-  - If 60% agree → boost by +12%
-    ↓
-Apply adjustment to future decisions:
-  - Symbolic rules get confidence boost for preferred action
-  - Other actions get confidence penalty
-    ↓
-Save to persistence file (survives restarts)
+┌─────────────────────────────────────────┐
+│ TRAINING PHASE (2-9 corrections)        │
+│                                         │
+│ Analyze consensus:                      │
+│   - What action do users prefer?        │
+│   - How strong is the preference?       │
+│                                         │
+│ Compute adjustment rule:                │
+│   - 100% agree → +20% boost             │
+│   - 80% agree → +16% boost              │
+│   - 60% agree → +12% boost              │
+│                                         │
+│ ❌ DON'T apply to decisions yet         │
+│ ✓ Store for future use                 │
+└─────────────────────────────────────────┘
+    ↓ (at 10 corrections)
+┌─────────────────────────────────────────┐
+│ PRODUCTION PHASE (10+ corrections)      │
+│                                         │
+│ ✓ Apply adjustment to future decisions │
+│   - Boost preferred action by +20%      │
+│   - Reduce other actions by -10%        │
+│                                         │
+│ ✓ Save to persistence file              │
+└─────────────────────────────────────────┘
 ```
 
 ### Pattern Categories (13 total)
@@ -207,40 +219,46 @@ Save to persistence file (survives restarts)
 
 **Scenario:** User has financial data with revenue columns that are highly skewed.
 
-**1st Correction:**
+**Corrections 1-2 (TRAINING PHASE STARTS):**
 ```
-Column: revenue
+Column: revenue, sales
 Pattern: numeric_high_skewness
-Symbolic suggested: standard_scale (confidence: 0.75)
-User corrected to: log_transform
+Symbolic suggested: standard_scale, minmax_scale
+User corrected to: log_transform (both times)
 ```
 
-System response:
+System response after 2nd correction:
 ```json
 {
   "learned": true,
-  "pattern_corrections": 1,
-  "corrections_needed": 1,
-  "message": "1/2 corrections recorded"
+  "production_ready": false,
+  "adjustment_active": true,
+  "pattern_corrections": 2,
+  "corrections_needed_for_training": 0,
+  "corrections_needed_for_production": 8,
+  "confidence_boost": "+0.200",
+  "preferred_action": "log_transform",
+  "message": "⚙ TRAINING: Adjustment computed from 2 corrections. 8 more needed to activate in production decisions."
 }
 ```
 
-**2nd Correction:**
-```
-Column: sales
-Pattern: numeric_high_skewness  (same pattern!)
-Symbolic suggested: minmax_scale (confidence: 0.72)
-User corrected to: log_transform
-```
+**During corrections 3-9:**
+- System records corrections
+- Updates adjustment confidence
+- ❌ Does NOT affect production decisions yet
+- User sees: "⚙ TRAINING: X more needed to activate"
+
+**Correction 10 (PRODUCTION PHASE ACTIVATED):**
 
 System response:
 ```json
 {
   "learned": true,
-  "new_rule_created": true,
-  "rule_name": "numeric_high_skewness",
-  "rule_confidence": 0.20,
-  "message": "Adjustment activated!"
+  "production_ready": true,
+  "adjustment_active": true,
+  "pattern_corrections": 10,
+  "corrections_needed_for_production": 0,
+  "message": "✓ PRODUCTION: Adjustments active! Pattern 'numeric_high_skewness' learned from 10 corrections. Now boosting 'log_transform' by 20% for similar columns."
 }
 ```
 
@@ -248,7 +266,7 @@ System response:
 - If symbolic suggests `log_transform` → confidence boosted +20% (e.g., 0.75 → 0.95)
 - If symbolic suggests other actions → confidence reduced -10% (e.g., 0.75 → 0.65)
 
-**Result:** System adapts to your domain preferences in just 2 corrections!
+**Result:** System trains safely, then deploys confidently!
 
 ---
 
@@ -260,19 +278,28 @@ System response:
 class AdaptiveSymbolicRules:
     def __init__(
         self,
-        min_corrections_for_adjustment: int = 2,   # Optimal: fast but safe
-        max_confidence_delta: float = 0.20,       # Strong: impactful adjustments
+        min_corrections_for_adjustment: int = 2,     # Training: compute adjustments
+        max_confidence_delta: float = 0.20,          # Strong: impactful adjustments
+        min_corrections_for_production: int = 10,    # Production: use adjustments
     ):
 ```
 
 ### Why These Values?
 
-**min_corrections_for_adjustment = 2:**
-- ✅ Fast enough to feel responsive
-- ✅ Safe enough to avoid overfitting
+**min_corrections_for_adjustment = 2 (Training Threshold):**
+- ✅ Fast feedback: Users see "adjustment computed" quickly
 - ✅ Requires consistency (not a one-off mistake)
-- ❌ 1 would be too risky (single mistake could train wrong preference)
-- ❌ 5 was too slow (65 corrections needed to cover all patterns)
+- ✅ Establishes pattern: Shows there's a preference forming
+- ❌ 1 would be too risky (single mistake could compute wrong preference)
+- ❌ 5 would delay feedback unnecessarily
+
+**min_corrections_for_production = 10 (Production Threshold):**
+- ✅ Sufficient data: 10 corrections provide strong signal
+- ✅ Safe from noise: Won't deploy adjustments from too few examples
+- ✅ Covers diversity: Likely sees different columns within same pattern
+- ✅ Not too high: Reaches activation in reasonable time
+- ❌ 5 would be too risky (premature deployment)
+- ❌ 20+ would take too long to see learning effects
 
 **max_confidence_delta = 0.20 (20%):**
 - ✅ Strong enough to influence decisions
@@ -362,10 +389,12 @@ curl -X POST "http://localhost:8000/preprocess" \
 
 | Metric | Old System | New System |
 |--------|-----------|------------|
-| Corrections needed per pattern | 5 | 2 |
-| Total corrections for full coverage | ~65 | ~26 |
-| Time to see first adjustment | After 5 corrections | After 2 corrections |
-| User perception | "Not learning" | "Responsive" |
+| Corrections to compute adjustment (training) | 5 | 2 |
+| Corrections to activate adjustment (production) | 5 | 10 |
+| Total corrections for full pattern coverage | ~65 (13×5) | ~130 (13×10) |
+| Time to see adjustment computed | After 5 corrections | After 2 corrections |
+| Time to see adjustment USED in decisions | After 5 corrections | After 10 corrections |
+| User perception | "Not learning" | "Training → Production (safe)" |
 
 ### Adjustment Strength
 
@@ -518,30 +547,43 @@ AdaptiveSymbolicRules(
 ### What Was Fixed
 
 1. ✅ Correction endpoint Pydantic validation error
-2. ✅ Learning threshold reduced from 5 to 2 corrections
+2. ✅ Learning threshold optimized (2 for training, 10 for production)
 3. ✅ Confidence adjustment increased from 15% to 20%
 4. ✅ Pattern detection field name compatibility
 5. ✅ User feedback for correction progress
+6. ✅ **Training/production phase separation (CRITICAL)**
 
 ### What You Get Now
 
-- **Responsive learning:** See adjustments after just 2 corrections
-- **Clear feedback:** Know exactly how many corrections needed
-- **Strong adjustments:** 20% confidence boost makes real impact
+- **Safe learning:** System trains first (2+ corrections), deploys later (10+ corrections)
+- **Clear feedback:** Know exactly which phase you're in (📝 Recording, ⚙ Training, ✓ Production)
+- **Strong adjustments:** 20% confidence boost makes real impact when activated
 - **Reliable patterns:** Fixed field names mean patterns actually work
-- **Production-ready:** No more validation errors
+- **Production-ready:** No more validation errors or premature decisions
 
 ### The Optimal Configuration
 
 ```python
-min_corrections_for_adjustment = 2  # Fast but safe
-max_confidence_delta = 0.20         # Strong but not excessive
+min_corrections_for_adjustment = 2   # Compute adjustments (TRAINING)
+max_confidence_delta = 0.20          # Strong adjustments (20%)
+min_corrections_for_production = 10  # Use adjustments (PRODUCTION)
 ```
 
 This is the **sweet spot** for:
-- Responsiveness (learns fast)
-- Safety (requires consistency)
-- Impact (adjustments make a difference)
-- User experience (clear feedback)
+- **Safety:** System won't affect decisions without sufficient training data
+- **Responsiveness:** Users see adjustments computed quickly (2 corrections)
+- **Confidence:** System deploys only when ready (10 corrections)
+- **Impact:** 20% adjustments make real difference in production
+- **Clarity:** Users always know training vs production status
 
-**Your learning system now works as intended.** ✅
+### The Critical Fix
+
+**User's Request:** *"learning system are taking decisions now itself let them learn for a while then they can take part in decision making pipeline"*
+
+**Solution Implemented:**
+- **Before:** System used adjustments in decisions immediately (2 corrections)
+- **After:** System separates training (compute) from production (use)
+  - 2 corrections → Adjustment computed (training)
+  - 10 corrections → Adjustment activated (production)
+
+**Your learning system now learns responsibly before affecting production decisions.** ✅
