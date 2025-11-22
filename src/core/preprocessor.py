@@ -88,8 +88,8 @@ class IntelligentPreprocessor:
         # Adaptive rules (with graceful degradation)
         try:
             self.adaptive_rules = AdaptiveSymbolicRules(
-                min_corrections_for_adjustment=5,
-                max_confidence_delta=0.15,
+                min_corrections_for_adjustment=2,  # REDUCED from 5 to 2 for faster learning
+                max_confidence_delta=0.20,  # INCREASED from 0.15 to 0.20 for stronger adjustments
                 persistence_file=Path("data/adaptive_rules.json")
             ) if enable_learning else None
         except Exception as e:
@@ -741,14 +741,21 @@ class IntelligentPreprocessor:
         adjustment = self.adaptive_rules.get_adjustment(stats_dict)
         stats = self.adaptive_rules.get_statistics()
 
+        # Get pattern-specific correction count
+        pattern_key = self.adaptive_rules._identify_pattern(stats_dict)
+        pattern_corrections = self.adaptive_rules.correction_patterns.get(pattern_key, [])
+        correction_count = len(pattern_corrections)
+
         result = {
             'learned': True,
             'approach': 'adaptive_rules',  # NEW: Fine-tuning instead of separate patterns
-            'pattern_category': self.adaptive_rules._identify_pattern(stats_dict),
+            'pattern_category': pattern_key,
             'cache_invalidated': True,
             'adjustment_active': adjustment is not None,
             'total_corrections': stats['total_corrections'],
-            'patterns_tracked': stats['patterns_tracked']
+            'patterns_tracked': stats['patterns_tracked'],
+            'pattern_corrections': correction_count,  # NEW: Show user their progress
+            'corrections_needed': max(0, self.adaptive_rules.min_corrections_for_adjustment - correction_count)  # NEW
         }
 
         if adjustment:
@@ -756,6 +763,11 @@ class IntelligentPreprocessor:
             result['preferred_action'] = adjustment.action.value
             result['correction_support'] = adjustment.correction_count
             result['applicable_to'] = f"Similar columns matching '{adjustment.rule_category}' pattern"
+        else:
+            # Provide feedback even if no adjustment yet
+            if correction_count > 0:
+                result['message'] = f"Correction recorded! {correction_count}/{self.adaptive_rules.min_corrections_for_adjustment} corrections for this pattern. " + \
+                                  f"{max(1, self.adaptive_rules.min_corrections_for_adjustment - correction_count)} more needed to activate adjustment."
 
         return result
 

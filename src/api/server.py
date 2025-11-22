@@ -891,7 +891,17 @@ async def submit_correction(request: CorrectionRequest):
                 }
                 logger.info(f"✨ New rule created: {learning_result.get('rule_name')}")
 
-        return CorrectionResponse(**result)
+        # Map preprocessor result to CorrectionResponse schema
+        response_data = {
+            'learned': result.get('learned', False),
+            'pattern_recorded': result.get('learned', False),  # If learned, pattern was recorded
+            'new_rule_created': result.get('adjustment_active', False),  # Adjustment = rule created
+            'rule_name': result.get('pattern_category'),  # Pattern category is the rule name
+            'rule_confidence': float(result.get('confidence_boost', '0').replace('+', '')) if 'confidence_boost' in result else None,
+            'similar_patterns_count': result.get('correction_support', 0)
+        }
+
+        return CorrectionResponse(**response_data)
 
     except ValueError as e:
         raise HTTPException(
