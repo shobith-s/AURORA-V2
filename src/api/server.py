@@ -893,12 +893,19 @@ async def submit_correction(request: CorrectionRequest):
 
         # Map preprocessor result to CorrectionResponse schema
         response_data = {
-            'learned': result.get('learned', False),
-            'pattern_recorded': result.get('learned', False),  # If learned, pattern was recorded
-            'new_rule_created': result.get('adjustment_active', False),  # Adjustment = rule created
+            'learned': bool(result.get('learned', False)),
+            'pattern_recorded': bool(result.get('learned', False)),  # If learned, pattern was recorded
+            'new_rule_created': bool(result.get('adjustment_active', False)),  # Adjustment = rule created
             'rule_name': result.get('pattern_category'),  # Pattern category is the rule name
             'rule_confidence': float(result.get('confidence_boost', '0').replace('+', '')) if 'confidence_boost' in result else None,
-            'similar_patterns_count': result.get('correction_support', 0)
+            'similar_patterns_count': int(result.get('correction_support', 0)) if result.get('correction_support') else None,
+            'applicable_to': result.get('applicable_to'),
+            'production_ready': bool(result.get('production_ready', False)),
+            'pattern_corrections': int(result.get('pattern_corrections', 0)),
+            'corrections_needed_for_training': int(result.get('corrections_needed_for_training', 0)),
+            'corrections_needed_for_production': int(result.get('corrections_needed_for_production', 0)),
+            'preferred_action': result.get('preferred_action'),
+            'message': result.get('message')
         }
 
         return CorrectionResponse(**response_data)
