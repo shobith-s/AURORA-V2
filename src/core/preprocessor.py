@@ -756,21 +756,21 @@ class IntelligentPreprocessor:
         result = {
             'learned': True,
             'approach': 'adaptive_rules',  # Fine-tuning instead of separate patterns
-            'pattern_category': pattern_key,
+            'pattern_category': str(pattern_key),
             'cache_invalidated': True,
-            'adjustment_active': adjustment is not None,
-            'production_ready': is_production_ready,  # NEW: Is this pattern ready for production use?
-            'total_corrections': stats['total_corrections'],
-            'patterns_tracked': stats['patterns_tracked'],
-            'pattern_corrections': correction_count,
-            'corrections_needed_for_training': max(0, self.adaptive_rules.min_corrections_for_adjustment - correction_count),
-            'corrections_needed_for_production': max(0, self.adaptive_rules.min_corrections_for_production - correction_count)
+            'adjustment_active': bool(adjustment is not None),
+            'production_ready': bool(is_production_ready),  # Explicit bool conversion
+            'total_corrections': int(stats['total_corrections']),
+            'patterns_tracked': int(stats['patterns_tracked']),
+            'pattern_corrections': int(correction_count),
+            'corrections_needed_for_training': int(max(0, self.adaptive_rules.min_corrections_for_adjustment - correction_count)),
+            'corrections_needed_for_production': int(max(0, self.adaptive_rules.min_corrections_for_production - correction_count))
         }
 
         if adjustment:
             result['confidence_boost'] = f"+{adjustment.confidence_delta:.3f}"
-            result['preferred_action'] = adjustment.action.value
-            result['correction_support'] = adjustment.correction_count
+            result['preferred_action'] = str(adjustment.action.value)
+            result['correction_support'] = int(adjustment.correction_count)
             result['applicable_to'] = f"Similar columns matching '{adjustment.rule_category}' pattern"
 
             # Phase-specific messaging
