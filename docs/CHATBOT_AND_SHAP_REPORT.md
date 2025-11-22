@@ -667,6 +667,22 @@ User: "Show me SHAP for my data"
 
 **Status**: ✅ All 18 tests now pass
 
+### Fix 4: Missing Type Imports in Server (Nov 22, 2025)
+
+**Issue**: Server failed to start with `NameError: name 'List' is not defined`
+
+**Root Cause**: The chatbot endpoints use `List` and `Optional` type hints but they weren't imported from `typing` module.
+
+**Solution**: Added `List` and `Optional` to the typing imports in server.py
+
+**Files Fixed**:
+- `src/api/server.py` (line 14)
+
+**Commits**:
+- `4af7e63`: Add missing List and Optional imports to server.py
+
+**Status**: ✅ Server now starts successfully
+
 ---
 
 The intelligent assistant is **ready for production use**! 🎉
