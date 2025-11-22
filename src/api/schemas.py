@@ -482,3 +482,44 @@ class DriftMonitoringResponse(BaseModel):
                 "drift_reports": []
             }
         }
+
+
+class ChatQueryRequest(BaseModel):
+    """Request schema for chatbot query."""
+    
+    question: str = Field(..., description="User's question")
+    context: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional context (current dataframe info, recent results)"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "question": "What are the statistics for revenue?",
+                "context": {
+                    "current_columns": ["revenue", "price", "quantity"],
+                    "row_count": 1000
+                }
+            }
+        }
+
+
+class ChatQueryResponse(BaseModel):
+    """Response schema for chatbot query."""
+    
+    answer: str = Field(..., description="AI assistant's answer")
+    confidence: float = Field(default=1.0, description="Confidence in answer (0-1)")
+    suggestions: List[str] = Field(default=[], description="Suggested follow-up questions")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "answer": "The revenue column has a mean of $1,234.56...",
+                "confidence": 0.95,
+                "suggestions": [
+                    "What preprocessing do you recommend for revenue?",
+                    "Show me the distribution of revenue"
+                ]
+            }
+        }
