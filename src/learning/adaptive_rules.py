@@ -1,30 +1,36 @@
 """
 Adaptive Symbolic Rules - Learn from corrections to improve symbolic engine.
 
-Instead of creating separate learned patterns that override symbolic rules,
-this module uses corrections to fine-tune symbolic rule parameters, thresholds,
-and confidence scores. This prevents overgeneralization while still learning
-from user feedback.
+NEW APPROACH (V3): Instead of adjusting confidence or creating separate patterns,
+this module creates NEW SYMBOLIC RULES that get dynamically added to the symbolic engine.
+
+The learner acts as a corrector/enhancer for the symbolic engine:
+1. Accumulates corrections until pattern is clear (training phase)
+2. Creates new Rule objects based on learned patterns
+3. Injects these rules into the symbolic engine (production phase)
+4. NO independent decisions - only enhances symbolic engine
 
 Architecture:
     User Corrections
           ↓
-    Extract Patterns
+    Accumulate & Analyze (Training: 2-9 corrections)
           ↓
-    Update Symbolic Rule Parameters
+    Create New Symbolic Rules (Production: 10+ corrections)
           ↓
-    Symbolic Engine (now domain-adapted)
+    Inject Rules into Symbolic Engine
+          ↓
+    Symbolic Engine (enhanced with learned rules)
           ↓
     Better Decisions
 
-Benefits over direct learned layer:
-- No overgeneralization from limited data
-- Symbolic rules remain primary (reliable)
-- Corrections fine-tune existing good logic
-- Domain adaptation without replacement
+Benefits:
+- Learner never makes direct decisions (prevents overgeneralization)
+- Creates actual symbolic rules (maintainable & inspectable)
+- Symbolic engine remains the ONLY decision-maker
+- Domain adaptation through rule creation, not override
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -291,6 +297,129 @@ class AdaptiveSymbolicRules:
         """
         adjustment = self.get_adjustment(column_stats)
         return adjustment.action if adjustment else None
+
+    def create_learned_rule(self, pattern_key: str) -> Optional['Rule']:
+        """
+        Create an actual symbolic Rule object from learned corrections.
+
+        This is the KEY innovation: instead of adjusting confidence or making
+        independent decisions, we CREATE NEW SYMBOLIC RULES that get added
+        to the symbolic engine.
+
+        Args:
+            pattern_key: Pattern identifier (e.g., "numeric_high_skewness")
+
+        Returns:
+            Rule object if pattern is production-ready, None otherwise
+        """
+        corrections = self.correction_patterns.get(pattern_key, [])
+
+        if len(corrections) < self.min_corrections_for_production:
+            return None  # Not enough corrections yet
+
+        adjustment = self.rule_adjustments.get(pattern_key)
+        if not adjustment:
+            return None  # No adjustment computed
+
+        # Import here to avoid circular dependency
+        try:
+            from ..symbolic.rules import Rule, RuleCategory
+        except ImportError:
+            return None
+
+        # Create condition function based on pattern
+        def create_condition(pattern: str) -> Callable[[Dict[str, Any]], bool]:
+            """Create condition function for this pattern."""
+            if pattern == "numeric_high_skewness":
+                return lambda stats: (
+                    stats.get("is_numeric", False) and
+                    stats.get("skewness", 0) > 2.0 and
+                    stats.get("null_pct", 1.0) < 0.3
+                )
+            elif pattern == "numeric_medium_skewness":
+                return lambda stats: (
+                    stats.get("is_numeric", False) and
+                    1.0 < stats.get("skewness", 0) <= 2.0 and
+                    stats.get("null_pct", 1.0) < 0.3
+                )
+            elif pattern == "numeric_high_nulls":
+                return lambda stats: (
+                    stats.get("is_numeric", False) and
+                    stats.get("null_pct", 0) > 0.5
+                )
+            elif pattern == "numeric_medium_nulls":
+                return lambda stats: (
+                    stats.get("is_numeric", False) and
+                    0.1 < stats.get("null_pct", 0) <= 0.5
+                )
+            elif pattern == "numeric_many_outliers":
+                return lambda stats: (
+                    stats.get("is_numeric", False) and
+                    stats.get("outlier_pct", 0) > 0.1
+                )
+            elif pattern == "numeric_normal":
+                return lambda stats: (
+                    stats.get("is_numeric", False) and
+                    abs(stats.get("skewness", 10)) < 1.0 and
+                    stats.get("outlier_pct", 0.2) < 0.1 and
+                    stats.get("null_pct", 1.0) < 0.1
+                )
+            elif pattern == "categorical_high_uniqueness":
+                return lambda stats: (
+                    (stats.get("is_categorical", False) or stats.get("dtype", "") == "object") and
+                    stats.get("unique_ratio", 0) > 0.9
+                )
+            elif pattern == "categorical_high_cardinality":
+                return lambda stats: (
+                    (stats.get("is_categorical", False) or stats.get("dtype", "") == "object") and
+                    stats.get("unique_count", 0) > 50
+                )
+            elif pattern == "categorical_low_cardinality":
+                return lambda stats: (
+                    (stats.get("is_categorical", False) or stats.get("dtype", "") == "object") and
+                    stats.get("unique_count", 0) < 10 and
+                    stats.get("null_pct", 1.0) < 0.2
+                )
+            elif pattern == "categorical_medium_cardinality":
+                return lambda stats: (
+                    (stats.get("is_categorical", False) or stats.get("dtype", "") == "object") and
+                    10 <= stats.get("unique_count", 0) <= 50
+                )
+            else:
+                # Generic fallback
+                return lambda stats: False
+
+        # Create the rule
+        rule = Rule(
+            name=f"LEARNED_{pattern_key.upper()}",
+            category=RuleCategory.STATISTICAL,  # Could be determined from pattern
+            action=adjustment.action,
+            condition=create_condition(pattern_key),
+            confidence_fn=lambda stats, adj=adjustment: min(
+                0.92,  # Cap learned rules at 0.92 (leave room for base rules)
+                0.75 + (adj.correction_count / 20) * 0.15  # Scale with corrections
+            ),
+            explanation_fn=lambda stats, adj=adjustment, pk=pattern_key: (
+                f"Learned from {adj.correction_count} user corrections for '{pk}' pattern"
+            ),
+            priority=92  # High priority but below simple case rules (100+)
+        )
+
+        return rule
+
+    def get_all_learned_rules(self) -> List['Rule']:
+        """
+        Get all learned rules that are ready for production.
+
+        Returns:
+            List of Rule objects to inject into symbolic engine
+        """
+        rules = []
+        for pattern_key in self.correction_patterns.keys():
+            rule = self.create_learned_rule(pattern_key)
+            if rule:
+                rules.append(rule)
+        return rules
 
     def get_statistics(self) -> Dict[str, Any]:
         """Get statistics about corrections and adjustments."""
