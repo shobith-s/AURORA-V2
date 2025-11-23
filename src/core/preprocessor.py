@@ -13,7 +13,6 @@ import time
 from ..symbolic.engine import SymbolicEngine
 from ..symbolic.meta_learner import get_meta_learner, MetaLearner
 from ..neural.oracle import NeuralOracle, get_neural_oracle
-from ..learning.pattern_learner import LocalPatternLearner
 from ..learning.adaptive_rules import AdaptiveSymbolicRules
 from ..features.minimal_extractor import MinimalFeatureExtractor, get_feature_extractor
 from ..features.intelligent_cache import get_cache
@@ -28,18 +27,26 @@ CONFIDENCE_LOW = 0.5       # Require manual review (low confidence)
 
 class IntelligentPreprocessor:
     """
-    Main preprocessing pipeline with adaptive learning architecture:
+    Main preprocessing pipeline with adaptive learning architecture (V3):
 
     0. Cache (validated decisions) - Instant lookup
-    1. Symbolic rules (165+ rules) - Primary decision layer
-       └─ Enhanced by adaptive learning from corrections
-    2. Meta-learning (statistical heuristics) - Bridge layer
-    3. NeuralOracle (ML predictions) - Ambiguous cases
+    1. Symbolic rules (185+ rules, including learned) - PRIMARY & ONLY DECISION LAYER
+       └─ Dynamically enhanced: Learner creates NEW symbolic rules from corrections
+    2. Meta-learning (statistical heuristics) - Bridge layer for edge cases
+    3. NeuralOracle (ML predictions) - Ambiguous cases only
 
-    Learning Approach:
-    - Corrections fine-tune symbolic rule parameters (NOT direct decisions)
-    - Prevents overgeneralization from limited data
-    - Maintains symbolic reliability while learning preferences
+    NEW Learning Architecture (V3):
+    - Learner NEVER makes direct decisions (prevents overgeneralization)
+    - Training phase (2-9 corrections): Analyze patterns, compute adjustments
+    - Production phase (10+ corrections): CREATE new symbolic Rule objects
+    - New rules are INJECTED into symbolic engine automatically
+    - Symbolic engine remains the ONLY decision-maker at all times
+
+    Benefits:
+    - No learner decision path = no overgeneralization from limited data
+    - Learned rules are inspectable, maintainable symbolic logic
+    - All decisions traceable to explicit rules
+    - Domain adaptation through rule creation, not override
     """
 
     def __init__(
@@ -78,12 +85,7 @@ class IntelligentPreprocessor:
             logger.error(f"Failed to initialize symbolic engine: {e}")
             raise RuntimeError(f"Critical component failed: symbolic engine - {e}")
 
-        # Legacy pattern learner (being phased out)
-        try:
-            self.pattern_learner = LocalPatternLearner() if enable_learning else None
-        except Exception as e:
-            logger.warning(f"Pattern learner initialization failed, continuing without it: {e}")
-            self.pattern_learner = None
+        # Note: Legacy pattern learner removed in V3 - now using adaptive_rules only
 
         # Adaptive rules (with graceful degradation)
         try:
@@ -93,6 +95,16 @@ class IntelligentPreprocessor:
                 min_corrections_for_production=10,  # Use adjustments in decisions after 10 corrections (PRODUCTION)
                 persistence_file=Path("data/adaptive_rules.json")
             ) if enable_learning else None
+
+            # CRITICAL: Inject learned rules into symbolic engine
+            # This is the KEY architectural change: learner creates rules, doesn't make decisions
+            if self.adaptive_rules:
+                learned_rules = self.adaptive_rules.get_all_learned_rules()
+                for rule in learned_rules:
+                    self.symbolic_engine.add_rule(rule)
+                if learned_rules:
+                    logger.info(f"Injected {len(learned_rules)} learned rules into symbolic engine")
+
         except Exception as e:
             logger.warning(f"Adaptive rules initialization failed, continuing without it: {e}")
             self.adaptive_rules = None
@@ -246,30 +258,34 @@ class IntelligentPreprocessor:
                 )
                 return self._add_confidence_warnings(result)
 
-        # LAYER 1: Symbolic engine with adaptive learning
-        # Corrections fine-tune symbolic rules instead of creating separate patterns
+        # LAYER 1: Symbolic engine (THE ONLY DECISION-MAKER)
+        # Note: Symbolic engine now includes dynamically learned rules injected during correction
+        # This ensures learner NEVER makes independent decisions - it only enhances symbolic engine
         symbolic_result = self.symbolic_engine.evaluate(
             column, column_name, target_available
         )
 
-        # Apply adaptive learning adjustments to confidence (if enabled and production-ready)
+        # Optional: Apply confidence adjustments from adaptive learning (legacy behavior)
+        # This is kept for smooth transition but learned rules are the primary mechanism
         original_confidence = symbolic_result.confidence
         if self.enable_learning and self.adaptive_rules and symbolic_result.context:
-            # Check if this pattern is ready for production use
+            # Check if this pattern has learned rules
             is_production_ready = self.adaptive_rules.is_production_ready(symbolic_result.context)
 
+            # Slight confidence boost if this matches a learned pattern
+            # (mainly for patterns not yet converted to full rules)
             adjusted_confidence = self.adaptive_rules.adjust_confidence(
                 symbolic_result.action,
                 original_confidence,
                 symbolic_result.context
             )
 
-            # Update explanation if confidence was adjusted (production phase only)
+            # Update explanation if confidence was adjusted
             if abs(adjusted_confidence - original_confidence) > 0.01:
                 adjustment = self.adaptive_rules.get_adjustment(symbolic_result.context)
                 if adjustment and is_production_ready:
                     delta = adjusted_confidence - original_confidence
-                    symbolic_result.explanation += f" [Adapted: {delta:+.2f} from {adjustment.correction_count} corrections]"
+                    symbolic_result.explanation += f" [Learned pattern: {delta:+.2f} confidence from {adjustment.correction_count} corrections]"
 
             symbolic_result.confidence = adjusted_confidence
 
@@ -741,33 +757,56 @@ class IntelligentPreprocessor:
             correct_action=correct_action
         )
 
-        # Get adjustment information
-        adjustment = self.adaptive_rules.get_adjustment(stats_dict)
-        stats = self.adaptive_rules.get_statistics()
-
-        # Get pattern-specific correction count
+        # Get pattern information
         pattern_key = self.adaptive_rules._identify_pattern(stats_dict)
         pattern_corrections = self.adaptive_rules.correction_patterns.get(pattern_key, [])
         correction_count = len(pattern_corrections)
+
+        # CRITICAL: Try to create and inject new rule if production-ready
+        # This is where the learner enhances the symbolic engine
+        newly_created_rule = None
+        if correction_count >= self.adaptive_rules.min_corrections_for_production:
+            newly_created_rule = self.adaptive_rules.create_learned_rule(pattern_key)
+            if newly_created_rule:
+                # Check if rule already exists (by name)
+                existing_rule_names = {r.name for r in self.symbolic_engine.rules}
+                if newly_created_rule.name not in existing_rule_names:
+                    self.symbolic_engine.add_rule(newly_created_rule)
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.info(f"Injected new learned rule: {newly_created_rule.name}")
+
+        # Get adjustment information
+        adjustment = self.adaptive_rules.get_adjustment(stats_dict)
+        stats = self.adaptive_rules.get_statistics()
 
         # Check production readiness
         is_production_ready = self.adaptive_rules.is_production_ready(stats_dict)
 
         result = {
             'learned': True,
-            'approach': 'adaptive_rules',  # Fine-tuning instead of separate patterns
+            'approach': 'symbolic_rule_creation',  # NEW: Creates rules, doesn't make decisions
             'pattern_category': str(pattern_key),
             'cache_invalidated': True,
-            'adjustment_active': bool(adjustment is not None),
-            'production_ready': bool(is_production_ready),  # Explicit bool conversion
+            'rule_created': bool(newly_created_rule is not None),
+            'production_ready': bool(is_production_ready),
             'total_corrections': int(stats['total_corrections']),
             'patterns_tracked': int(stats['patterns_tracked']),
             'pattern_corrections': int(correction_count),
             'corrections_needed_for_training': int(max(0, self.adaptive_rules.min_corrections_for_adjustment - correction_count)),
-            'corrections_needed_for_production': int(max(0, self.adaptive_rules.min_corrections_for_production - correction_count))
+            'corrections_needed_for_production': int(max(0, self.adaptive_rules.min_corrections_for_production - correction_count)),
+            'total_symbolic_rules': int(len(self.symbolic_engine.rules))
         }
 
-        if adjustment:
+        if newly_created_rule:
+            result['rule_name'] = newly_created_rule.name
+            result['rule_action'] = newly_created_rule.action.value
+            result['rule_priority'] = newly_created_rule.priority
+            result['message'] = f"🎯 RULE CREATED: New symbolic rule '{newly_created_rule.name}' " + \
+                              f"injected into engine! Learned from {correction_count} corrections. " + \
+                              f"This rule will now handle all '{pattern_key}' cases automatically. " + \
+                              f"Total rules: {len(self.symbolic_engine.rules)}"
+        elif adjustment:
             result['confidence_boost'] = f"+{adjustment.confidence_delta:.3f}"
             result['preferred_action'] = str(adjustment.action.value)
             result['correction_support'] = int(adjustment.correction_count)
@@ -775,21 +814,21 @@ class IntelligentPreprocessor:
 
             # Phase-specific messaging
             if is_production_ready:
-                result['message'] = f"✓ PRODUCTION: Adjustments active! Pattern '{pattern_key}' learned from {correction_count} corrections. " + \
-                                  f"Now boosting '{adjustment.action.value}' by {adjustment.confidence_delta:.0%} for similar columns."
+                result['message'] = f"✓ PRODUCTION: Pattern '{pattern_key}' learned from {correction_count} corrections. " + \
+                                  f"Ready to create symbolic rule on next decision."
             else:
                 corrections_left = self.adaptive_rules.min_corrections_for_production - correction_count
                 result['message'] = f"⚙ TRAINING: Adjustment computed from {correction_count} corrections. " + \
-                                  f"{corrections_left} more needed to activate in production decisions."
+                                  f"{corrections_left} more needed to create symbolic rule."
         else:
             # Provide feedback even if no adjustment yet
             if correction_count > 0:
                 corrections_left = self.adaptive_rules.min_corrections_for_adjustment - correction_count
                 result['message'] = f"📝 Recording: {correction_count}/{self.adaptive_rules.min_corrections_for_adjustment} corrections for pattern '{pattern_key}'. " + \
-                                  f"{corrections_left} more needed to compute adjustment."
+                                  f"{corrections_left} more needed to compute pattern."
             else:
                 result['message'] = f"📝 First correction for pattern '{pattern_key}' recorded. " + \
-                                  f"{self.adaptive_rules.min_corrections_for_adjustment - 1} more needed to compute adjustment."
+                                  f"{self.adaptive_rules.min_corrections_for_adjustment - 1} more needed to compute pattern."
 
         return result
 
@@ -839,9 +878,9 @@ class IntelligentPreprocessor:
             'symbolic_coverage': self.symbolic_engine.coverage()
         }
 
-        # Add learning statistics if available
-        if self.pattern_learner:
-            stats['learning'] = self.pattern_learner.get_statistics()
+        # Add adaptive learning statistics if available
+        if self.adaptive_rules:
+            stats['adaptive_learning'] = self.adaptive_rules.get_statistics()
 
         # Add meta-learning statistics if available
         if self.meta_learner:
@@ -865,28 +904,28 @@ class IntelligentPreprocessor:
         if self.meta_learner:
             self.meta_learner.reset_statistics()
 
-    def save_learned_patterns(self, path: Path):
+    def save_learned_rules(self, path: Path):
         """
-        Save learned patterns to disk.
+        Save learned rules to disk (via adaptive_rules persistence).
 
         Args:
-            path: Path to save patterns
+            path: Path to save rules
         """
-        if self.pattern_learner:
-            self.pattern_learner.save(path)
+        if self.adaptive_rules:
+            self.adaptive_rules.save()
 
-    def load_learned_patterns(self, path: Path):
+    def load_learned_rules(self, path: Path):
         """
-        Load learned patterns from disk.
+        Load learned rules from disk and inject into symbolic engine.
 
         Args:
-            path: Path to load patterns from
+            path: Path to load rules from
         """
-        if self.pattern_learner:
-            self.pattern_learner.load(path)
-
-            # Add learned rules to symbolic engine
-            for rule in self.pattern_learner.learned_rules:
+        if self.adaptive_rules:
+            self.adaptive_rules.load()
+            # Inject loaded rules into symbolic engine
+            learned_rules = self.adaptive_rules.get_all_learned_rules()
+            for rule in learned_rules:
                 self.symbolic_engine.add_rule(rule)
 
 

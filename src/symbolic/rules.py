@@ -754,6 +754,14 @@ def get_all_rules(include_extended: bool = True) -> List[Rule]:
     """
     all_rules = []
 
+    # HIGH PRIORITY: Simple case rules (catches obvious preprocessing needs)
+    try:
+        from .simple_case_rules import create_simple_case_rules
+        all_rules.extend(create_simple_case_rules())
+    except ImportError:
+        # Simple case rules not available, continue
+        pass
+
     # Base rules (~100 rules)
     all_rules.extend(create_data_quality_rules())
     all_rules.extend(create_type_detection_rules())

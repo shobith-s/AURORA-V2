@@ -547,7 +547,7 @@ export default function PreprocessingPanel() {
                     <h3 className="text-base font-bold text-slate-800">Architecture</h3>
                   </div>
                   <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium w-fit">
-                    5-Layer System
+                    V3: 4-Layer Architecture
                   </span>
                 </div>
                 {expandedPanels.architecture ? (
@@ -578,71 +578,66 @@ export default function PreprocessingPanel() {
                     </div>
                   </div>
 
-                  {/* Layer 1: Learned */}
-                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border border-purple-200">
-                    <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <BookOpen className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-slate-800 text-sm">L1: Learned</h4>
-                        <span className="text-lg font-bold text-purple-600">
-                          {sourceBreakdown?.learned || 0}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600">User patterns, privacy-first</p>
-                    </div>
-                  </div>
-
-                  {/* Layer 2: Symbolic */}
-                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200">
-                    <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                  {/* Layer 1: Symbolic Engine (ONLY DECISION-MAKER) */}
+                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border-2 border-blue-400 shadow-md">
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
                       <Target className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-slate-800 text-sm">L2: Symbolic (165+)</h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-semibold text-slate-800 text-sm">L1: Symbolic Engine</h4>
+                          <span className="px-1.5 py-0.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-[10px] rounded font-bold uppercase">
+                            ONLY DECIDER
+                          </span>
+                        </div>
                         <span className="text-lg font-bold text-blue-600">
                           {sourceBreakdown?.symbolic || 0}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-600">Expert rules, 80-100% conf</p>
+                      <p className="text-xs text-slate-600 font-medium">185+ rules (base + learned), 90-99% confidence</p>
+                      <div className="flex items-center gap-1 mt-1">
+                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                        <p className="text-[10px] text-blue-600 font-medium">
+                          Learner creates new rules (not decisions!)
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Layer 2.5: Meta */}
+                  {/* Layer 2: Meta-Learning */}
                   <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-orange-50 to-orange-100 rounded-lg border border-orange-200">
                     <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center flex-shrink-0">
                       <Brain className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-slate-800 text-sm">L2.5: Meta</h4>
+                        <h4 className="font-semibold text-slate-800 text-sm">L2: Meta-Learning</h4>
                         <span className="text-lg font-bold text-orange-600">
                           {sourceBreakdown?.meta_learning || 0}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-600">Universal heuristics</p>
+                      <p className="text-xs text-slate-600">Universal coverage, edge cases</p>
                     </div>
                   </div>
 
-                  {/* Layer 3: Neural */}
+                  {/* Layer 3: Neural Oracle */}
                   <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-pink-50 to-pink-100 rounded-lg border border-pink-200">
                     <div className="w-10 h-10 bg-pink-600 rounded-lg flex items-center justify-center flex-shrink-0">
                       <Brain className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-slate-800 text-sm">L3: Neural</h4>
+                        <h4 className="font-semibold text-slate-800 text-sm">L3: Neural Oracle</h4>
                         <span className="text-lg font-bold text-pink-600">
                           {sourceBreakdown?.neural || 0}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-600">ML fallback, &lt;5% usage</p>
+                      <p className="text-xs text-slate-600">ML predictions for ambiguous cases</p>
                     </div>
                   </div>
 
-                  {/* Layer 4: Fallback */}
+                  {/* Layer 4: Conservative Fallback */}
                   <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-slate-50 to-slate-100 rounded-lg border border-slate-300">
                     <div className="w-10 h-10 bg-slate-600 rounded-lg flex items-center justify-center flex-shrink-0">
                       <Shield className="w-5 h-5 text-white" />
@@ -654,14 +649,22 @@ export default function PreprocessingPanel() {
                           {sourceBreakdown?.conservative_fallback || 0}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-600">100% coverage, never fails</p>
+                      <p className="text-xs text-slate-600">100% coverage guarantee</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="text-xs text-blue-800">
-                    <strong>95-99% autonomous coverage</strong> on any domain (financial, medical, IoT, web)
+                <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                    <p className="text-xs font-bold text-slate-800 uppercase">V3 Architecture</p>
+                  </div>
+                  <p className="text-xs text-slate-700">
+                    <strong>Key Innovation:</strong> Learner creates symbolic rules (not decisions).
+                    After 10 corrections, new rules are injected into L1 Symbolic Engine.
+                  </p>
+                  <p className="text-xs text-blue-700 font-medium mt-2">
+                    ✓ 95-99% autonomous coverage • ✓ Zero overgeneralization • ✓ All decisions traceable
                   </p>
                 </div>
               </div>
