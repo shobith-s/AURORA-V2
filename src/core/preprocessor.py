@@ -13,7 +13,6 @@ import time
 from ..symbolic.engine import SymbolicEngine
 from ..symbolic.meta_learner import get_meta_learner, MetaLearner
 from ..neural.oracle import NeuralOracle, get_neural_oracle
-from ..learning.pattern_learner import LocalPatternLearner
 from ..learning.adaptive_rules import AdaptiveSymbolicRules
 from ..features.minimal_extractor import MinimalFeatureExtractor, get_feature_extractor
 from ..features.intelligent_cache import get_cache
@@ -86,12 +85,7 @@ class IntelligentPreprocessor:
             logger.error(f"Failed to initialize symbolic engine: {e}")
             raise RuntimeError(f"Critical component failed: symbolic engine - {e}")
 
-        # Legacy pattern learner (being phased out)
-        try:
-            self.pattern_learner = LocalPatternLearner() if enable_learning else None
-        except Exception as e:
-            logger.warning(f"Pattern learner initialization failed, continuing without it: {e}")
-            self.pattern_learner = None
+        # Note: Legacy pattern learner removed in V3 - now using adaptive_rules only
 
         # Adaptive rules (with graceful degradation)
         try:
@@ -884,9 +878,9 @@ class IntelligentPreprocessor:
             'symbolic_coverage': self.symbolic_engine.coverage()
         }
 
-        # Add learning statistics if available
-        if self.pattern_learner:
-            stats['learning'] = self.pattern_learner.get_statistics()
+        # Add adaptive learning statistics if available
+        if self.adaptive_rules:
+            stats['adaptive_learning'] = self.adaptive_rules.get_statistics()
 
         # Add meta-learning statistics if available
         if self.meta_learner:
@@ -910,28 +904,28 @@ class IntelligentPreprocessor:
         if self.meta_learner:
             self.meta_learner.reset_statistics()
 
-    def save_learned_patterns(self, path: Path):
+    def save_learned_rules(self, path: Path):
         """
-        Save learned patterns to disk.
+        Save learned rules to disk (via adaptive_rules persistence).
 
         Args:
-            path: Path to save patterns
+            path: Path to save rules
         """
-        if self.pattern_learner:
-            self.pattern_learner.save(path)
+        if self.adaptive_rules:
+            self.adaptive_rules.save()
 
-    def load_learned_patterns(self, path: Path):
+    def load_learned_rules(self, path: Path):
         """
-        Load learned patterns from disk.
+        Load learned rules from disk and inject into symbolic engine.
 
         Args:
-            path: Path to load patterns from
+            path: Path to load rules from
         """
-        if self.pattern_learner:
-            self.pattern_learner.load(path)
-
-            # Add learned rules to symbolic engine
-            for rule in self.pattern_learner.learned_rules:
+        if self.adaptive_rules:
+            self.adaptive_rules.load()
+            # Inject loaded rules into symbolic engine
+            learned_rules = self.adaptive_rules.get_all_learned_rules()
+            for rule in learned_rules:
                 self.symbolic_engine.add_rule(rule)
 
 

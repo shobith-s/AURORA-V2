@@ -1,0 +1,147 @@
+/**
+ * Learning Progress Panel - Shows V3 adaptive learning progress
+ * Displays training/production phases and rule creation status
+ */
+
+import { useState, useEffect } from 'react';
+import { BookOpen, Target, TrendingUp, CheckCircle, Clock, Zap } from 'lucide-react';
+import axios from 'axios';
+
+interface LearningProgress {
+  approach: string;
+  total_corrections: number;
+  patterns_tracked: number;
+  pattern_corrections: number;
+  corrections_needed_for_training: number;
+  corrections_needed_for_production: number;
+  production_ready: boolean;
+  rule_created: boolean;
+  rule_name?: string;
+  total_symbolic_rules?: number;
+  message?: string;
+}
+
+export default function LearningProgressPanel() {
+  const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(fetchStats, 10000); // Refresh every 10s
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      const response = await axios.get('http://localhost:8000/stats');
+      setStats(response.data);
+      setLoading(false);
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="glass-card p-6">
+        <div className="animate-pulse">
+          <div className="h-4 bg-slate-200 rounded w-1/2 mb-4"></div>
+          <div className="h-32 bg-slate-200 rounded"></div>
+        </div>
+      </div>
+    );
+  }
+
+  const adaptiveLearning = stats?.adaptive_learning;
+  if (!adaptiveLearning) {
+    return null;
+  }
+
+  const totalCorrections = adaptiveLearning.total_corrections || 0;
+  const patternsTracked = adaptiveLearning.patterns_tracked || 0;
+  const activeAdjustments = adaptiveLearning.active_adjustments || 0;
+
+  return (
+    <div className="glass-card p-6">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
+          <Target className="w-5 h-5 text-white" />
+        </div>
+        <div>
+          <h3 className="text-lg font-bold text-slate-800">Adaptive Learning (V3)</h3>
+          <p className="text-xs text-slate-600">Creates symbolic rules from your corrections</p>
+        </div>
+      </div>
+
+      {/* Progress Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200">
+          <div className="flex items-center gap-2 mb-2">
+            <BookOpen className="w-4 h-4 text-blue-600" />
+            <span className="text-xs font-medium text-blue-700">Total Corrections</span>
+          </div>
+          <div className="text-2xl font-bold text-blue-900">{totalCorrections}</div>
+        </div>
+
+        <div className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="w-4 h-4 text-purple-600" />
+            <span className="text-xs font-medium text-purple-700">Patterns Tracked</span>
+          </div>
+          <div className="text-2xl font-bold text-purple-900">{patternsTracked}</div>
+        </div>
+
+        <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200">
+          <div className="flex items-center gap-2 mb-2">
+            <Zap className="w-4 h-4 text-green-600" />
+            <span className="text-xs font-medium text-green-700">Rules Created</span>
+          </div>
+          <div className="text-2xl font-bold text-green-900">{activeAdjustments}</div>
+        </div>
+      </div>
+
+      {/* Adjustments Detail */}
+      {adaptiveLearning.adjustments && Object.keys(adaptiveLearning.adjustments).length > 0 && (
+        <div>
+          <h4 className="text-sm font-semibold text-slate-700 mb-3">Active Learned Rules</h4>
+          <div className="space-y-2">
+            {Object.entries(adaptiveLearning.adjustments).map(([pattern, adj]: [string, any]) => (
+              <div key={pattern} className="p-3 bg-white rounded-lg border border-slate-200">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-slate-800">
+                    {pattern.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  </span>
+                  <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+                    {adj.corrections} corrections
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-600">
+                  <CheckCircle className="w-3 h-3 text-green-600" />
+                  <span>Action: {adj.action}</span>
+                  <span className="text-green-600 font-medium">{adj.confidence_delta}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Phase Explanation */}
+      <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+        <div className="flex items-start gap-3">
+          <Clock className="w-4 h-4 text-slate-600 mt-0.5" />
+          <div className="text-xs text-slate-600">
+            <p className="font-medium text-slate-800 mb-1">How It Works:</p>
+            <p className="mb-1">
+              <strong>Training (2-9 corrections):</strong> Analyzes your corrections to identify patterns
+            </p>
+            <p>
+              <strong>Production (10+ corrections):</strong> Creates new symbolic rules and injects them into the engine
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
