@@ -2048,3 +2048,284 @@ async def get_explanation_demo():
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate demo: {str(e)}"
         )
+
+
+# =============================================================================
+# VALIDATION & METRICS ENDPOINTS (NEW!)
+# =============================================================================
+
+from ..validation.metrics_tracker import get_metrics_tracker
+from ..validation.feedback_collector import get_feedback_collector
+from ..validation.validation_dashboard import ValidationDashboard
+from ..validation.benchmarking import BenchmarkRunner
+
+# Initialize validation components
+metrics_tracker = get_metrics_tracker()
+feedback_collector = get_feedback_collector()
+validation_dashboard = ValidationDashboard()
+
+
+@app.get("/validation/dashboard")
+async def get_validation_dashboard():
+    """
+    Get comprehensive validation dashboard with all metrics.
+
+    Returns:
+    - Performance metrics (time saved, accuracy, etc.)
+    - User feedback summary
+    - Testimonials
+    - Proof points
+    - Key statistics
+    """
+    try:
+        dashboard = validation_dashboard.get_complete_dashboard()
+        return {
+            "success": True,
+            "dashboard": dashboard
+        }
+    except Exception as e:
+        logger.error(f"Error generating validation dashboard: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate dashboard: {str(e)}"
+        )
+
+
+@app.get("/validation/metrics")
+async def get_performance_metrics():
+    """Get detailed performance metrics."""
+    try:
+        metrics = metrics_tracker.get_performance_metrics()
+        return {
+            "success": True,
+            "metrics": {
+                "usage": {
+                    "total_decisions": metrics.total_decisions,
+                    "total_users": metrics.total_users,
+                    "total_sessions": metrics.total_sessions,
+                },
+                "quality": {
+                    "average_confidence": metrics.average_confidence,
+                    "acceptance_rate": metrics.acceptance_rate,
+                    "override_rate": metrics.override_rate,
+                },
+                "performance": {
+                    "average_processing_time_ms": metrics.average_processing_time_ms,
+                    "total_time_saved_hours": metrics.total_time_saved_hours,
+                    "average_time_saved_per_decision_seconds": metrics.average_time_saved_per_decision_seconds,
+                    "time_vs_manual_percentage": metrics.time_vs_manual_percentage,
+                },
+                "decision_sources": {
+                    "symbolic": metrics.symbolic_decisions,
+                    "neural": metrics.neural_decisions,
+                    "learned": metrics.learned_decisions,
+                    "meta_learning": metrics.meta_learning_decisions,
+                },
+                "user_satisfaction": {
+                    "average_rating": metrics.average_user_rating,
+                    "explanation_helpfulness_rate": metrics.explanation_helpfulness_rate,
+                    "learning_rate": metrics.learning_rate,
+                    "recommendation_rate": metrics.recommendation_rate,
+                }
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting metrics: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get metrics: {str(e)}"
+        )
+
+
+@app.post("/validation/feedback")
+async def submit_feedback(
+    user_id: str,
+    overall_rating: int,
+    would_recommend: bool,
+    learned_something: bool,
+    time_saved_perception: str,
+    ease_of_use: int,
+    explanation_quality: int,
+    confidence_in_decisions: int,
+    what_worked_well: str = "",
+    what_needs_improvement: str = "",
+    use_case: str = "",
+    willing_to_be_quoted: bool = False,
+    testimonial: Optional[str] = None
+):
+    """
+    Submit user feedback.
+
+    This helps us prove AURORA's value with real user data.
+    """
+    try:
+        feedback = feedback_collector.collect_feedback(
+            user_id=user_id,
+            overall_rating=overall_rating,
+            would_recommend=would_recommend,
+            learned_something=learned_something,
+            time_saved_perception=time_saved_perception,
+            ease_of_use=ease_of_use,
+            explanation_quality=explanation_quality,
+            confidence_in_decisions=confidence_in_decisions,
+            what_worked_well=what_worked_well,
+            what_needs_improvement=what_needs_improvement,
+            use_case=use_case,
+            willing_to_be_quoted=willing_to_be_quoted,
+            testimonial=testimonial
+        )
+
+        return {
+            "success": True,
+            "message": "Thank you for your feedback!",
+            "feedback_id": feedback.feedback_id
+        }
+
+    except Exception as e:
+        logger.error(f"Error submitting feedback: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to submit feedback: {str(e)}"
+        )
+
+
+@app.get("/validation/testimonials")
+async def get_testimonials(limit: int = 5):
+    """Get user testimonials."""
+    try:
+        testimonials = feedback_collector.get_testimonials(limit=limit)
+        return {
+            "success": True,
+            "testimonials": testimonials,
+            "count": len(testimonials)
+        }
+    except Exception as e:
+        logger.error(f"Error getting testimonials: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get testimonials: {str(e)}"
+        )
+
+
+@app.get("/validation/proof-points")
+async def get_proof_points():
+    """
+    Get proof points for showcasing AURORA's value.
+
+    Perfect for landing pages, presentations, papers.
+    """
+    try:
+        dashboard = validation_dashboard.get_complete_dashboard()
+
+        return {
+            "success": True,
+            "proof_points": dashboard["proof_points"],
+            "key_stats": dashboard["key_stats"],
+            "summary": {
+                "total_decisions": dashboard["overview"]["total_decisions"],
+                "total_users": dashboard["overview"]["total_users"],
+                "time_saved_hours": dashboard["overview"]["time_saved_hours"],
+                "recommendation_rate": dashboard["user_satisfaction"]["recommendation_rate"],
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting proof points: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get proof points: {str(e)}"
+        )
+
+
+@app.get("/validation/export")
+async def export_validation_report():
+    """
+    Export complete validation report in markdown format.
+
+    Use this for:
+    - Research papers
+    - Documentation
+    - Presentations
+    - GitHub README
+    """
+    try:
+        report = validation_dashboard.get_metrics_for_export()
+
+        return {
+            "success": True,
+            "markdown": report,
+            "download_filename": "aurora_validation_report.md"
+        }
+
+    except Exception as e:
+        logger.error(f"Error exporting report: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to export report: {str(e)}"
+        )
+
+
+@app.post("/validation/track-decision")
+async def track_decision_for_validation(
+    decision_id: str,
+    column_name: str,
+    action_taken: str,
+    confidence: float,
+    source: str,
+    processing_time_ms: float,
+    user_id: str = "anonymous"
+):
+    """
+    Track a preprocessing decision for validation metrics.
+
+    Called automatically after each preprocessing decision.
+    """
+    try:
+        # Ensure session exists
+        if not metrics_tracker.current_session:
+            metrics_tracker.start_session(user_id)
+
+        # Track the decision
+        metrics_tracker.track_decision(
+            decision_id=decision_id,
+            column_name=column_name,
+            action_taken=action_taken,
+            confidence=confidence,
+            source=source,
+            processing_time_ms=processing_time_ms,
+            estimated_manual_time_seconds=60.0  # Default estimate
+        )
+
+        return {"success": True, "message": "Decision tracked"}
+
+    except Exception as e:
+        logger.error(f"Error tracking decision: {e}", exc_info=True)
+        # Don't fail the request if tracking fails
+        return {"success": False, "message": "Tracking failed but operation completed"}
+
+
+@app.post("/validation/record-user-action")
+async def record_user_action(
+    decision_id: str,
+    accepted: bool,
+    rating: Optional[int] = None,
+    alternative_chosen: Optional[str] = None,
+    explanation_helpful: Optional[bool] = None
+):
+    """
+    Record user action on a decision (accept/override/rate).
+    """
+    try:
+        metrics_tracker.record_user_feedback(
+            decision_id=decision_id,
+            accepted=accepted,
+            rating=rating,
+            alternative_chosen=alternative_chosen,
+            explanation_helpful=explanation_helpful
+        )
+
+        return {"success": True, "message": "User action recorded"}
+
+    except Exception as e:
+        logger.error(f"Error recording user action: {e}", exc_info=True)
+        return {"success": False, "message": "Recording failed"}
