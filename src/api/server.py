@@ -1764,3 +1764,287 @@ async def set_chat_context(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to set context: {str(e)}"
         )
+
+
+# =============================================================================
+# ENHANCED EXPLAINABILITY ENDPOINTS (NEW!)
+# =============================================================================
+
+from ..explanation.explanation_engine import ExplanationEngine
+from ..explanation.counterfactual_analyzer import CounterfactualAnalyzer
+
+# Initialize explanation components
+explanation_engine = ExplanationEngine()
+counterfactual_analyzer = CounterfactualAnalyzer()
+
+
+@app.post("/explain/enhanced")
+async def get_enhanced_explanation(request: PreprocessRequest):
+    """
+    Get a rich, detailed explanation for a preprocessing decision.
+
+    This goes FAR beyond simple explanations to provide:
+    - Scientific justification with references
+    - Detailed alternative analysis
+    - Impact predictions on model performance
+    - Risk assessments
+    - Best practices
+    - "What if" scenarios
+
+    This is what makes AURORA's explainability world-class.
+    """
+    try:
+        start_time = time.time()
+
+        # Get the preprocessing decision
+        preprocessor = get_preprocessor()
+        result = preprocessor.preprocess_column(
+            column=request.column_data,
+            column_name=request.column_name,
+            metadata=request.column_metadata or {}
+        )
+
+        # Generate enhanced explanation
+        enhanced_explanation = explanation_engine.generate_enhanced_explanation(
+            preprocessing_result=result,
+            column_stats=result.context or {}
+        )
+
+        elapsed_ms = (time.time() - start_time) * 1000
+
+        logger.info(f"Enhanced explanation generated in {elapsed_ms:.1f}ms")
+
+        return {
+            "success": True,
+            "decision": {
+                "action": result.action.value,
+                "confidence": result.confidence,
+                "source": result.source
+            },
+            "enhanced_explanation": enhanced_explanation.to_dict(),
+            "markdown_report": enhanced_explanation.to_markdown(),
+            "plain_text_summary": enhanced_explanation.to_plain_text(),
+            "processing_time_ms": elapsed_ms
+        }
+
+    except Exception as e:
+        logger.error(f"Error generating enhanced explanation: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate enhanced explanation: {str(e)}"
+        )
+
+
+@app.post("/explain/counterfactual")
+async def analyze_counterfactual(
+    request: Dict[str, Any]
+):
+    """
+    Analyze "what if" scenarios for preprocessing decisions.
+
+    Examples:
+    - "What if I used robust_scale instead of standard_scale?"
+    - "What if the data had more outliers?"
+    - "What if skewness was 3.0 instead of 1.5?"
+
+    Request body:
+    {
+        "column_data": [...],
+        "column_name": "...",
+        "scenario_type": "alternative_action" or "data_change",
+        "alternative_action": "log_transform"  (for alternative_action scenarios),
+        "data_change_description": "skewness increased to 3.0"  (for data_change scenarios),
+        "modified_stats": {...}  (for data_change scenarios)
+    }
+    """
+    try:
+        # Get current decision
+        preprocessor = get_preprocessor()
+        current_result = preprocessor.preprocess_column(
+            column=request.get("column_data", []),
+            column_name=request.get("column_name", "column"),
+            metadata={}
+        )
+
+        scenario_type = request.get("scenario_type", "alternative_action")
+
+        if scenario_type == "alternative_action":
+            # Simulate using a different action
+            alt_action_str = request.get("alternative_action")
+            try:
+                from ..core.actions import PreprocessingAction
+                alternative_action = PreprocessingAction(alt_action_str)
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid alternative action: {alt_action_str}"
+                )
+
+            scenario = counterfactual_analyzer.simulate_alternative_action(
+                current_action=current_result.action,
+                alternative_action=alternative_action,
+                column_stats=current_result.context or {}
+            )
+
+        elif scenario_type == "data_change":
+            # Simulate data characteristics changing
+            data_change_desc = request.get("data_change_description", "data changed")
+            modified_stats = request.get("modified_stats", {})
+
+            scenario = counterfactual_analyzer.simulate_data_change(
+                current_action=current_result.action,
+                current_stats=current_result.context or {},
+                data_change_description=data_change_desc,
+                modified_stats=modified_stats
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid scenario_type: {scenario_type}. Use 'alternative_action' or 'data_change'"
+            )
+
+        return {
+            "success": True,
+            "current_decision": {
+                "action": current_result.action.value,
+                "confidence": current_result.confidence
+            },
+            "counterfactual_scenario": {
+                "description": scenario.scenario_description,
+                "alternative_action": scenario.alternative_action.value,
+                "predicted_confidence": scenario.predicted_confidence,
+                "expected_outcomes": scenario.expected_outcomes,
+                "trade_offs": scenario.trade_offs,
+                "recommendation": scenario.recommendation
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error analyzing counterfactual: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze counterfactual: {str(e)}"
+        )
+
+
+@app.post("/explain/sensitivity")
+async def analyze_sensitivity(request: PreprocessRequest):
+    """
+    Analyze how sensitive the preprocessing decision is to changes in statistics.
+
+    Shows:
+    - How decision changes as skewness varies
+    - How decision changes as outlier percentage varies
+    - How decision changes as null percentage varies
+    - How decision changes as cardinality varies (for categorical)
+
+    This helps understand the robustness and boundaries of the decision.
+    """
+    try:
+        # Get current decision
+        preprocessor = get_preprocessor()
+        result = preprocessor.preprocess_column(
+            column=request.column_data,
+            column_name=request.column_name,
+            metadata=request.column_metadata or {}
+        )
+
+        # Generate sensitivity analysis
+        sensitivity = counterfactual_analyzer.generate_sensitivity_analysis(
+            action=result.action,
+            column_stats=result.context or {}
+        )
+
+        # Format for response
+        formatted_sensitivity = {}
+        for stat_name, values in sensitivity.items():
+            formatted_sensitivity[stat_name] = [
+                {"condition": cond, "predicted_action": action}
+                for cond, action in values
+            ]
+
+        return {
+            "success": True,
+            "current_decision": {
+                "action": result.action.value,
+                "confidence": result.confidence
+            },
+            "sensitivity_analysis": formatted_sensitivity,
+            "interpretation": {
+                "stable_ranges": [
+                    f"{stat}: {len(set(action for _, action in values))} different actions across range"
+                    for stat, values in sensitivity.items()
+                ],
+                "most_sensitive_to": max(
+                    sensitivity.items(),
+                    key=lambda x: len(set(action for _, action in x[1]))
+                )[0] if sensitivity else "none"
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error analyzing sensitivity: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze sensitivity: {str(e)}"
+        )
+
+
+@app.get("/explain/demo")
+async def get_explanation_demo():
+    """
+    Get a demo showcasing the enhanced explanation capabilities.
+
+    Returns a pre-generated example with rich explanations for a log transform decision.
+    """
+    try:
+        # Create demo data: highly skewed revenue data
+        demo_data = [10, 15, 20, 50, 100, 500, 1000, 5000, 10000, 50000]
+
+        preprocessor = get_preprocessor()
+        result = preprocessor.preprocess_column(
+            column=demo_data,
+            column_name="revenue",
+            metadata={"dtype": "numeric"}
+        )
+
+        # Generate enhanced explanation
+        enhanced = explanation_engine.generate_enhanced_explanation(
+            preprocessing_result=result,
+            column_stats=result.context or {}
+        )
+
+        # Generate comparison with alternative
+        from ..core.actions import PreprocessingAction
+        comparison = explanation_engine.explain_decision_comparison(
+            chosen_explanation=enhanced,
+            alternative_action=PreprocessingAction.STANDARD_SCALE,
+            alternative_stats=result.context or {}
+        )
+
+        return {
+            "success": True,
+            "demo_data": demo_data,
+            "decision": {
+                "action": result.action.value,
+                "confidence": result.confidence
+            },
+            "enhanced_explanation": enhanced.to_dict(),
+            "markdown_report": enhanced.to_markdown(),
+            "comparison_with_alternative": comparison,
+            "demo_notes": (
+                "This demo shows AURORA's world-class explainability. "
+                "The explanation includes scientific justification, detailed alternatives, "
+                "impact predictions, risks, best practices, and 'what-if' scenarios. "
+                "This level of detail is unprecedented in preprocessing automation."
+            )
+        }
+
+    except Exception as e:
+        logger.error(f"Error generating demo: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate demo: {str(e)}"
+        )
