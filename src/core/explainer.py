@@ -69,7 +69,7 @@ class ExplanationGenerator:
             "alternative": "Use standard scaling if you don't need strict bounds"
         },
 
-        PreprocessingAction.ONE_HOT_ENCODE: {
+        PreprocessingAction.ONEHOT_ENCODE: {
             "why": "Convert categories into binary columns (one column per category)",
             "reasons": {
                 "low_cardinality": "Only {n_categories} unique categories - won't create too many columns",
