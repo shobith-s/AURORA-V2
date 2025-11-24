@@ -14,6 +14,7 @@ from ..symbolic.engine import SymbolicEngine
 from ..neural.oracle import NeuralOracle, get_neural_oracle
 from ..features.minimal_extractor import MinimalFeatureExtractor, get_feature_extractor
 from .actions import PreprocessingAction, PreprocessingResult
+from .explainer import get_explainer
 
 # Confidence thresholds for decision quality
 CONFIDENCE_HIGH = 0.9      # Auto-apply decision (highly confident)
@@ -489,18 +490,35 @@ class IntelligentPreprocessor:
         return result
 
     def _add_confidence_warnings(
-        self, 
+        self,
         result: PreprocessingResult,
         context: str = "general",
         column_name: str = ""
     ) -> PreprocessingResult:
         """
         Add warnings based on confidence level and record metrics.
-        Also applies context-specific bias.
+        Also applies context-specific bias and enhances explanation.
         """
         # Apply context bias first
         if context != "general":
             result = self._apply_context_bias(result, context, column_name)
+
+        # Enhance explanation with detailed reasoning
+        explainer = get_explainer()
+        try:
+            enhanced_explanation = explainer.generate_explanation(
+                action=result.action,
+                confidence=result.confidence,
+                source=result.source,
+                context=result.context or {},
+                column_name=column_name or "column"
+            )
+            result.explanation = enhanced_explanation
+        except Exception as e:
+            # If explanation enhancement fails, keep original
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to enhance explanation: {e}")
 
         # Add confidence warnings
         if result.confidence < CONFIDENCE_LOW:
