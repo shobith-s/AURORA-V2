@@ -1,6 +1,6 @@
 """
 Main Preprocessing Pipeline - Integrates all layers.
-Symbolic Engine (with adaptive learning) -> Meta-Learning -> NeuralOracle
+Symbolic Engine (with adaptive learning) -> NeuralOracle
 """
 
 from typing import Any, Dict, List, Optional, Union
@@ -11,13 +11,11 @@ import uuid
 import time
 
 from ..symbolic.engine import SymbolicEngine
-from ..symbolic.meta_learner import get_meta_learner, MetaLearner
 from ..neural.oracle import NeuralOracle, get_neural_oracle
 from ..learning.adaptive_rules import AdaptiveSymbolicRules
 from ..features.minimal_extractor import MinimalFeatureExtractor, get_feature_extractor
 from ..features.intelligent_cache import get_cache
 from .actions import PreprocessingAction, PreprocessingResult
-from ..utils.layer_metrics import LayerMetrics
 
 # Confidence thresholds for decision quality
 CONFIDENCE_HIGH = 0.9      # Auto-apply decision (highly confident)
@@ -32,8 +30,7 @@ class IntelligentPreprocessor:
     0. Cache (validated decisions) - Instant lookup
     1. Symbolic rules (185+ rules, including learned) - PRIMARY & ONLY DECISION LAYER
        └─ Dynamically enhanced: Learner creates NEW symbolic rules from corrections
-    2. Meta-learning (statistical heuristics) - Bridge layer for edge cases
-    3. NeuralOracle (ML predictions) - Ambiguous cases only
+    2. NeuralOracle (ML predictions) - Ambiguous cases only
 
     NEW Learning Architecture (V3):
     - Learner NEVER makes direct decisions (prevents overgeneralization)
@@ -55,8 +52,7 @@ class IntelligentPreprocessor:
         use_neural_oracle: bool = True,
         enable_learning: bool = True,
         neural_model_path: Optional[Path] = None,
-        enable_cache: bool = True,
-        enable_meta_learning: bool = True
+        enable_cache: bool = True
     ):
         """
         Initialize the intelligent preprocessor.
@@ -67,7 +63,6 @@ class IntelligentPreprocessor:
             enable_learning: Whether to enable pattern learning
             neural_model_path: Path to neural oracle model
             enable_cache: Whether to enable intelligent caching
-            enable_meta_learning: Whether to enable meta-learning (statistical heuristics)
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -76,7 +71,6 @@ class IntelligentPreprocessor:
         self.use_neural_oracle = use_neural_oracle
         self.enable_learning = enable_learning
         self.enable_cache = enable_cache
-        self.enable_meta_learning = enable_meta_learning
 
         # Initialize components with error handling
         try:
@@ -110,13 +104,6 @@ class IntelligentPreprocessor:
             self.adaptive_rules = None
             self.enable_learning = False  # Disable learning if adaptive rules fail
 
-        # Meta learner
-        try:
-            self.meta_learner = get_meta_learner() if enable_meta_learning else None
-        except Exception as e:
-            logger.warning(f"Meta learner initialization failed, continuing without it: {e}")
-            self.meta_learner = None
-
         # Feature extractor (required for neural oracle)
         try:
             self.feature_extractor = get_feature_extractor()
@@ -136,21 +123,11 @@ class IntelligentPreprocessor:
         self._neural_oracle: Optional[NeuralOracle] = None
         self.neural_model_path = neural_model_path
 
-        # Initialize layer metrics tracker
-        try:
-            self.layer_metrics = LayerMetrics(
-                persistence_file=Path("data/layer_metrics.json")
-            )
-        except Exception as e:
-            logger.warning(f"Layer metrics initialization failed, continuing without it: {e}")
-            self.layer_metrics = None
-
         # Statistics
         self.stats = {
             'total_decisions': 0,
             'learned_decisions': 0,
             'symbolic_decisions': 0,
-            'meta_learning_decisions': 0,
             'neural_decisions': 0,
             'high_confidence_decisions': 0,
             'cache_hits': 0,
@@ -304,32 +281,7 @@ class IntelligentPreprocessor:
             symbolic_result.decision_id = decision_id
             return self._add_confidence_warnings(symbolic_result)
 
-        # LAYER 2.5: Try meta-learning (statistical heuristics) for universal coverage
-        # This bridges the gap between symbolic rules and neural oracle
-        if self.enable_meta_learning and self.meta_learner:
-            # Use the same stats computed for symbolic engine
-            stats_dict = symbolic_result.context if symbolic_result.context else {}
-
-            meta_result = self.meta_learner.decide(stats_dict, column_name)
-            if meta_result and meta_result.confidence >= (self.confidence_threshold - 0.1):
-                # Accept meta-learning if confidence is close to threshold
-                # (e.g., threshold=0.9, accept >=0.8)
-                self.stats['meta_learning_decisions'] += 1
-
-                if meta_result.confidence >= self.confidence_threshold:
-                    self.stats['high_confidence_decisions'] += 1
-
-                elapsed_ms = (time.time() - start_time) * 1000
-                self.stats['total_time_ms'] += elapsed_ms
-
-                # Update cache with meta-learning decision
-                if self.enable_cache and self.cache:
-                    self.cache.set(stats_dict, meta_result.action, column_name)
-
-                meta_result.decision_id = decision_id
-                return self._add_confidence_warnings(meta_result)
-
-        # LAYER 3: Use NeuralOracle for ambiguous cases (<5ms)
+        # LAYER 2: Use NeuralOracle for ambiguous cases (<5ms)
         if self.use_neural_oracle and self.neural_oracle:
             # Extract minimal features
             features = self.feature_extractor.extract(column, column_name)
@@ -560,25 +512,6 @@ class IntelligentPreprocessor:
         elif result.confidence < CONFIDENCE_MEDIUM:
             result.warning = "⚠️ Low confidence - consider reviewing this decision"
         # No warning needed for confidence >= CONFIDENCE_MEDIUM
-
-        # Record layer metrics (Phase 4)
-        if hasattr(self, 'layer_metrics') and self.layer_metrics is not None:
-            try:
-                self.layer_metrics.record_decision(
-                    layer=result.source,
-                    confidence=result.confidence
-                )
-
-                # Save metrics periodically (every 100 decisions)
-                if self.layer_metrics.stats.get(result.source):
-                    total = self.layer_metrics.stats[result.source].total_decisions
-                    if total % 100 == 0:
-                        self.layer_metrics.save()
-            except Exception as e:
-                # Don't fail preprocessing if metrics recording fails
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.warning(f"Failed to record layer metrics: {e}")
 
         return result
 
@@ -871,7 +804,6 @@ class IntelligentPreprocessor:
             **self.stats,
             'learned_pct': self.stats['learned_decisions'] / total * 100 if total > 0 else 0,
             'symbolic_pct': self.stats['symbolic_decisions'] / total * 100 if total > 0 else 0,
-            'meta_learning_pct': self.stats['meta_learning_decisions'] / total * 100 if total > 0 else 0,
             'neural_pct': self.stats['neural_decisions'] / total * 100 if total > 0 else 0,
             'high_confidence_pct': self.stats['high_confidence_decisions'] / total * 100 if total > 0 else 0,
             'avg_time_ms': self.stats['total_time_ms'] / total if total > 0 else 0,
@@ -882,10 +814,6 @@ class IntelligentPreprocessor:
         if self.adaptive_rules:
             stats['adaptive_learning'] = self.adaptive_rules.get_statistics()
 
-        # Add meta-learning statistics if available
-        if self.meta_learner:
-            stats['meta_learning'] = self.meta_learner.get_statistics()
-
         return stats
 
     def reset_statistics(self):
@@ -894,15 +822,12 @@ class IntelligentPreprocessor:
             'total_decisions': 0,
             'learned_decisions': 0,
             'symbolic_decisions': 0,
-            'meta_learning_decisions': 0,
             'neural_decisions': 0,
             'high_confidence_decisions': 0,
             'cache_hits': 0,
             'total_time_ms': 0.0
         }
         self.symbolic_engine.reset_stats()
-        if self.meta_learner:
-            self.meta_learner.reset_statistics()
 
     def save_learned_rules(self, path: Path):
         """
