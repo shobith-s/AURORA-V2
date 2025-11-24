@@ -339,7 +339,8 @@ def create_domain_pattern_rules() -> List[Rule]:
         action=PreprocessingAction.KEEP_AS_IS,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            0 <= stats.get("min_value", -1) <= stats.get("max_value", 200) <= 100 and
+            stats.get("min_value") is not None and stats.get("max_value") is not None and
+            0 <= stats.get("min_value") <= stats.get("max_value") <= 100 and
             _column_name_contains(stats, ["rate", "ratio", "percentage", "pct", "percent", "_pct", "bounce_rate", "conversion"])
         ),
         confidence_fn=lambda stats: 0.91,
@@ -354,7 +355,7 @@ def create_domain_pattern_rules() -> List[Rule]:
         action=PreprocessingAction.LOG1P_TRANSFORM,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            stats.get("min_value", -1) >= 0 and
+            stats.get("min_value") is not None and stats.get("min_value") >= 0 and
             stats.get("skewness", 0) > 1.5 and
             _column_name_contains(stats, ["count", "frequency", "num_", "total_", "_count", "quantity"])
         ),
@@ -385,7 +386,7 @@ def create_domain_pattern_rules() -> List[Rule]:
         action=PreprocessingAction.LOG1P_TRANSFORM,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            stats.get("min_value", -1) >= 0 and
+            stats.get("min_value") is not None and stats.get("min_value") >= 0 and
             stats.get("skewness", 0) > 2.0 and
             _column_name_contains(stats, ["duration", "time", "_ms", "_seconds", "latency", "elapsed", "session_time"])
         ),
@@ -495,7 +496,8 @@ def create_domain_pattern_rules() -> List[Rule]:
         action=PreprocessingAction.KEEP_AS_IS,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            -100 < stats.get("min_value", -1000) < stats.get("max_value", 1000) < 200 and
+            stats.get("min_value") is not None and stats.get("max_value") is not None and
+            -100 < stats.get("min_value") < stats.get("max_value") < 200 and
             _column_name_contains(stats, ["temp", "temperature", "_celsius", "_fahrenheit", "_kelvin"])
         ),
         confidence_fn=lambda stats: 0.85,
@@ -542,7 +544,8 @@ def create_domain_pattern_rules() -> List[Rule]:
         action=PreprocessingAction.KEEP_AS_IS,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            0 <= stats.get("min_value", -1) <= stats.get("max_value", 200) <= 120 and
+            stats.get("min_value") is not None and stats.get("max_value") is not None and
+            0 <= stats.get("min_value") <= stats.get("max_value") <= 120 and
             abs(stats.get("skewness", 0)) < 2.0 and
             _column_name_contains(stats, ["age", "patient_age", "age_years"])
         ),
@@ -677,7 +680,7 @@ def create_composite_rules() -> List[Rule]:
         action=PreprocessingAction.LOG1P_TRANSFORM,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            stats.get("min_value", -1) >= 0 and
+            stats.get("min_value") is not None and stats.get("min_value") >= 0 and
             stats.get("has_zeros", False) and
             stats.get("skewness", 0) > 2.5 and
             not stats.get("is_already_scaled", False)
@@ -787,7 +790,7 @@ def create_composite_rules() -> List[Rule]:
             stats.get("is_numeric", False) and
             not stats.get("all_positive", True) and
             abs(stats.get("skewness", 0)) > 1.8 and
-            stats.get("min_value", 0) < 0
+            stats.get("min_value") is not None and stats.get("min_value") < 0
         ),
         confidence_fn=lambda stats: 0.88,
         explanation_fn=lambda stats: "Mixed sign with high skew: Yeo-Johnson handles negative values",
@@ -801,7 +804,8 @@ def create_composite_rules() -> List[Rule]:
         action=PreprocessingAction.KEEP_AS_IS,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            0 <= stats.get("min_value", -1) <= stats.get("max_value", 2) <= 1.0 and
+            stats.get("min_value") is not None and stats.get("max_value") is not None and
+            0 <= stats.get("min_value") <= stats.get("max_value") <= 1.0 and
             stats.get("max_value", 0) - stats.get("min_value", 0) > 0.5  # Uses significant part of range
         ),
         confidence_fn=lambda stats: 0.90,
@@ -816,7 +820,8 @@ def create_composite_rules() -> List[Rule]:
         action=PreprocessingAction.KEEP_AS_IS,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            -1 <= stats.get("min_value", -10) <= stats.get("max_value", 10) <= 1 and
+            stats.get("min_value") is not None and stats.get("max_value") is not None and
+            -1 <= stats.get("min_value") <= stats.get("max_value") <= 1 and
             stats.get("unique_count", 100) <= 5
         ),
         confidence_fn=lambda stats: 0.87,
@@ -861,8 +866,8 @@ def create_composite_rules() -> List[Rule]:
         action=PreprocessingAction.KEEP_AS_IS,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            -3 <= stats.get("min_value", -10) and
-            stats.get("max_value", 10) <= 3 and
+            stats.get("min_value") is not None and -3 <= stats.get("min_value") and
+            stats.get("max_value") is not None and stats.get("max_value") <= 3 and
             abs(stats.get("mean", 100)) < 0.3 and
             0.7 <= stats.get("std", 0) <= 1.3
         ),
@@ -879,7 +884,7 @@ def create_composite_rules() -> List[Rule]:
         condition=lambda stats: (
             stats.get("unique_count", 100) == 2 and
             stats.get("entropy", 1.0) < 0.3 and  # Very imbalanced
-            stats.get("min_value", -1) >= 0
+            (stats.get("min_value") is not None and stats.get("min_value") >= 0)
         ),
         confidence_fn=lambda stats: 0.88,
         explanation_fn=lambda stats: "Sparse binary indicator: keeping as-is (optimal encoding)",
@@ -893,8 +898,8 @@ def create_composite_rules() -> List[Rule]:
         action=PreprocessingAction.PARSE_DATETIME,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            stats.get("min_value", 0) > 1_000_000_000_000 and  # After year 2001 in ms
-            stats.get("max_value", 0) < 2_000_000_000_000 and  # Before year 2033 in ms
+            stats.get("min_value") is not None and stats.get("min_value") > 1_000_000_000_000 and  # After year 2001 in ms
+            stats.get("max_value") is not None and stats.get("max_value") < 2_000_000_000_000 and  # Before year 2033 in ms
             _column_name_contains(stats, ["time", "timestamp", "created", "updated", "date"])
         ),
         confidence_fn=lambda stats: 0.91,

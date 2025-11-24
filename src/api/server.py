@@ -124,23 +124,26 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"Database initialization failed: {e}. Using in-memory storage.")
 
-    # Initialize learning engine
+    # Initialize learning engine (Option B: with validation and A/B testing)
     try:
         db_url = os.getenv("DATABASE_URL", "sqlite:///./aurora.db")
         learning_engine = AdaptiveLearningEngine(
             db_url=db_url,
-            min_support=5,
+            min_support=10,  # CHANGED: 5 → 10 corrections per pattern
             similarity_threshold=0.85,
-            epsilon=1.0
+            epsilon=1.0,
+            validation_sample_size=20,
+            ab_test_min_decisions=100,
+            ab_test_success_threshold=0.80
         )
-        logger.info("Adaptive learning engine initialized")
+        logger.info("Adaptive learning engine initialized with validation and A/B testing")
     except Exception as e:
         logger.warning(f"Learning engine initialization failed: {e}")
 
     # Initialize preprocessor
     try:
         preprocessor = get_preprocessor(
-            confidence_threshold=0.9,
+            confidence_threshold=0.75,  # CHANGED: 0.9 → 0.75 for more neural participation
             use_neural_oracle=True,
             enable_learning=True
         )
@@ -149,7 +152,7 @@ async def startup_event():
         logger.error(f"Failed to initialize AURORA: {e}")
         # Create basic preprocessor without neural oracle
         preprocessor = IntelligentPreprocessor(
-            confidence_threshold=0.9,
+            confidence_threshold=0.75,
             use_neural_oracle=False,
             enable_learning=True
         )
@@ -255,6 +258,40 @@ async def health_check():
     )
 
 
+# New API Endpoints for Redesigned Frontend
+
+@app.get("/stats")
+async def get_system_stats():
+    """Get system-wide statistics for dashboard."""
+    try:
+        stats = preprocessor.stats.copy()
+        total = stats.get('total_decisions', 0)
+        avg_confidence = 0.0
+        if total > 0:
+            high_conf = stats.get('high_confidence_decisions', 0)
+            avg_confidence = (high_conf / total) * 100
+        
+        avg_time = 0.0
+        if total > 0:
+            avg_time = stats.get('total_time_ms', 0) / total
+        
+        rule_count = len(preprocessor.symbolic_engine.rules) if hasattr(preprocessor, 'symbolic_engine') else 0
+        
+        return {
+            "total_decisions": total,
+            "symbolic_decisions": stats.get('symbolic_decisions', 0),
+            "meta_decisions": stats.get('meta_learning_decisions', 0),
+            "neural_decisions": stats.get('neural_decisions', 0),
+            "high_confidence_decisions": stats.get('high_confidence_decisions', 0),
+            "avg_confidence": round(avg_confidence, 2),
+            "avg_time_ms": round(avg_time, 2),
+            "active_rules": rule_count
+        }
+    except Exception as e:
+        logger.error(f"Error getting system stats: {e}")
+        return {"total_decisions": 0, "error": str(e)}
+
+
 @app.post("/preprocess", response_model=PreprocessResponse)
 async def preprocess_column(request: PreprocessRequest):
     """
@@ -300,7 +337,8 @@ async def preprocess_column(request: PreprocessRequest):
             column=request.column_data,
             column_name=request.column_name,
             target_available=request.target_available,
-            metadata=request.metadata
+            metadata=request.metadata,
+            context=request.context
         )
 
         # Record metrics
@@ -527,7 +565,8 @@ async def batch_preprocess(request: BatchPreprocessRequest):
         # Process all columns
         results_dict = preprocessor.preprocess_dataframe(
             df,
-            target_column=request.target_column
+            target_column=request.target_column,
+            context=request.context
         )
 
         # Record overall pipeline latency
@@ -1192,53 +1231,11 @@ async def get_realtime_metrics():
         )
 
 
-# Phase 1: Cache and Drift Detection Endpoints
-
-@app.get("/cache/stats", response_model=CacheStatsResponse)
-async def get_cache_statistics():
-    """
-    Get intelligent cache statistics.
-
-    Returns cache hit rates, levels, and pattern rules.
-    """
-    try:
-        from ..features.intelligent_cache import get_cache
-
-        cache = get_cache()
-        stats = cache.get_stats()
-
-        return CacheStatsResponse(
-            total_queries=stats['total_queries'],
-            l1_hits=stats['l1_hits'],
-            l2_hits=stats['l2_hits'],
-            l3_hits=stats['l3_hits'],
-            misses=stats['misses'],
-            hit_rate=stats['hit_rate'],
-            cache_size=stats['cache_size'],
-            pattern_rules=stats['pattern_rules']
-        )
-    except Exception as e:
-        logger.error(f"Error getting cache statistics: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get cache statistics: {str(e)}"
-        )
+# Phase 1: Removed - Cache endpoints deleted (cache system removed in Option B)
+# /cache/stats and /cache/clear endpoints removed
 
 
-@app.post("/cache/clear")
-async def clear_cache():
-    """Clear the intelligent cache."""
-    try:
-        from ..features.intelligent_cache import clear_cache
 
-        clear_cache()
-        return {"message": "Cache cleared successfully"}
-    except Exception as e:
-        logger.error(f"Error clearing cache: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to clear cache: {str(e)}"
-        )
 
 
 @app.get("/drift/status", response_model=DriftMonitoringResponse)

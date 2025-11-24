@@ -25,6 +25,10 @@ class PreprocessRequest(BaseModel):
         default=None,
         description="Additional metadata about the column"
     )
+    context: Optional[str] = Field(
+        default="general",
+        description="Analysis context/goal (general, regression, classification)"
+    )
 
     class Config:
         json_schema_extra = {
@@ -342,6 +346,10 @@ class BatchPreprocessRequest(BaseModel):
     target_column: Optional[str] = Field(
         None,
         description="Name of the target column"
+    )
+    context: Optional[str] = Field(
+        default="general",
+        description="Analysis context/goal (general, regression, classification)"
     )
 
     class Config:
