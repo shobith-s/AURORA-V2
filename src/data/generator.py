@@ -109,7 +109,7 @@ class SyntheticDataGenerator:
 
         action = self.rng.choice([
             PreprocessingAction.DROP_COLUMN,
-            PreprocessingAction.IMPUTE_MEAN
+            PreprocessingAction.FILL_NULL_MEAN
         ])
         return pd.Series(data), action, "medium"
 
@@ -136,7 +136,7 @@ class SyntheticDataGenerator:
         self.rng.shuffle(data)
 
         action = self.rng.choice([
-            PreprocessingAction.BIN_QUANTILE,
+            PreprocessingAction.BINNING_EQUAL_FREQ,
             PreprocessingAction.STANDARD_SCALE
         ])
         return pd.Series(data), action, "medium"

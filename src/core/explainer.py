@@ -124,7 +124,7 @@ class ExplanationGenerator:
             "alternative": "Use REMOVE_OUTLIERS to delete them entirely, or ROBUST_SCALE to reduce their influence"
         },
 
-        PreprocessingAction.IMPUTE_MEAN: {
+        PreprocessingAction.FILL_NULL_MEAN: {
             "why": "Fill missing values with the column's average",
             "reasons": {
                 "moderate_missing": "{null_pct:.1f}% missing values - imputation is viable",
@@ -135,7 +135,7 @@ class ExplanationGenerator:
             "alternative": "Use IMPUTE_MEDIAN if data has outliers, or IMPUTE_MODE for categorical data"
         },
 
-        PreprocessingAction.IMPUTE_MEDIAN: {
+        PreprocessingAction.FILL_NULL_MEDIAN: {
             "why": "Fill missing values with the middle value (median)",
             "reasons": {
                 "moderate_missing": "{null_pct:.1f}% missing values - imputation is viable",
@@ -146,7 +146,7 @@ class ExplanationGenerator:
             "alternative": "Use IMPUTE_MEAN if data is normally distributed"
         },
 
-        PreprocessingAction.BIN_QUANTILE: {
+        PreprocessingAction.BINNING_EQUAL_FREQ: {
             "why": "Group continuous values into equal-frequency bins",
             "reasons": {
                 "non_linear": "Relationship with target is non-linear - binning captures patterns",
