@@ -33,7 +33,7 @@ export default function LearningProgressPanel() {
 
   const fetchStats = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/stats');
+      const response = await axios.get('/api/stats'); // Use relative path
       setStats(response.data);
       setLoading(false);
     } catch (error) {

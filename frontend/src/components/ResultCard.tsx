@@ -1,7 +1,8 @@
-import { TrendingUp, Target, Clock, Sparkles, ThumbsUp, ThumbsDown, Edit2 } from 'lucide-react';
+import { TrendingUp, Target, Clock, Sparkles, ThumbsUp, ThumbsDown, Edit2, BookOpen } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import ExplanationModal from './ExplanationModal';
 
 interface ResultCardProps {
   result: any;
@@ -11,6 +12,7 @@ export default function ResultCard({ result }: ResultCardProps) {
   const [showCorrection, setShowCorrection] = useState(false);
   const [correctAction, setCorrectAction] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showExplanation, setShowExplanation] = useState(false);
 
   const getSourceColor = (source: string) => {
     // Check if learned pattern has limited training
@@ -85,13 +87,22 @@ export default function ResultCard({ result }: ResultCardProps) {
               </h4>
             </div>
           </div>
-          <button
-            onClick={() => setShowCorrection(!showCorrection)}
-            className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-blue-50 text-blue-600 rounded-lg text-sm font-medium border border-blue-200 transition"
-          >
-            <Edit2 className="w-4 h-4" />
-            Override
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowExplanation(true)}
+              className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg text-sm font-medium transition shadow-md"
+            >
+              <BookOpen className="w-4 h-4" />
+              Explain
+            </button>
+            <button
+              onClick={() => setShowCorrection(!showCorrection)}
+              className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-blue-50 text-blue-600 rounded-lg text-sm font-medium border border-blue-200 transition"
+            >
+              <Edit2 className="w-4 h-4" />
+              Override
+            </button>
+          </div>
         </div>
         <p className="text-sm text-slate-700">{result.explanation}</p>
       </div>
@@ -128,26 +139,22 @@ export default function ResultCard({ result }: ResultCardProps) {
 
       {/* Confidence Warning (Phase 3) */}
       {result.warning && (
-        <div className={`rounded-lg p-4 border ${
-          result.require_manual_review
-            ? 'bg-red-50 border-red-300'
-            : 'bg-yellow-50 border-yellow-300'
-        }`}>
+        <div className={`rounded-lg p-4 border ${result.require_manual_review
+          ? 'bg-red-50 border-red-300'
+          : 'bg-yellow-50 border-yellow-300'
+          }`}>
           <div className="flex items-start gap-3">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-              result.require_manual_review ? 'bg-red-100' : 'bg-yellow-100'
-            }`}>
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${result.require_manual_review ? 'bg-red-100' : 'bg-yellow-100'
+              }`}>
               <span className="text-lg">{result.require_manual_review ? '⚠️' : '⚡'}</span>
             </div>
             <div className="flex-1">
-              <p className={`text-sm font-semibold ${
-                result.require_manual_review ? 'text-red-800' : 'text-yellow-800'
-              }`}>
+              <p className={`text-sm font-semibold ${result.require_manual_review ? 'text-red-800' : 'text-yellow-800'
+                }`}>
                 {result.require_manual_review ? 'Manual Review Required' : 'Low Confidence Warning'}
               </p>
-              <p className={`text-xs mt-1 ${
-                result.require_manual_review ? 'text-red-700' : 'text-yellow-700'
-              }`}>
+              <p className={`text-xs mt-1 ${result.require_manual_review ? 'text-red-700' : 'text-yellow-700'
+                }`}>
                 {result.warning}
               </p>
             </div>
@@ -168,10 +175,9 @@ export default function ResultCard({ result }: ResultCardProps) {
           </div>
           <div className="w-full bg-slate-200 rounded-full h-2 mt-2">
             <div
-              className={`h-2 rounded-full ${
-                result.confidence >= 0.9 ? 'bg-green-500' :
+              className={`h-2 rounded-full ${result.confidence >= 0.9 ? 'bg-green-500' :
                 result.confidence >= 0.7 ? 'bg-yellow-500' : 'bg-red-500'
-              }`}
+                }`}
               style={{ width: `${result.confidence * 100}%` }}
             />
           </div>
@@ -281,6 +287,14 @@ export default function ResultCard({ result }: ResultCardProps) {
           </div>
         )}
       </div>
+
+      {/* Explanation Modal */}
+      <ExplanationModal
+        isOpen={showExplanation}
+        onClose={() => setShowExplanation(false)}
+        columnData={[]} // Will need to pass actual data
+        columnName={result.column_name || 'column'}
+      />
     </div>
   );
 }
