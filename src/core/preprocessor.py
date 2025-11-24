@@ -196,6 +196,28 @@ class IntelligentPreprocessor:
         elif not isinstance(column, pd.Series):
             raise TypeError(f"Column must be pd.Series, list, or np.ndarray, got {type(column)}")
 
+        # CRITICAL FIX: Infer numeric types from object dtype (handles JSON data)
+        # When data comes from frontend as JSON, pandas treats everything as object dtype
+        # We need to attempt numeric conversion to get proper type detection
+        if column.dtype == 'object' or column.dtype == 'O':
+            try:
+                # Try to convert to numeric
+                numeric_column = pd.to_numeric(column, errors='coerce')
+                # If most values successfully converted (>50%), use numeric version
+                conversion_rate = numeric_column.notna().sum() / len(column) if len(column) > 0 else 0
+                if conversion_rate > 0.5:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.info(f"Type inference: '{column_name}' converted from object to numeric (success rate: {conversion_rate:.2%})")
+                    column = numeric_column
+                    # Update the series name to maintain consistency
+                    column.name = column_name
+            except Exception as e:
+                # If conversion fails completely, keep as object dtype
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Type inference failed for '{column_name}': {e}")
+
         # Update statistics
         self.stats['total_decisions'] += 1
 
@@ -247,12 +269,19 @@ class IntelligentPreprocessor:
         # LAYER 3: Use NeuralOracle for ambiguous cases (<5ms)
         if self.use_neural_oracle and self.neural_oracle:
             # Extract minimal features
-            features = self.feature_extractor.extract(column, column_name)
-
-            # Get neural prediction with SHAP explanation
             try:
-                # Try SHAP-enabled prediction first
+                features = self.feature_extractor.extract(column, column_name)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Feature extraction failed for '{column_name}': {e}")
+                # Fall through to conservative fallback
+                features = None
+
+            if features is not None:
+                # Get neural prediction with SHAP explanation
                 try:
+                    # Try SHAP-enabled prediction first
                     neural_shap_result = self.neural_oracle.predict_with_shap(features, top_k=3)
 
                     # Blend symbolic and neural if both have medium confidence
@@ -358,10 +387,12 @@ class IntelligentPreprocessor:
                     )
                     return self._add_confidence_warnings(result)
 
-            except Exception as e:
-                print(f"Warning: Neural oracle failed: {e}")
-                # Fall back to symbolic result
-                pass
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Neural oracle prediction failed for '{column_name}': {e}")
+                    # Fall back to symbolic result or conservative fallback
+                    pass
 
         # LAYER 4: Ultra-conservative fallback
         # When all layers are uncertain, make the safest possible decision

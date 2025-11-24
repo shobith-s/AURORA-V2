@@ -381,8 +381,8 @@ async def preprocess_column(request: PreprocessRequest):
             alternatives=alternatives,
             parameters=json_safe_parameters,
             decision_id=result.decision_id,
-            enhanced_features=None,  # Phase 1 field - not yet implemented
-            cache_info=None  # Phase 1 field - not yet implemented
+            enhanced_features=None,
+            cache_info=None
         )
 
         # Use FastAPI's jsonable_encoder to ensure ALL types are JSON-safe
@@ -394,6 +394,79 @@ async def preprocess_column(request: PreprocessRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Preprocessing failed: {str(e)}"
         )
+
+
+@app.post("/api/explain/enhanced")
+async def explain_enhanced(request: PreprocessRequest):
+    """
+    Get enhanced explanation for a column decision with markdown report.
+    """
+    try:
+        # Preprocess to get the decision and details
+        result = preprocessor.preprocess_column(
+            column=request.column_data,
+            column_name=request.column_name,
+            target_available=request.target_available,
+            metadata=request.metadata,
+            context=request.context
+        )
+        
+        # Generate markdown report
+        markdown_report = f"""
+## Decision Analysis for "{request.column_name}"
+
+### Recommended Action: **{result.action.value.replace('_', ' ').title()}**
+
+**Confidence:** {result.confidence * 100:.1f}%  
+**Source:** {result.source}
+
+### Explanation
+
+{result.explanation}
+
+### Why This Action?
+
+"""
+        
+        # Add metadata insights if available
+        if result.metadata:
+            if result.metadata.get("skewness"):
+                markdown_report += f"- **Skewness:** {result.metadata['skewness']:.2f}\n"
+            if result.metadata.get("null_pct"):
+                markdown_report += f"- **Missing Values:** {result.metadata['null_pct'] * 100:.1f}%\n"
+            if result.metadata.get("outlier_pct"):
+                markdown_report += f"- **Outliers:** {result.metadata['outlier_pct'] * 100:.1f}%\n"
+            if result.metadata.get("unique_ratio"):
+                markdown_report += f"- **Unique Ratio:** {result.metadata['unique_ratio'] * 100:.1f}%\n"
+        
+        # Add alternatives section
+        if result.alternatives:
+            markdown_report += "\n### Alternative Approaches\n\n"
+            for alt in result.alternatives[:3]:  # Top 3 alternatives
+                action_name = alt.get("action", "unknown").replace('_', ' ').title()
+                conf = alt.get("confidence", 0)
+                markdown_report += f"- **{action_name}** ({conf * 100:.1f}% confidence)\n"
+        
+        # Construct response matching frontend expectations
+        return {
+            "decision": {
+                "action": result.action.value,
+                "confidence": result.confidence,
+                "source": result.source,
+                "decision_id": result.decision_id
+            },
+            "markdown_report": markdown_report,
+            "alternatives": result.alternatives,
+            "metadata": result.metadata,
+            "context": {
+                "column_name": request.column_name,
+                "sample_size": len(request.column_data),
+                "context": request.context
+            }
+        }
+    except Exception as e:
+        logger.error(f"Explanation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def compute_column_health(column: pd.Series, column_name: str) -> 'ColumnHealthMetrics':
@@ -416,18 +489,29 @@ def compute_column_health(column: pd.Series, column_name: str) -> 'ColumnHealthM
     unique_count = int(column.nunique())
     unique_ratio = float(unique_count / total_count) if total_count > 0 else 0.0
 
-    # Detect data type
+    # Detect data type - try to infer numeric types from object dtype
     non_null = column.dropna()
     if len(non_null) == 0:
         data_type = "empty"
         anomalies.append("All values are null")
         health_score = 0.0
-    elif pd.api.types.is_numeric_dtype(column):
-        data_type = "numeric"
-    elif pd.api.types.is_datetime64_any_dtype(column):
-        data_type = "datetime"
     else:
-        data_type = "categorical"
+        # Try to convert to numeric first (handles JSON data that comes as strings)
+        try:
+            numeric_column = pd.to_numeric(column, errors='coerce')
+            # If most values successfully converted, it's numeric
+            if numeric_column.notna().sum() / len(column) > 0.5:
+                column = numeric_column  # Use the numeric version
+                data_type = "numeric"
+            elif pd.api.types.is_datetime64_any_dtype(column):
+                data_type = "datetime"
+            else:
+                data_type = "categorical"
+        except:
+            if pd.api.types.is_datetime64_any_dtype(column):
+                data_type = "datetime"
+            else:
+                data_type = "categorical"
 
     # Numeric-specific metrics
     outlier_count = None
@@ -438,38 +522,41 @@ def compute_column_health(column: pd.Series, column_name: str) -> 'ColumnHealthM
     std = None
     cv = None
 
-    if data_type == "numeric" and len(non_null) > 0:
-        try:
-            from scipy import stats
-            mean = float(non_null.mean())
-            std = float(non_null.std())
-            cv = float(abs(std / mean)) if mean != 0 else None
+    if data_type == "numeric":
+        # Recalculate non_null with the numeric column
+        non_null = column.dropna()
+        if len(non_null) > 0:
+            try:
+                from scipy import stats
+                mean = float(non_null.mean())
+                std = float(non_null.std())
+                cv = float(abs(std / mean)) if mean != 0 else None
 
-            # Skewness and kurtosis
-            if len(non_null) > 2:
-                skewness = float(non_null.skew())
-                kurtosis = float(non_null.kurtosis())
+                # Skewness and kurtosis
+                if len(non_null) > 2:
+                    skewness = float(non_null.skew())
+                    kurtosis = float(non_null.kurtosis())
 
-            # Outlier detection using IQR
-            Q1 = non_null.quantile(0.25)
-            Q3 = non_null.quantile(0.75)
-            IQR = Q3 - Q1
-            outliers = (non_null < (Q1 - 1.5 * IQR)) | (non_null > (Q3 + 1.5 * IQR))
-            outlier_count = int(outliers.sum())
-            outlier_pct = float(outlier_count / len(non_null)) if len(non_null) > 0 else 0.0
+                # Outlier detection using IQR
+                Q1 = non_null.quantile(0.25)
+                Q3 = non_null.quantile(0.75)
+                IQR = Q3 - Q1
+                outliers = (non_null < (Q1 - 1.5 * IQR)) | (non_null > (Q3 + 1.5 * IQR))
+                outlier_count = int(outliers.sum())
+                outlier_pct = float(outlier_count / len(non_null)) if len(non_null) > 0 else 0.0
 
-            # Anomaly detection for numeric
-            if outlier_pct and outlier_pct > 0.1:
-                anomalies.append(f"High outlier percentage ({outlier_pct:.1%})")
-                health_score -= 15
-            if skewness and abs(skewness) > 2:
-                anomalies.append(f"High skewness ({skewness:.2f})")
-                health_score -= 10
-            if cv and cv > 2:
-                anomalies.append(f"High coefficient of variation ({cv:.2f})")
-                health_score -= 5
-        except:
-            pass
+                # Anomaly detection for numeric
+                if outlier_pct and outlier_pct > 0.1:
+                    anomalies.append(f"High outlier percentage ({outlier_pct:.1%})")
+                    health_score -= 15
+                if skewness and abs(skewness) > 2:
+                    anomalies.append(f"High skewness ({skewness:.2f})")
+                    health_score -= 10
+                if cv and cv > 2:
+                    anomalies.append(f"High coefficient of variation ({cv:.2f})")
+                    health_score -= 5
+            except:
+                pass
 
     # Categorical-specific metrics
     cardinality = None

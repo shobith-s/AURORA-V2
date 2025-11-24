@@ -5,9 +5,9 @@
     "total_confidence": 0.0
   },
   "symbolic": {
-    "total_decisions": 200,
+    "total_decisions": 300,
     "correct_decisions": 0,
-    "total_confidence": 186.7747830541554
+    "total_confidence": 280.11778305415555
   },
   "neural": {
     "total_decisions": 0,
