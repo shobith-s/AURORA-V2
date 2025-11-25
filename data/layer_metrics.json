@@ -1,0 +1,32 @@
+{
+  "learned": {
+    "total_decisions": 0,
+    "correct_decisions": 0,
+    "total_confidence": 0.0
+  },
+  "symbolic": {
+    "total_decisions": 400,
+    "correct_decisions": 0,
+    "total_confidence": 371.11869214506413
+  },
+  "neural": {
+    "total_decisions": 0,
+    "correct_decisions": 0,
+    "total_confidence": 0.0
+  },
+  "meta_learning": {
+    "total_decisions": 0,
+    "correct_decisions": 0,
+    "total_confidence": 0.0
+  },
+  "conservative_fallback": {
+    "total_decisions": 0,
+    "correct_decisions": 0,
+    "total_confidence": 0.0
+  },
+  "context_bias": {
+    "total_decisions": 1,
+    "correct_decisions": 0,
+    "total_confidence": 0.95
+  }
+}

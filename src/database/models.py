@@ -32,7 +32,7 @@ class CorrectionRecord(Base):
 
 
 class LearnedRule(Base):
-    """Rules learned from correction patterns."""
+    """Rules learned from correction patterns with validation and A/B testing."""
     __tablename__ = 'learned_rules'
 
     id = Column(Integer, primary_key=True)
@@ -48,14 +48,26 @@ class LearnedRule(Base):
     support_count = Column(Integer)
     created_at = Column(Float)
 
-    # Validation tracking
+    # Pattern type tracking (NEW)
+    pattern_type = Column(String, index=True)  # e.g., 'numeric_high_skewness'
+    corrections_per_pattern = Column(Integer, default=0)
+
+    # Validation tracking (ENHANCED)
     validation_successes = Column(Integer, default=0)
     validation_failures = Column(Integer, default=0)
     last_validation = Column(Float, nullable=True)
+    validation_accuracy = Column(Float, default=0.0)  # NEW
+    validation_sample_size = Column(Integer, default=0)  # NEW
+    validation_passed = Column(Boolean, default=False)  # NEW
 
-    # A/B testing
+    # A/B testing (ENHANCED)
     is_active = Column(Boolean, default=True)
     performance_score = Column(Float, default=0.5)
+    ab_test_group = Column(String, default='control')  # NEW: 'control', 'treatment', 'production'
+    ab_test_start = Column(Float, nullable=True)  # NEW
+    ab_test_decisions = Column(Integer, default=0)  # NEW
+    ab_test_corrections = Column(Integer, default=0)  # NEW
+    ab_test_accuracy = Column(Float, default=0.0)  # NEW
 
 
 class ModelVersion(Base):

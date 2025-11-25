@@ -1,229 +1,319 @@
-# AURORA V2/V3: Intelligent Data Preprocessing System
+# AURORA v2 - Intelligent Data Preprocessing System
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+> **Latest Update (v2.1.0):** Neural Oracle integration, Light Theme UI, Enhanced Type Detection
 
-AURORA is an intelligent data preprocessing system that combines symbolic rules, neural intelligence, and privacy-preserving adaptive learning to automate data preprocessing decisions.
+## Overview
 
-## 🚀 **Quick Start**
+AURORA is an intelligent data preprocessing system that combines symbolic rules, meta-learning, and neural networks to automatically recommend optimal preprocessing strategies for your data.
 
-👉 **[Read IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)** for complete setup instructions and current status.
+## 🚀 New Features (v2.1.0)
 
-## 🌟 Key Features
+### 1. Neural Oracle
+- **Real-world trained ML model** on 6 diverse datasets
+- **<0.5ms inference time** for instant recommendations
+- **Handles ambiguous cases** that symbolic rules miss
+- **Confidence scores** for every decision
 
-- **Secure & Robust**: JWT authentication, CORS whitelisting, handles ANY CSV format
-- **Persistent Learning**: System learns from corrections and survives restarts
-- **Privacy-Preserving**: Only stores statistical fingerprints, never raw data
-- **Three-Layer Architecture**: Learned rules → Symbolic rules (165+) → Meta-learner
-- **Production Ready**: SQLite (dev) / PostgreSQL (prod), comprehensive error handling
-- **Real-time API**: RESTful API with interactive Swagger documentation
+### 2. Light Theme UI
+- Modern, clean interface optimized for readability
+- Consistent design system across all components
+- Better visibility in well-lit environments
 
-## 🏗️ Current Implementation
+### 3. Enhanced Type Detection
+- **Intelligent type inference** from JSON data
+- Correctly identifies numeric vs categorical columns
+- Proper health metrics for all data types
 
-### ✅ **Option A: Security & Robustness** (COMPLETED)
-- Fixed CORS vulnerability (no more `allow_origins=["*"]`)
-- JWT authentication system
-- Robust CSV parser (handles any format)
-- Environment-based security configuration
+### 4. Explanation System
+- **Detailed markdown reports** for every decision
+- Shows confidence, source, and reasoning
+- Alternative approaches with trade-offs
+- Metadata insights (skewness, outliers, missing values)
 
-### ✅ **Option B: Persistent Learning** (COMPLETED)
-- Database infrastructure (SQLite dev / PostgreSQL prod)
-- Adaptive learning that survives restarts
-- Privacy-preserving correction storage
-- Automatic rule creation (after 5+ similar corrections)
+## 🎯 Key Features
+
+- **185+ Symbolic Rules** - Expert knowledge encoded
+- **Neural Oracle** - ML-powered decision making
+- **Meta-Learning** - Statistical heuristics for edge cases
+- **Adaptive Learning** - Learns from user corrections
+- **Real-time Processing** - Instant recommendations
+- **Explainable AI** - Transparent decision process
+
+## 📊 Architecture
+
+```
+┌─────────────────────────────────────────┐
+│         User Upload CSV                 │
+└──────────────┬──────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────┐
+│     Intelligent Preprocessor            │
+│  ┌────────────────────────────────────┐ │
+│  │  1. Symbolic Engine (185+ rules)   │ │
+│  │     ↓ (if confidence < 0.75)       │ │
+│  │  2. Meta-Learning (heuristics)     │ │
+│  │     ↓ (if still uncertain)         │ │
+│  │  3. Neural Oracle (XGBoost)        │ │
+│  │     ↓ (if all fail)                │ │
+│  │  4. Conservative Fallback          │ │
+│  └────────────────────────────────────┘ │
+└──────────────┬──────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────┐
+│   Preprocessing Recommendations         │
+│   + Explanations + Confidence Scores    │
+└─────────────────────────────────────────┘
+```
+
+## 🛠️ Installation
+
+### Prerequisites
+```bash
+# Python 3.8+
+# Node.js 14+
+```
+
+### Backend Setup
+```bash
+cd AURORA-V2
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+pip install xgboost scikit-learn shap numba
+```
+
+### Frontend Setup
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+### Train Neural Oracle (Optional)
+```bash
+# Train on real-world datasets
+python scripts/train_realworld.py
+
+# Or use synthetic data
+python scripts/train_neural_oracle.py
+```
 
 ## 🚀 Quick Start
 
+### Start Backend
 ```bash
-# 1. Install dependencies
-pip install -r requirements.txt
-
-# 2. Configure environment
-cp .env.example .env
-# Edit .env and set JWT_SECRET_KEY and ALLOWED_ORIGINS
-
-# 3. Start the server (database auto-initializes)
-uvicorn src.api.server:app --reload --port 8000
-
-# 4. Check health
-curl http://localhost:8000/health
-
-# 5. View interactive docs
-# Open http://localhost:8000/docs in your browser
+uvicorn src.api.server:app --reload
 ```
 
-**📖 For detailed setup, testing, and troubleshooting, see [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)**
+### Start Frontend
+```bash
+cd frontend
+npm start
+```
 
-## 📊 Usage
+### Access Application
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+
+## 📖 Usage
+
+1. **Upload CSV** - Drag and drop or click to upload
+2. **Analyze** - Click "Analyze" to get recommendations
+3. **Review** - Check data health metrics and preprocessing suggestions
+4. **Explain** - Click "Explain" on any column for detailed reasoning
+5. **Override** - Manually adjust recommendations if needed
+6. **Export** - Download preprocessed data or Python script
+
+## 🧠 How It Works
+
+### Decision Process
+
+1. **Symbolic Engine** (Primary)
+   - 185+ hand-crafted rules
+   - Pattern matching on data characteristics
+   - High confidence for known patterns
+
+2. **Meta-Learning** (Bridge)
+   - Statistical heuristics
+   - Covers edge cases
+   - Universal coverage
+
+3. **Neural Oracle** (ML)
+   - XGBoost model trained on real data
+   - Handles ambiguous cases
+   - Provides confidence scores
+
+4. **Conservative Fallback** (Safety)
+   - Ultra-safe defaults
+   - Preserves data integrity
+   - Reversible operations
+
+### Type Detection
 
 ```python
-from src.core.preprocessor import IntelligentPreprocessor
+# Intelligent type inference
+if column.dtype == 'object':
+    numeric_column = pd.to_numeric(column, errors='coerce')
+    if numeric_column.notna().sum() / len(column) > 0.5:
+        # Treat as numeric
+        return "numeric"
+    else:
+        # Treat as categorical
+        return "categorical"
+```
 
-# Initialize preprocessor
-preprocessor = IntelligentPreprocessor()
+## 📊 Supported Preprocessing Actions
 
-# Preprocess a column
-result = preprocessor.preprocess_column(
-    column_data=[1, 2, 3, 100, 200, 300],
-    column_name="revenue",
-    metadata={"dtype": "numeric"}
-)
+### Data Quality
+- Drop column, Remove duplicates, Fill nulls (mean/median/mode)
 
-print(f"Action: {result.action}")
-print(f"Confidence: {result.confidence}")
-print(f"Source: {result.source}")  # symbolic/neural/learned
-print(f"Explanation: {result.explanation}")
+### Type Conversion
+- Parse datetime, Parse numeric, Parse boolean, Parse categorical
 
-# Submit correction (privacy-preserving)
-preprocessor.process_correction(
-    column_context=result.context,
-    wrong_action="standard_scale",
-    correct_action="log_transform"
+### Scaling
+- Standard scale, MinMax scale, Robust scale, MaxAbs scale
+
+### Transformation
+- Log transform, Box-Cox, Yeo-Johnson, Quantile transform
+
+### Encoding
+- One-hot encode, Label encode, Target encode, Hash encode
+
+### Outlier Handling
+- Clip outliers, Winsorize, Remove outliers
+
+## 🔧 Configuration
+
+### Confidence Threshold
+```python
+# In src/api/server.py
+preprocessor = get_preprocessor(
+    confidence_threshold=0.75,  # Adjust for more/less neural participation
+    use_neural_oracle=True,
+    enable_learning=True
 )
 ```
 
-## 🔌 API Endpoints
-
-```bash
-# Preprocess a column
-POST /preprocess
-{
-  "column_data": [...],
-  "column_name": "age",
-  "column_metadata": {...}
-}
-
-# Submit correction
-POST /correct
-{
-  "column_context": {...},
-  "action_taken": "standard_scale",
-  "correct_action": "log_transform"
-}
-
-# Get explanation
-GET /explain/{decision_id}
+### Neural Oracle Training
+```python
+# In scripts/train_realworld.py
+# Add your own datasets
+datasets.append(("MyDataset", pd.read_csv("my_data.csv")))
 ```
 
 ## 📈 Performance
 
-- **Symbolic Engine**: <100μs per decision
-- **Neural Oracle**: <5ms per decision
-- **Pattern Learning**: <1ms per correction
-- **Memory Usage**: <50MB total
-- **Accuracy**: 95% overall (95% symbolic on covered cases, 85% neural on edge cases)
+- **Symbolic Engine:** <1ms per column
+- **Neural Oracle:** <0.5ms per column
+- **Total Pipeline:** <5ms per column
+- **Batch Processing:** ~100 columns/second
 
 ## 🧪 Testing
 
+### Run Diagnostic Check
 ```bash
-# Run all tests
-pytest tests/ -v
-
-# Run with coverage
-pytest tests/ --cov=src --cov-report=html
-
-# Run specific test suite
-pytest tests/test_symbolic_engine.py -v
-
-# Benchmark performance
-python scripts/benchmark_performance.py
+python diagnostic_check.py
 ```
 
-## 🔒 Privacy Guarantees
-
-AURORA is built with privacy-by-design:
-- ✅ Never stores raw data values
-- ✅ Pattern extraction uses only statistical signatures
-- ✅ Differential privacy (ε-DP) for shared updates
-- ✅ Local learning by default
-- ✅ Optional federated learning with secure aggregation
-
-## 📂 Project Structure
-
-```
-aurora/
-├── src/
-│   ├── symbolic/       # Symbolic rule engine
-│   ├── neural/         # NeuralOracle model
-│   ├── features/       # Feature extraction
-│   ├── learning/       # Pattern learning & federated learning
-│   ├── core/           # Main preprocessing pipeline
-│   ├── data/           # Data generation
-│   ├── api/            # FastAPI server
-│   └── utils/          # Utilities (explainer, monitor)
-├── scripts/            # Training & evaluation scripts
-├── tests/              # Comprehensive test suite
-├── configs/            # Configuration files
-├── models/             # Pre-trained models
-└── data/               # Synthetic & edge case data
-```
-
-## 🛠️ Development
-
+### Test Neural Oracle
 ```bash
-# Install development dependencies
-pip install -r requirements.txt
-
-# Run linting
-ruff check src/
-black src/
-
-# Type checking
-mypy src/
-
-# Generate synthetic data (sample dataset by default)
-python scripts/generate_synthetic_data.py
-
-# Or generate specific dataset types:
-python scripts/generate_synthetic_data.py basic --rows 1000 --numeric 10
-python scripts/generate_synthetic_data.py edge-cases --rows 1000
-python scripts/generate_synthetic_data.py realistic --rows 5000
-python scripts/generate_synthetic_data.py training --samples 5000 --ambiguous-only
-
-# Train NeuralOracle
-python scripts/train_neural_oracle.py
-
-# Evaluate system
-python scripts/evaluate_system.py
+python -c "from src.neural.oracle import get_neural_oracle; oracle = get_neural_oracle(); print('✓ Neural oracle loaded')"
 ```
 
-## 📖 Documentation
+## 📝 API Documentation
 
-### Getting Started
-- **[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)** - Current status, setup guide, and testing instructions
+### Preprocess Endpoint
+```bash
+POST /api/preprocess
+Content-Type: application/json
 
-### V3 Architecture & Roadmap
-- **[docs/ARCHITECTURE_V3_PROPOSAL.md](docs/ARCHITECTURE_V3_PROPOSAL.md)** - Complete V3 architecture design
-- **[docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md)** - 12-week implementation plan
-- **[docs/QUICK_START_V3.md](docs/QUICK_START_V3.md)** - Quick start guide with 3 options
-- **[docs/SUMMARY_FOR_IMPROVEMENT.md](docs/SUMMARY_FOR_IMPROVEMENT.md)** - Improvement overview and competitive analysis
+{
+  "column_data": [1, 2, 3, 4, 5],
+  "column_name": "age",
+  "target_available": false
+}
+```
 
-### API Documentation
-- **Interactive Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+### Explanation Endpoint
+```bash
+POST /api/explain/enhanced
+Content-Type: application/json
 
-## 🎯 Success Criteria
+{
+  "column_data": [1, 2, 3, 4, 5],
+  "column_name": "age"
+}
+```
 
-- ✅ Symbolic engine handles 80% of decisions
-- ✅ Combined system achieves 95% accuracy
-- ✅ Inference under 1ms for most cases
-- ✅ Privacy preserved (no data leakage)
-- ✅ Learns patterns from <10 corrections
-- ✅ Memory footprint under 50MB
-- ✅ Zero external API dependencies for core functionality
+## 🐛 Troubleshooting
 
-## 📝 License
+### Neural Oracle Not Participating
+```bash
+# Check if model exists
+ls models/neural_oracle_v1.pkl
 
-MIT License - see [LICENSE](LICENSE) file for details
+# Check server logs for errors
+# Look for: "Neural oracle loaded successfully"
+
+# Restart server
+uvicorn src.api.server:app --reload
+```
+
+### Explanation Modal Empty
+```bash
+# Hard refresh browser
+Ctrl + Shift + R
+
+# Check backend endpoint
+curl -X POST http://localhost:8000/api/explain/enhanced \
+  -H "Content-Type: application/json" \
+  -d '{"column_data": [1,2,3], "column_name": "test"}'
+```
+
+### Type Detection Issues
+```bash
+# Check server logs for type inference messages
+# Should see: "Type inference: 'column_name' converted from object to numeric"
+```
+
+## 📚 Documentation
+
+- [CHANGELOG.md](./CHANGELOG.md) - Recent updates and changes
+- [API Documentation](http://localhost:8000/docs) - Interactive API docs
+- [Architecture Guide](./docs/architecture.md) - System design
+- [Training Guide](./docs/training.md) - Neural oracle training
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
 
-## 📧 Contact
+## 📄 License
 
-For questions or support, please open an issue on GitHub.
+MIT License - See LICENSE file for details
+
+## 🙏 Acknowledgments
+
+- Built with FastAPI, Next.js, XGBoost
+- Inspired by AutoML and data preprocessing best practices
+- Trained on publicly available datasets
+
+## 📞 Support
+
+For issues, questions, or suggestions:
+- Open an issue on GitHub
+- Check existing documentation
+- Run diagnostic tools
 
 ---
 
-Built with ❤️ for intelligent, privacy-preserving data preprocessing
+**Version:** 2.1.0  
+**Last Updated:** November 24, 2024  
+**Status:** Production Ready ✅

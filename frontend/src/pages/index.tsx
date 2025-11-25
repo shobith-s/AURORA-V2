@@ -5,11 +5,13 @@ import ChatbotPanel from '../components/ChatbotPanel';
 import MetricsDashboard from '../components/MetricsDashboard';
 import LearningProgressPanel from '../components/LearningProgressPanel';
 import Header from '../components/Header';
+import ScriptIDE from '../components/ScriptIDE';
 import { Toaster } from 'react-hot-toast';
 
 export default function Home() {
   const [showMetrics, setShowMetrics] = useState(false);
   const [showChatbot, setShowChatbot] = useState(false);
+  const [showIDE, setShowIDE] = useState(false);
 
   return (
     <>
@@ -21,9 +23,15 @@ export default function Home() {
 
       <Toaster position="top-right" />
 
+      {/* Custom Script IDE Modal */}
+      <ScriptIDE isOpen={showIDE} onClose={() => setShowIDE(false)} />
+
       <div className="min-h-screen">
         {/* Header */}
-        <Header onToggleMetrics={() => setShowMetrics(!showMetrics)} />
+        <Header
+          onToggleMetrics={() => setShowMetrics(!showMetrics)}
+          onToggleIDE={() => setShowIDE(true)}
+        />
 
         {/* Metrics Dashboard (Collapsible) */}
         {showMetrics && (
@@ -33,19 +41,10 @@ export default function Home() {
         )}
 
         {/* Main Content */}
-        <main className="container mx-auto px-4 py-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left Column: Preprocessing Panel (2/3 width on large screens) */}
-            <div className="lg:col-span-2">
-              <PreprocessingPanel />
-            </div>
-
-            {/* Right Column: Learning Progress (1/3 width on large screens) */}
-            <div className="lg:col-span-1">
-              <div className="sticky top-6">
-                <LearningProgressPanel />
-              </div>
-            </div>
+        <main className="w-full px-6 py-8">
+          {/* Full Width Layout */}
+          <div className="w-full">
+            <PreprocessingPanel />
           </div>
         </main>
 
@@ -92,12 +91,12 @@ export default function Home() {
         )}
 
         {/* Footer */}
-        <footer className="mt-12 py-6 text-center text-slate-600 text-sm">
+        <footer className="mt-12 py-6 text-center text-slate-400 text-sm">
           <p>
-            AURORA V3 - Intelligent Data Preprocessing System
+            AURORA V4 - Intelligent Data Preprocessing System
             <br />
-            <span className="text-xs">
-              Symbolic-first • Rule-creating learner • Zero overgeneralization
+            <span className="text-xs text-slate-500">
+              Symbolic-first • Validated Learning • A/B Testing • Zero Overgeneralization
             </span>
           </p>
         </footer>

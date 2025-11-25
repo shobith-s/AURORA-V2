@@ -28,11 +28,7 @@ from .schemas import (
     ExecutePipelineRequest,
     ExecutePipelineResponse,
     AlternativeAction,
-    CacheStatsResponse,
-    DriftMonitoringResponse,
-    DriftStatus,
-    ChatQueryRequest,
-    ChatQueryResponse
+    CacheStatsResponse
 )
 from ..core.preprocessor import IntelligentPreprocessor, get_preprocessor
 from ..utils.monitor import get_monitor
@@ -124,23 +120,26 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"Database initialization failed: {e}. Using in-memory storage.")
 
-    # Initialize learning engine
+    # Initialize learning engine (Option B: with validation and A/B testing)
     try:
         db_url = os.getenv("DATABASE_URL", "sqlite:///./aurora.db")
         learning_engine = AdaptiveLearningEngine(
             db_url=db_url,
-            min_support=5,
+            min_support=10,  # CHANGED: 5 → 10 corrections per pattern
             similarity_threshold=0.85,
-            epsilon=1.0
+            epsilon=1.0,
+            validation_sample_size=20,
+            ab_test_min_decisions=100,
+            ab_test_success_threshold=0.80
         )
-        logger.info("Adaptive learning engine initialized")
+        logger.info("Adaptive learning engine initialized with validation and A/B testing")
     except Exception as e:
         logger.warning(f"Learning engine initialization failed: {e}")
 
     # Initialize preprocessor
     try:
         preprocessor = get_preprocessor(
-            confidence_threshold=0.9,
+            confidence_threshold=0.75,  # CHANGED: 0.9 → 0.75 for more neural participation
             use_neural_oracle=True,
             enable_learning=True
         )
@@ -149,7 +148,7 @@ async def startup_event():
         logger.error(f"Failed to initialize AURORA: {e}")
         # Create basic preprocessor without neural oracle
         preprocessor = IntelligentPreprocessor(
-            confidence_threshold=0.9,
+            confidence_threshold=0.75,
             use_neural_oracle=False,
             enable_learning=True
         )
@@ -255,6 +254,40 @@ async def health_check():
     )
 
 
+# New API Endpoints for Redesigned Frontend
+
+@app.get("/stats")
+async def get_system_stats():
+    """Get system-wide statistics for dashboard."""
+    try:
+        stats = preprocessor.stats.copy()
+        total = stats.get('total_decisions', 0)
+        avg_confidence = 0.0
+        if total > 0:
+            high_conf = stats.get('high_confidence_decisions', 0)
+            avg_confidence = (high_conf / total) * 100
+        
+        avg_time = 0.0
+        if total > 0:
+            avg_time = stats.get('total_time_ms', 0) / total
+        
+        rule_count = len(preprocessor.symbolic_engine.rules) if hasattr(preprocessor, 'symbolic_engine') else 0
+        
+        return {
+            "total_decisions": total,
+            "symbolic_decisions": stats.get('symbolic_decisions', 0),
+            "meta_decisions": stats.get('meta_learning_decisions', 0),
+            "neural_decisions": stats.get('neural_decisions', 0),
+            "high_confidence_decisions": stats.get('high_confidence_decisions', 0),
+            "avg_confidence": round(avg_confidence, 2),
+            "avg_time_ms": round(avg_time, 2),
+            "active_rules": rule_count
+        }
+    except Exception as e:
+        logger.error(f"Error getting system stats: {e}")
+        return {"total_decisions": 0, "error": str(e)}
+
+
 @app.post("/preprocess", response_model=PreprocessResponse)
 async def preprocess_column(request: PreprocessRequest):
     """
@@ -300,7 +333,8 @@ async def preprocess_column(request: PreprocessRequest):
             column=request.column_data,
             column_name=request.column_name,
             target_available=request.target_available,
-            metadata=request.metadata
+            metadata=request.metadata,
+            context=request.context
         )
 
         # Record metrics
@@ -343,8 +377,8 @@ async def preprocess_column(request: PreprocessRequest):
             alternatives=alternatives,
             parameters=json_safe_parameters,
             decision_id=result.decision_id,
-            enhanced_features=None,  # Phase 1 field - not yet implemented
-            cache_info=None  # Phase 1 field - not yet implemented
+            enhanced_features=None,
+            cache_info=None
         )
 
         # Use FastAPI's jsonable_encoder to ensure ALL types are JSON-safe
@@ -356,6 +390,129 @@ async def preprocess_column(request: PreprocessRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Preprocessing failed: {str(e)}"
         )
+
+
+def convert_numpy_types(obj):
+    """Convert numpy types to native Python types for JSON serialization."""
+    import numpy as np
+    
+    if isinstance(obj, (np.bool_, np.generic)) and hasattr(obj, 'item'):
+        # Handle numpy scalars including bool_
+        return obj.item()
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_numpy_types(item) for item in obj)
+    else:
+        return obj
+
+
+@app.post("/explain/enhanced")
+async def explain_enhanced(request: PreprocessRequest):
+    """
+    Get enhanced explanation for a column decision with markdown report.
+    """
+    try:
+        # Preprocess to get the decision and details
+        result = preprocessor.preprocess_column(
+            column=request.column_data,
+            column_name=request.column_name,
+            target_available=request.target_available,
+            metadata=request.metadata,
+            context=request.context
+        )
+        
+        # Generate markdown report
+        markdown_report = f"""
+## Decision Analysis for "{request.column_name}"
+
+### Recommended Action: **{result.action.value.replace('_', ' ').title()}**
+
+**Confidence:** {result.confidence * 100:.1f}%  
+**Source:** {result.source}
+
+### Explanation
+
+{result.explanation}
+
+### Why This Action?
+
+"""
+        
+        # Get metadata from result.context (that's where stats are stored)
+        metadata = result.context if result.context else {}
+        
+        # Convert numpy types in metadata to native Python types
+        metadata = convert_numpy_types(metadata)
+        
+        # Add metadata insights if available
+        if metadata:
+            if metadata.get("skewness"):
+                markdown_report += f"- **Skewness:** {metadata['skewness']:.2f}\n"
+            if metadata.get("null_pct"):
+                markdown_report += f"- **Missing Values:** {metadata['null_pct'] * 100:.1f}%\n"
+            if metadata.get("outlier_pct"):
+                markdown_report += f"- **Outliers:** {metadata['outlier_pct'] * 100:.1f}%\n"
+            if metadata.get("unique_ratio"):
+                markdown_report += f"- **Unique Ratio:** {metadata['unique_ratio'] * 100:.1f}%\n"
+        
+        # Add alternatives section
+        alternatives_serializable = []
+        if result.alternatives:
+            markdown_report += "\n### Alternative Approaches\n\n"
+            for alt in result.alternatives[:3]:  # Top 3 alternatives
+                # Handle both tuple and dict formats
+                if isinstance(alt, tuple):
+                    action, conf = alt
+                    action_name = action.value if hasattr(action, 'value') else str(action)
+                    alternatives_serializable.append({
+                        "action": action_name,
+                        "confidence": float(conf)
+                    })
+                else:
+                    action_name = alt.get("action", "unknown")
+                    conf = alt.get("confidence", 0)
+                    alternatives_serializable.append({
+                        "action": action_name,
+                        "confidence": float(conf)
+                    })
+                action_name = action_name.replace('_', ' ').title()
+                markdown_report += f"- **{action_name}** ({conf * 100:.1f}% confidence)\n"
+        
+        # Construct response matching frontend expectations
+        response = {
+            "decision": {
+                "action": result.action.value,
+                "confidence": float(result.confidence),
+                "source": result.source,
+                "decision_id": result.decision_id
+            },
+            "markdown_report": markdown_report,
+            "alternatives": alternatives_serializable,
+            "metadata": metadata,  # Frontend expects this field
+            "context": {
+                "column_name": request.column_name,
+                "sample_size": len(request.column_data),
+                "context": request.context
+            }
+        }
+        
+        # Final safety conversion
+        return convert_numpy_types(response)
+        
+    except Exception as e:
+        import traceback
+        logger.error(f"Explanation error: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate enhanced explanation: {str(e)}")
 
 
 def compute_column_health(column: pd.Series, column_name: str) -> 'ColumnHealthMetrics':
@@ -378,18 +535,43 @@ def compute_column_health(column: pd.Series, column_name: str) -> 'ColumnHealthM
     unique_count = int(column.nunique())
     unique_ratio = float(unique_count / total_count) if total_count > 0 else 0.0
 
-    # Detect data type
+    # Detect data type - check actual pandas dtype first
     non_null = column.dropna()
     if len(non_null) == 0:
         data_type = "empty"
         anomalies.append("All values are null")
         health_score = 0.0
-    elif pd.api.types.is_numeric_dtype(column):
-        data_type = "numeric"
-    elif pd.api.types.is_datetime64_any_dtype(column):
-        data_type = "datetime"
     else:
-        data_type = "categorical"
+        # Check if already numeric dtype
+        if pd.api.types.is_numeric_dtype(column):
+            data_type = "numeric"
+        elif pd.api.types.is_datetime64_any_dtype(column):
+            data_type = "datetime"
+        # For object/string types, try to infer
+        elif pd.api.types.is_object_dtype(column) or pd.api.types.is_string_dtype(column):
+            try:
+                # Try to convert to numeric
+                numeric_column = pd.to_numeric(column, errors='coerce')
+                # If most values successfully converted, it's numeric
+                successful_conversions = numeric_column.notna().sum()
+                if successful_conversions / len(column) > 0.8:  # 80% threshold
+                    column = numeric_column  # Use the numeric version
+                    data_type = "numeric"
+                else:
+                    # Check unique ratio to determine if categorical
+                    if unique_ratio < 0.5:  # Less than 50% unique -> categorical
+                        data_type = "categorical"
+                    else:
+                        data_type = "text"  # High unique ratio -> text
+            except:
+                # Default to categorical for object types with low unique ratio
+                if unique_ratio < 0.5:
+                    data_type = "categorical"
+                else:
+                    data_type = "text"
+        else:
+            # Fallback for unknown types
+            data_type = "categorical"
 
     # Numeric-specific metrics
     outlier_count = None
@@ -400,38 +582,41 @@ def compute_column_health(column: pd.Series, column_name: str) -> 'ColumnHealthM
     std = None
     cv = None
 
-    if data_type == "numeric" and len(non_null) > 0:
-        try:
-            from scipy import stats
-            mean = float(non_null.mean())
-            std = float(non_null.std())
-            cv = float(abs(std / mean)) if mean != 0 else None
+    if data_type == "numeric":
+        # Recalculate non_null with the numeric column
+        non_null = column.dropna()
+        if len(non_null) > 0:
+            try:
+                from scipy import stats
+                mean = float(non_null.mean())
+                std = float(non_null.std())
+                cv = float(abs(std / mean)) if mean != 0 else None
 
-            # Skewness and kurtosis
-            if len(non_null) > 2:
-                skewness = float(non_null.skew())
-                kurtosis = float(non_null.kurtosis())
+                # Skewness and kurtosis
+                if len(non_null) > 2:
+                    skewness = float(non_null.skew())
+                    kurtosis = float(non_null.kurtosis())
 
-            # Outlier detection using IQR
-            Q1 = non_null.quantile(0.25)
-            Q3 = non_null.quantile(0.75)
-            IQR = Q3 - Q1
-            outliers = (non_null < (Q1 - 1.5 * IQR)) | (non_null > (Q3 + 1.5 * IQR))
-            outlier_count = int(outliers.sum())
-            outlier_pct = float(outlier_count / len(non_null)) if len(non_null) > 0 else 0.0
+                # Outlier detection using IQR
+                Q1 = non_null.quantile(0.25)
+                Q3 = non_null.quantile(0.75)
+                IQR = Q3 - Q1
+                outliers = (non_null < (Q1 - 1.5 * IQR)) | (non_null > (Q3 + 1.5 * IQR))
+                outlier_count = int(outliers.sum())
+                outlier_pct = float(outlier_count / len(non_null)) if len(non_null) > 0 else 0.0
 
-            # Anomaly detection for numeric
-            if outlier_pct and outlier_pct > 0.1:
-                anomalies.append(f"High outlier percentage ({outlier_pct:.1%})")
-                health_score -= 15
-            if skewness and abs(skewness) > 2:
-                anomalies.append(f"High skewness ({skewness:.2f})")
-                health_score -= 10
-            if cv and cv > 2:
-                anomalies.append(f"High coefficient of variation ({cv:.2f})")
-                health_score -= 5
-        except:
-            pass
+                # Anomaly detection for numeric
+                if outlier_pct and outlier_pct > 0.1:
+                    anomalies.append(f"High outlier percentage ({outlier_pct:.1%})")
+                    health_score -= 15
+                if skewness and abs(skewness) > 2:
+                    anomalies.append(f"High skewness ({skewness:.2f})")
+                    health_score -= 10
+                if cv and cv > 2:
+                    anomalies.append(f"High coefficient of variation ({cv:.2f})")
+                    health_score -= 5
+            except:
+                pass
 
     # Categorical-specific metrics
     cardinality = None
@@ -527,7 +712,8 @@ async def batch_preprocess(request: BatchPreprocessRequest):
         # Process all columns
         results_dict = preprocessor.preprocess_dataframe(
             df,
-            target_column=request.target_column
+            target_column=request.target_column,
+            context=request.context
         )
 
         # Record overall pipeline latency
@@ -1192,150 +1378,11 @@ async def get_realtime_metrics():
         )
 
 
-# Phase 1: Cache and Drift Detection Endpoints
-
-@app.get("/cache/stats", response_model=CacheStatsResponse)
-async def get_cache_statistics():
-    """
-    Get intelligent cache statistics.
-
-    Returns cache hit rates, levels, and pattern rules.
-    """
-    try:
-        from ..features.intelligent_cache import get_cache
-
-        cache = get_cache()
-        stats = cache.get_stats()
-
-        return CacheStatsResponse(
-            total_queries=stats['total_queries'],
-            l1_hits=stats['l1_hits'],
-            l2_hits=stats['l2_hits'],
-            l3_hits=stats['l3_hits'],
-            misses=stats['misses'],
-            hit_rate=stats['hit_rate'],
-            cache_size=stats['cache_size'],
-            pattern_rules=stats['pattern_rules']
-        )
-    except Exception as e:
-        logger.error(f"Error getting cache statistics: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get cache statistics: {str(e)}"
-        )
+# Phase 1: Removed - Cache endpoints deleted (cache system removed in Option B)
+# /cache/stats and /cache/clear endpoints removed
 
 
-@app.post("/cache/clear")
-async def clear_cache():
-    """Clear the intelligent cache."""
-    try:
-        from ..features.intelligent_cache import clear_cache
 
-        clear_cache()
-        return {"message": "Cache cleared successfully"}
-    except Exception as e:
-        logger.error(f"Error clearing cache: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to clear cache: {str(e)}"
-        )
-
-
-@app.get("/drift/status", response_model=DriftMonitoringResponse)
-async def get_drift_status():
-    """
-    Get drift monitoring status for all tracked columns.
-
-    Returns drift detection results and retraining recommendations.
-    """
-    try:
-        from ..monitoring.drift_detector import get_drift_detector
-
-        detector = get_drift_detector()
-
-        # Get recent drift reports
-        drift_reports = []
-        critical_columns = []
-        high_priority_columns = []
-        columns_with_drift = 0
-
-        for col_name, profile in detector.reference_profiles.items():
-            # Find recent drift report for this column
-            recent_reports = [r for r in detector.drift_history
-                            if r.column_name == col_name]
-
-            if recent_reports:
-                latest = recent_reports[-1]
-
-                drift_status = DriftStatus(
-                    column_name=latest.column_name,
-                    drift_detected=latest.drift_detected,
-                    drift_score=latest.drift_score,
-                    severity=latest.severity,
-                    recommendation=latest.recommendation,
-                    p_value=latest.p_value,
-                    test_used=latest.test_used,
-                    changes=latest.changes,
-                    timestamp=latest.timestamp
-                )
-                drift_reports.append(drift_status)
-
-                if latest.drift_detected:
-                    columns_with_drift += 1
-
-                    if latest.severity == 'critical':
-                        critical_columns.append(col_name)
-                    elif latest.severity == 'high':
-                        high_priority_columns.append(col_name)
-
-        requires_retraining = len(critical_columns) > 0 or len(high_priority_columns) >= 3
-
-        return DriftMonitoringResponse(
-            monitored_columns=len(detector.reference_profiles),
-            columns_with_drift=columns_with_drift,
-            critical_columns=critical_columns,
-            high_priority_columns=high_priority_columns,
-            requires_retraining=requires_retraining,
-            drift_reports=drift_reports
-        )
-    except Exception as e:
-        logger.error(f"Error getting drift status: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get drift status: {str(e)}"
-        )
-
-
-@app.post("/drift/set_reference")
-async def set_drift_reference(request: PreprocessRequest):
-    """
-    Set reference distribution for drift detection.
-
-    Args:
-        request: Column data to use as reference
-    """
-    try:
-        from ..monitoring.drift_detector import get_drift_detector
-
-        detector = get_drift_detector()
-        column_series = pd.Series(request.column_data)
-
-        detector.set_reference(
-            column_name=request.column_name,
-            column_data=column_series
-        )
-
-        return {
-            "message": f"Reference set for column '{request.column_name}'",
-            "column_name": request.column_name,
-            "sample_size": len(request.column_data)
-        }
-    except Exception as e:
-        logger.error(f"Error setting drift reference: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to set drift reference: {str(e)}"
-        )
 
 
 @app.get("/metrics/neural_oracle")
@@ -1485,43 +1532,6 @@ async def get_learning_metrics():
         )
 
 
-@app.get("/metrics/layers")
-async def get_layer_metrics():
-    """
-    Get layer-by-layer performance metrics.
-
-    Shows which layers are used most and their accuracy.
-    Helps identify which components are working well and which need improvement.
-
-    Returns:
-        Layer-wise decision statistics including usage, accuracy, and confidence
-    """
-    try:
-        summary = preprocessor.layer_metrics.get_summary()
-
-        return {
-            "total_decisions": summary['total_decisions'],
-            "overall_accuracy": f"{summary['overall_accuracy']:.1f}%",
-            "layers": {
-                layer: {
-                    "decisions": stats['decisions'],
-                    "usage_percentage": f"{stats['usage_pct']:.1f}%",
-                    "accuracy_percentage": f"{stats['accuracy_pct']:.1f}%",
-                    "avg_confidence": f"{stats['avg_confidence']:.2f}"
-                }
-                for layer, stats in summary['by_layer'].items()
-            },
-            "timestamp": time.time()
-        }
-
-    except Exception as e:
-        logger.error(f"Error getting layer metrics: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get layer metrics: {str(e)}"
-        )
-
-
 @app.get("/metrics/dashboard")
 async def get_dashboard_metrics():
     """
@@ -1585,510 +1595,16 @@ async def get_dashboard_metrics():
         )
 
 
-@app.post("/drift/check")
-async def check_drift(request: PreprocessRequest):
-    """
-    Check a column for drift against its reference.
-
-    Args:
-        request: Column data to check for drift
-
-    Returns:
-        Drift detection report
-    """
-    try:
-        from ..monitoring.drift_detector import get_drift_detector
-
-        detector = get_drift_detector()
-        column_series = pd.Series(request.column_data)
-
-        report = detector.detect_drift(
-            column_name=request.column_name,
-            new_data=column_series
-        )
-
-        return DriftStatus(
-            column_name=report.column_name,
-            drift_detected=report.drift_detected,
-            drift_score=report.drift_score,
-            severity=report.severity,
-            recommendation=report.recommendation,
-            p_value=report.p_value,
-            test_used=report.test_used,
-            changes=report.changes,
-            timestamp=report.timestamp
-        )
-    except Exception as e:
-        logger.error(f"Error checking drift: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to check drift: {str(e)}"
-        )
-
 
 # =============================================================================
-# Intelligent Assistant / Chatbot Endpoints
-# =============================================================================
-
-# Global assistant instance (initialized with preprocessor context)
-assistant_instance = None
-
-def get_assistant():
-    """Get or create assistant instance."""
-    global assistant_instance
-    if assistant_instance is None:
-        from ..ai.intelligent_assistant import IntelligentAssistant
-        assistant_instance = IntelligentAssistant(preprocessor=preprocessor)
-    return assistant_instance
-
-
-@app.post("/chat/query", response_model=ChatQueryResponse)
-async def chat_query(request: ChatQueryRequest):
-    """
-    Query the intelligent assistant.
-    
-    The assistant can answer questions about:
-    - Column-level statistics and analysis
-    - Dataset-level insights
-    - SHAP explanations
-    - Preprocessing techniques
-    - Statistical queries
-    
-    Args:
-        request: Query request with question and optional context
-        
-    Returns:
-        Answer with confidence and suggestions
-    """
-    try:
-        assistant = get_assistant()
-        
-        # Update context if provided
-        if request.context:
-            # Create dummy dataframe from context if provided
-            if 'columns' in request.context and 'data' in request.context:
-                try:
-                    import pandas as pd
-                    df = pd.DataFrame(request.context['data'])
-                    assistant.set_context(df)
-                except:
-                    pass
-        
-        # Get answer
-        answer = assistant.query(request.question)
-        
-        # Generate suggestions based on question
-        suggestions = []
-        q = request.question.lower()
-        
-        if 'column' in q or 'statistics' in q:
-            suggestions = [
-                "What preprocessing do you recommend for this column?",
-                "Why did you make this recommendation?",
-                "Show me SHAP explanation"
-            ]
-        elif 'dataset' in q or 'data' in q:
-            suggestions = [
-                "What data quality issues do we have?",
-                "Show me all columns",
-                "What's the distribution analysis?"
-            ]
-        elif 'why' in q or 'explain' in q:
-            suggestions = [
-                "What is SHAP?",
-                "How confident are you?",
-                "What are the alternatives?"
-            ]
-        else:
-            suggestions = [
-                "What are my capabilities?",
-                "Give me a dataset summary",
-                "Explain SHAP values"
-            ]
-        
-        return ChatQueryResponse(
-            answer=answer,
-            confidence=0.95,  # High confidence for built-in knowledge
-            suggestions=suggestions[:3]
-        )
-        
-    except Exception as e:
-        logger.error(f"Error in chat query: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process query: {str(e)}"
-        )
-
-
-@app.post("/chat/set_context")
-async def set_chat_context(
-    columns: List[str] = None,
-    row_count: int = 0,
-    dataframe: Optional[Dict[str, List[Any]]] = None
-):
-    """
-    Set context for the chat assistant.
-    
-    This allows the assistant to answer questions about the current dataset.
-    
-    Args:
-        columns: List of column names
-        row_count: Number of rows
-        dataframe: Optional dataframe as dict of lists
-        
-    Returns:
-        Success status
-    """
-    try:
-        assistant = get_assistant()
-        
-        if dataframe:
-            import pandas as pd
-            df = pd.DataFrame(dataframe)
-            assistant.set_context(df)
-            
-            return {
-                "success": True,
-                "message": f"Context set: {len(df.columns)} columns, {len(df)} rows",
-                "columns": list(df.columns)
-            }
-        else:
-            return {
-                "success": False,
-                "message": "No dataframe provided"
-            }
-            
-    except Exception as e:
-        logger.error(f"Error setting chat context: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to set context: {str(e)}"
-        )
-
-
-# =============================================================================
-# ENHANCED EXPLAINABILITY ENDPOINTS (NEW!)
-# =============================================================================
-
-from ..explanation.explanation_engine import ExplanationEngine
-from ..explanation.counterfactual_analyzer import CounterfactualAnalyzer
-
-# Initialize explanation components
-explanation_engine = ExplanationEngine()
-counterfactual_analyzer = CounterfactualAnalyzer()
-
-
-@app.post("/explain/enhanced")
-async def get_enhanced_explanation(request: PreprocessRequest):
-    """
-    Get a rich, detailed explanation for a preprocessing decision.
-
-    This goes FAR beyond simple explanations to provide:
-    - Scientific justification with references
-    - Detailed alternative analysis
-    - Impact predictions on model performance
-    - Risk assessments
-    - Best practices
-    - "What if" scenarios
-
-    This is what makes AURORA's explainability world-class.
-    """
-    try:
-        start_time = time.time()
-
-        # Get the preprocessing decision
-        preprocessor = get_preprocessor()
-        result = preprocessor.preprocess_column(
-            column=request.column_data,
-            column_name=request.column_name,
-            metadata=request.column_metadata or {}
-        )
-
-        # Generate enhanced explanation
-        enhanced_explanation = explanation_engine.generate_enhanced_explanation(
-            preprocessing_result=result,
-            column_stats=result.context or {}
-        )
-
-        elapsed_ms = (time.time() - start_time) * 1000
-
-        logger.info(f"Enhanced explanation generated in {elapsed_ms:.1f}ms")
-
-        return {
-            "success": True,
-            "decision": {
-                "action": result.action.value,
-                "confidence": result.confidence,
-                "source": result.source
-            },
-            "enhanced_explanation": enhanced_explanation.to_dict(),
-            "markdown_report": enhanced_explanation.to_markdown(),
-            "plain_text_summary": enhanced_explanation.to_plain_text(),
-            "processing_time_ms": elapsed_ms
-        }
-
-    except Exception as e:
-        logger.error(f"Error generating enhanced explanation: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate enhanced explanation: {str(e)}"
-        )
-
-
-@app.post("/explain/counterfactual")
-async def analyze_counterfactual(
-    request: Dict[str, Any]
-):
-    """
-    Analyze "what if" scenarios for preprocessing decisions.
-
-    Examples:
-    - "What if I used robust_scale instead of standard_scale?"
-    - "What if the data had more outliers?"
-    - "What if skewness was 3.0 instead of 1.5?"
-
-    Request body:
-    {
-        "column_data": [...],
-        "column_name": "...",
-        "scenario_type": "alternative_action" or "data_change",
-        "alternative_action": "log_transform"  (for alternative_action scenarios),
-        "data_change_description": "skewness increased to 3.0"  (for data_change scenarios),
-        "modified_stats": {...}  (for data_change scenarios)
-    }
-    """
-    try:
-        # Get current decision
-        preprocessor = get_preprocessor()
-        current_result = preprocessor.preprocess_column(
-            column=request.get("column_data", []),
-            column_name=request.get("column_name", "column"),
-            metadata={}
-        )
-
-        scenario_type = request.get("scenario_type", "alternative_action")
-
-        if scenario_type == "alternative_action":
-            # Simulate using a different action
-            alt_action_str = request.get("alternative_action")
-            try:
-                from ..core.actions import PreprocessingAction
-                alternative_action = PreprocessingAction(alt_action_str)
-            except ValueError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid alternative action: {alt_action_str}"
-                )
-
-            scenario = counterfactual_analyzer.simulate_alternative_action(
-                current_action=current_result.action,
-                alternative_action=alternative_action,
-                column_stats=current_result.context or {}
-            )
-
-        elif scenario_type == "data_change":
-            # Simulate data characteristics changing
-            data_change_desc = request.get("data_change_description", "data changed")
-            modified_stats = request.get("modified_stats", {})
-
-            scenario = counterfactual_analyzer.simulate_data_change(
-                current_action=current_result.action,
-                current_stats=current_result.context or {},
-                data_change_description=data_change_desc,
-                modified_stats=modified_stats
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid scenario_type: {scenario_type}. Use 'alternative_action' or 'data_change'"
-            )
-
-        return {
-            "success": True,
-            "current_decision": {
-                "action": current_result.action.value,
-                "confidence": current_result.confidence
-            },
-            "counterfactual_scenario": {
-                "description": scenario.scenario_description,
-                "alternative_action": scenario.alternative_action.value,
-                "predicted_confidence": scenario.predicted_confidence,
-                "expected_outcomes": scenario.expected_outcomes,
-                "trade_offs": scenario.trade_offs,
-                "recommendation": scenario.recommendation
-            }
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error analyzing counterfactual: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to analyze counterfactual: {str(e)}"
-        )
-
-
-@app.post("/explain/sensitivity")
-async def analyze_sensitivity(request: PreprocessRequest):
-    """
-    Analyze how sensitive the preprocessing decision is to changes in statistics.
-
-    Shows:
-    - How decision changes as skewness varies
-    - How decision changes as outlier percentage varies
-    - How decision changes as null percentage varies
-    - How decision changes as cardinality varies (for categorical)
-
-    This helps understand the robustness and boundaries of the decision.
-    """
-    try:
-        # Get current decision
-        preprocessor = get_preprocessor()
-        result = preprocessor.preprocess_column(
-            column=request.column_data,
-            column_name=request.column_name,
-            metadata=request.column_metadata or {}
-        )
-
-        # Generate sensitivity analysis
-        sensitivity = counterfactual_analyzer.generate_sensitivity_analysis(
-            action=result.action,
-            column_stats=result.context or {}
-        )
-
-        # Format for response
-        formatted_sensitivity = {}
-        for stat_name, values in sensitivity.items():
-            formatted_sensitivity[stat_name] = [
-                {"condition": cond, "predicted_action": action}
-                for cond, action in values
-            ]
-
-        return {
-            "success": True,
-            "current_decision": {
-                "action": result.action.value,
-                "confidence": result.confidence
-            },
-            "sensitivity_analysis": formatted_sensitivity,
-            "interpretation": {
-                "stable_ranges": [
-                    f"{stat}: {len(set(action for _, action in values))} different actions across range"
-                    for stat, values in sensitivity.items()
-                ],
-                "most_sensitive_to": max(
-                    sensitivity.items(),
-                    key=lambda x: len(set(action for _, action in x[1]))
-                )[0] if sensitivity else "none"
-            }
-        }
-
-    except Exception as e:
-        logger.error(f"Error analyzing sensitivity: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to analyze sensitivity: {str(e)}"
-        )
-
-
-@app.get("/explain/demo")
-async def get_explanation_demo():
-    """
-    Get a demo showcasing the enhanced explanation capabilities.
-
-    Returns a pre-generated example with rich explanations for a log transform decision.
-    """
-    try:
-        # Create demo data: highly skewed revenue data
-        demo_data = [10, 15, 20, 50, 100, 500, 1000, 5000, 10000, 50000]
-
-        preprocessor = get_preprocessor()
-        result = preprocessor.preprocess_column(
-            column=demo_data,
-            column_name="revenue",
-            metadata={"dtype": "numeric"}
-        )
-
-        # Generate enhanced explanation
-        enhanced = explanation_engine.generate_enhanced_explanation(
-            preprocessing_result=result,
-            column_stats=result.context or {}
-        )
-
-        # Generate comparison with alternative
-        from ..core.actions import PreprocessingAction
-        comparison = explanation_engine.explain_decision_comparison(
-            chosen_explanation=enhanced,
-            alternative_action=PreprocessingAction.STANDARD_SCALE,
-            alternative_stats=result.context or {}
-        )
-
-        return {
-            "success": True,
-            "demo_data": demo_data,
-            "decision": {
-                "action": result.action.value,
-                "confidence": result.confidence
-            },
-            "enhanced_explanation": enhanced.to_dict(),
-            "markdown_report": enhanced.to_markdown(),
-            "comparison_with_alternative": comparison,
-            "demo_notes": (
-                "This demo shows AURORA's world-class explainability. "
-                "The explanation includes scientific justification, detailed alternatives, "
-                "impact predictions, risks, best practices, and 'what-if' scenarios. "
-                "This level of detail is unprecedented in preprocessing automation."
-            )
-        }
-
-    except Exception as e:
-        logger.error(f"Error generating demo: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate demo: {str(e)}"
-        )
-
-
-# =============================================================================
-# VALIDATION & METRICS ENDPOINTS (NEW!)
+# VALIDATION & METRICS ENDPOINTS
 # =============================================================================
 
 from ..validation.metrics_tracker import get_metrics_tracker
-from ..validation.feedback_collector import get_feedback_collector
-from ..validation.validation_dashboard import ValidationDashboard
-from ..validation.benchmarking import BenchmarkRunner
 
 # Initialize validation components
 metrics_tracker = get_metrics_tracker()
-feedback_collector = get_feedback_collector()
-validation_dashboard = ValidationDashboard()
 
-
-@app.get("/validation/dashboard")
-async def get_validation_dashboard():
-    """
-    Get comprehensive validation dashboard with all metrics.
-
-    Returns:
-    - Performance metrics (time saved, accuracy, etc.)
-    - User feedback summary
-    - Testimonials
-    - Proof points
-    - Key statistics
-    """
-    try:
-        dashboard = validation_dashboard.get_complete_dashboard()
-        return {
-            "success": True,
-            "dashboard": dashboard
-        }
-    except Exception as e:
-        logger.error(f"Error generating validation dashboard: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate dashboard: {str(e)}"
-        )
 
 
 @app.get("/validation/metrics")
@@ -2137,132 +1653,8 @@ async def get_performance_metrics():
         )
 
 
-@app.post("/validation/feedback")
-async def submit_feedback(
-    user_id: str,
-    overall_rating: int,
-    would_recommend: bool,
-    learned_something: bool,
-    time_saved_perception: str,
-    ease_of_use: int,
-    explanation_quality: int,
-    confidence_in_decisions: int,
-    what_worked_well: str = "",
-    what_needs_improvement: str = "",
-    use_case: str = "",
-    willing_to_be_quoted: bool = False,
-    testimonial: Optional[str] = None
-):
-    """
-    Submit user feedback.
-
-    This helps us prove AURORA's value with real user data.
-    """
-    try:
-        feedback = feedback_collector.collect_feedback(
-            user_id=user_id,
-            overall_rating=overall_rating,
-            would_recommend=would_recommend,
-            learned_something=learned_something,
-            time_saved_perception=time_saved_perception,
-            ease_of_use=ease_of_use,
-            explanation_quality=explanation_quality,
-            confidence_in_decisions=confidence_in_decisions,
-            what_worked_well=what_worked_well,
-            what_needs_improvement=what_needs_improvement,
-            use_case=use_case,
-            willing_to_be_quoted=willing_to_be_quoted,
-            testimonial=testimonial
-        )
-
-        return {
-            "success": True,
-            "message": "Thank you for your feedback!",
-            "feedback_id": feedback.feedback_id
-        }
-
-    except Exception as e:
-        logger.error(f"Error submitting feedback: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to submit feedback: {str(e)}"
-        )
 
 
-@app.get("/validation/testimonials")
-async def get_testimonials(limit: int = 5):
-    """Get user testimonials."""
-    try:
-        testimonials = feedback_collector.get_testimonials(limit=limit)
-        return {
-            "success": True,
-            "testimonials": testimonials,
-            "count": len(testimonials)
-        }
-    except Exception as e:
-        logger.error(f"Error getting testimonials: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get testimonials: {str(e)}"
-        )
-
-
-@app.get("/validation/proof-points")
-async def get_proof_points():
-    """
-    Get proof points for showcasing AURORA's value.
-
-    Perfect for landing pages, presentations, papers.
-    """
-    try:
-        dashboard = validation_dashboard.get_complete_dashboard()
-
-        return {
-            "success": True,
-            "proof_points": dashboard["proof_points"],
-            "key_stats": dashboard["key_stats"],
-            "summary": {
-                "total_decisions": dashboard["overview"]["total_decisions"],
-                "total_users": dashboard["overview"]["total_users"],
-                "time_saved_hours": dashboard["overview"]["time_saved_hours"],
-                "recommendation_rate": dashboard["user_satisfaction"]["recommendation_rate"],
-            }
-        }
-
-    except Exception as e:
-        logger.error(f"Error getting proof points: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get proof points: {str(e)}"
-        )
-
-
-@app.get("/validation/export")
-async def export_validation_report():
-    """
-    Export complete validation report in markdown format.
-
-    Use this for:
-    - Research papers
-    - Documentation
-    - Presentations
-    - GitHub README
-    """
-    try:
-        report = validation_dashboard.get_metrics_for_export()
-
-        return {
-            "success": True,
-            "markdown": report,
-            "download_filename": "aurora_validation_report.md"
-        }
-
-    except Exception as e:
-        logger.error(f"Error exporting report: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to export report: {str(e)}"
-        )
 
 
 @app.post("/validation/track-decision")

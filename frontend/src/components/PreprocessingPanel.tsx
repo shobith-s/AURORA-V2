@@ -3,6 +3,7 @@ import { Upload, Play, Download, CheckCircle, AlertCircle, Info, FileSpreadsheet
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import ResultCard from './ResultCard';
+import ExplanationModal from './ExplanationModal';
 
 interface ColumnHealthMetrics {
   column_name: string;
@@ -54,6 +55,9 @@ export default function PreprocessingPanel() {
   const [result, setResult] = useState<any>(null);
   const [batchResults, setBatchResults] = useState<BatchResults | null>(null);
   const [showCorrectionFor, setShowCorrectionFor] = useState<string | null>(null);
+  const [showExplanationFor, setShowExplanationFor] = useState<string | null>(null);
+  const [explanationColumnName, setExplanationColumnName] = useState<string | null>(null);
+  const [explanationColumnData, setExplanationColumnData] = useState<any>(null);
   const [correctActions, setCorrectActions] = useState<Record<string, string>>({});
   const [isSubmittingCorrection, setIsSubmittingCorrection] = useState<Record<string, boolean>>({});
   const [expandedHealthColumn, setExpandedHealthColumn] = useState<string | null>(null);
@@ -303,11 +307,10 @@ export default function PreprocessingPanel() {
         <div className="flex gap-4">
           <button
             onClick={() => setMode('single')}
-            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${
-              mode === 'single'
-                ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-                : 'bg-white/50 text-slate-600 hover:bg-white/80'
-            }`}
+            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${mode === 'single'
+              ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+              : 'bg-white/50 text-slate-600 hover:bg-white/80'
+              }`}
           >
             <div className="flex items-center justify-center gap-2">
               <Play className="w-5 h-5" />
@@ -316,11 +319,10 @@ export default function PreprocessingPanel() {
           </button>
           <button
             onClick={() => setMode('file')}
-            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${
-              mode === 'file'
-                ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-                : 'bg-white/50 text-slate-600 hover:bg-white/80'
-            }`}
+            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${mode === 'file'
+              ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+              : 'bg-white/50 text-slate-600 hover:bg-white/80'
+              }`}
           >
             <div className="flex items-center justify-center gap-2">
               <FileSpreadsheet className="w-5 h-5" />
@@ -533,147 +535,11 @@ export default function PreprocessingPanel() {
             </div>
           </div>
 
-          {/* Intelligent 3-Panel Layout: Architecture + Health + Recommendations */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            {/* PANEL 1: System Architecture (40% on XL screens) */}
-            <div className="xl:col-span-1 glass-card overflow-hidden">
-              <button
-                onClick={() => togglePanel('architecture')}
-                className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
-              >
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-3">
-                    <Layers className="w-6 h-6 text-blue-600" />
-                    <h3 className="text-base font-bold text-slate-800">Architecture</h3>
-                  </div>
-                  <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium w-fit">
-                    V3: 4-Layer Architecture
-                  </span>
-                </div>
-                {expandedPanels.architecture ? (
-                  <ChevronDown className="w-5 h-5 text-slate-600 flex-shrink-0" />
-                ) : (
-                  <ChevronRight className="w-5 h-5 text-slate-600 flex-shrink-0" />
-                )}
-              </button>
-
-            {expandedPanels.architecture && (
-              <div className="px-4 pb-4 border-t border-slate-200">
-                <div className="mt-4 space-y-2">
-                  {/* Layer 0: Cache */}
-                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-green-50 to-green-100 rounded-lg border border-green-200">
-                    <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Zap className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-slate-800 text-sm">L0: Cache</h4>
-                        <span className="text-lg font-bold text-green-600">
-                          {sourceBreakdown?.cache || 0}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600">
-                        &lt;0.1ms, 3-tier matching
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Layer 1: Symbolic Engine (ONLY DECISION-MAKER) */}
-                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border-2 border-blue-400 shadow-md">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Target className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-semibold text-slate-800 text-sm">L1: Symbolic Engine</h4>
-                          <span className="px-1.5 py-0.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-[10px] rounded font-bold uppercase">
-                            ONLY DECIDER
-                          </span>
-                        </div>
-                        <span className="text-lg font-bold text-blue-600">
-                          {sourceBreakdown?.symbolic || 0}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600 font-medium">185+ rules (base + learned), 90-99% confidence</p>
-                      <div className="flex items-center gap-1 mt-1">
-                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                        <p className="text-[10px] text-blue-600 font-medium">
-                          Learner creates new rules (not decisions!)
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Layer 2: Meta-Learning */}
-                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-orange-50 to-orange-100 rounded-lg border border-orange-200">
-                    <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Brain className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-slate-800 text-sm">L2: Meta-Learning</h4>
-                        <span className="text-lg font-bold text-orange-600">
-                          {sourceBreakdown?.meta_learning || 0}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600">Universal coverage, edge cases</p>
-                    </div>
-                  </div>
-
-                  {/* Layer 3: Neural Oracle */}
-                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-pink-50 to-pink-100 rounded-lg border border-pink-200">
-                    <div className="w-10 h-10 bg-pink-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Brain className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-slate-800 text-sm">L3: Neural Oracle</h4>
-                        <span className="text-lg font-bold text-pink-600">
-                          {sourceBreakdown?.neural || 0}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600">ML predictions for ambiguous cases</p>
-                    </div>
-                  </div>
-
-                  {/* Layer 4: Conservative Fallback */}
-                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-slate-50 to-slate-100 rounded-lg border border-slate-300">
-                    <div className="w-10 h-10 bg-slate-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Shield className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-slate-800 text-sm">L4: Safety Net</h4>
-                        <span className="text-lg font-bold text-slate-600">
-                          {sourceBreakdown?.conservative_fallback || 0}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600">100% coverage guarantee</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                    <p className="text-xs font-bold text-slate-800 uppercase">V3 Architecture</p>
-                  </div>
-                  <p className="text-xs text-slate-700">
-                    <strong>Key Innovation:</strong> Learner creates symbolic rules (not decisions).
-                    After 10 corrections, new rules are injected into L1 Symbolic Engine.
-                  </p>
-                  <p className="text-xs text-blue-700 font-medium mt-2">
-                    ✓ 95-99% autonomous coverage • ✓ Zero overgeneralization • ✓ All decisions traceable
-                  </p>
-                </div>
-              </div>
-            )}
-            </div>
-
+          {/* Intelligent 2-Panel Layout: Health + Recommendations */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
             {/* PANEL 2: Data Health (30% on XL screens) */}
             {batchResults.health && (
-              <div className="xl:col-span-1 glass-card overflow-hidden">
+              <div className="xl:col-span-1 glass-card overflow-hidden flex flex-col">
                 <button
                   onClick={() => togglePanel('dataHealth')}
                   className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
@@ -683,11 +549,10 @@ export default function PreprocessingPanel() {
                       <Activity className="w-6 h-6 text-blue-600" />
                       <h3 className="text-base font-bold text-slate-800">Health</h3>
                     </div>
-                    <span className={`px-2 py-1 text-xs rounded-full font-medium w-fit ${
-                      batchResults.health.overall_health_score >= 80 ? 'bg-green-100 text-green-700' :
+                    <span className={`px-2 py-1 text-xs rounded-full font-medium w-fit ${batchResults.health.overall_health_score >= 80 ? 'bg-green-100 text-green-700' :
                       batchResults.health.overall_health_score >= 50 ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
+                        'bg-red-100 text-red-700'
+                      }`}>
                       {batchResults.health.overall_health_score.toFixed(0)}/100
                     </span>
                   </div>
@@ -698,90 +563,87 @@ export default function PreprocessingPanel() {
                   )}
                 </button>
 
-              {expandedPanels.dataHealth && (
-                <div className="px-4 pb-4 border-t border-slate-200">
-                  {/* Overall Health Score - Compact */}
-                  <div className="mt-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-100">
-                    <p className="text-xs text-slate-600 mb-2">Dataset Health</p>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="text-3xl font-bold" style={{
-                        color: batchResults.health.overall_health_score >= 80 ? '#10b981' :
-                               batchResults.health.overall_health_score >= 50 ? '#f59e0b' : '#ef4444'
-                      }}>
-                        {batchResults.health.overall_health_score.toFixed(0)}
+                {expandedPanels.dataHealth && (
+                  <div className="px-4 pb-4 border-t border-slate-200 flex-1">
+                    {/* Overall Health Score - Compact */}
+                    <div className="mt-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-100">
+                      <p className="text-xs text-slate-600 mb-2">Dataset Health</p>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="text-3xl font-bold" style={{
+                          color: batchResults.health.overall_health_score >= 80 ? '#10b981' :
+                            batchResults.health.overall_health_score >= 50 ? '#f59e0b' : '#ef4444'
+                        }}>
+                          {batchResults.health.overall_health_score.toFixed(0)}
+                        </div>
+                        <div className="text-lg text-slate-400">/100</div>
                       </div>
-                      <div className="text-lg text-slate-400">/100</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="text-center p-2 bg-white rounded-lg shadow-sm">
+                          <div className="text-lg font-bold text-green-600">{batchResults.health.healthy_columns}</div>
+                          <div className="text-xs text-slate-600">OK</div>
+                        </div>
+                        <div className="text-center p-2 bg-white rounded-lg shadow-sm">
+                          <div className="text-lg font-bold text-yellow-600">{batchResults.health.warning_columns}</div>
+                          <div className="text-xs text-slate-600">Warn</div>
+                        </div>
+                        <div className="text-center p-2 bg-white rounded-lg shadow-sm">
+                          <div className="text-lg font-bold text-red-600">{batchResults.health.critical_columns}</div>
+                          <div className="text-xs text-slate-600">Crit</div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="text-center p-2 bg-white rounded-lg shadow-sm">
-                        <div className="text-lg font-bold text-green-600">{batchResults.health.healthy_columns}</div>
-                        <div className="text-xs text-slate-600">OK</div>
-                      </div>
-                      <div className="text-center p-2 bg-white rounded-lg shadow-sm">
-                        <div className="text-lg font-bold text-yellow-600">{batchResults.health.warning_columns}</div>
-                        <div className="text-xs text-slate-600">Warn</div>
-                      </div>
-                      <div className="text-center p-2 bg-white rounded-lg shadow-sm">
-                        <div className="text-lg font-bold text-red-600">{batchResults.health.critical_columns}</div>
-                        <div className="text-xs text-slate-600">Crit</div>
-                      </div>
-                    </div>
-                  </div>
 
-                  {/* Column Health Details - Compact */}
-                  <div className="mt-4 space-y-2">
-                    <h4 className="text-xs font-semibold text-slate-700">Columns</h4>
-                    {Object.values(batchResults.health.column_health).map((health: ColumnHealthMetrics) => (
-                      <div key={health.column_name} className={`border rounded-lg p-2 transition-all ${
-                        health.severity === 'healthy' ? 'border-green-200 bg-green-50/30' :
-                        health.severity === 'warning' ? 'border-yellow-200 bg-yellow-50/30' :
-                        'border-red-200 bg-red-50/30'
-                      }`}>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            {health.severity === 'healthy' && <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />}
-                            {health.severity === 'warning' && <AlertCircle className="w-4 h-4 text-yellow-600 flex-shrink-0" />}
-                            {health.severity === 'critical' && <X className="w-4 h-4 text-red-600 flex-shrink-0" />}
-                            <div className="flex-1 min-w-0">
-                              <h5 className="font-semibold text-slate-800 text-xs truncate">{health.column_name}</h5>
-                              <span className="text-xs text-slate-500">{health.data_type}</span>
+                    {/* Column Health Details - Compact */}
+                    <div className="mt-4 space-y-2 max-h-[600px] overflow-y-auto pr-2">
+                      <h4 className="text-xs font-semibold text-slate-700">Columns</h4>
+                      {Object.values(batchResults.health.column_health).map((health: ColumnHealthMetrics) => (
+                        <div key={health.column_name} className={`border rounded-lg p-2 transition-all ${health.severity === 'healthy' ? 'border-green-200 bg-green-50/30' :
+                          health.severity === 'warning' ? 'border-yellow-200 bg-yellow-50/30' :
+                            'border-red-200 bg-red-50/30'
+                          }`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              {health.severity === 'healthy' && <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />}
+                              {health.severity === 'warning' && <AlertCircle className="w-4 h-4 text-yellow-600 flex-shrink-0" />}
+                              {health.severity === 'critical' && <X className="w-4 h-4 text-red-600 flex-shrink-0" />}
+                              <div className="flex-1 min-w-0">
+                                <h5 className="font-semibold text-slate-800 text-xs truncate">{health.column_name}</h5>
+                                <span className="text-xs text-slate-500">{health.data_type}</span>
+                              </div>
+                            </div>
+                            <div className={`text-lg font-bold ${health.severity === 'healthy' ? 'text-green-600' :
+                              health.severity === 'warning' ? 'text-yellow-600' :
+                                'text-red-600'
+                              }`}>
+                              {health.health_score.toFixed(0)}
                             </div>
                           </div>
-                          <div className={`text-lg font-bold ${
-                            health.severity === 'healthy' ? 'text-green-600' :
-                            health.severity === 'warning' ? 'text-yellow-600' :
-                            'text-red-600'
-                          }`}>
-                            {health.health_score.toFixed(0)}
-                          </div>
+                          {health.anomalies.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {health.anomalies.slice(0, 2).map((anomaly, idx) => (
+                                <span key={idx} className={`text-xs px-1 py-0.5 rounded ${health.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                                  health.severity === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-blue-100 text-blue-700'
+                                  }`}>
+                                  {anomaly}
+                                </span>
+                              ))}
+                              {health.anomalies.length > 2 && (
+                                <span className="text-xs text-slate-500">+{health.anomalies.length - 2}</span>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        {health.anomalies.length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {health.anomalies.slice(0, 2).map((anomaly, idx) => (
-                              <span key={idx} className={`text-xs px-1 py-0.5 rounded ${
-                                health.severity === 'critical' ? 'bg-red-100 text-red-700' :
-                                health.severity === 'warning' ? 'bg-yellow-100 text-yellow-700' :
-                                'bg-blue-100 text-blue-700'
-                              }`}>
-                                {anomaly}
-                              </span>
-                            ))}
-                            {health.anomalies.length > 2 && (
-                              <span className="text-xs text-slate-500">+{health.anomalies.length - 2}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
               </div>
             )}
 
             {/* PANEL 3: Column Recommendations (30% on XL screens) */}
             {Object.keys(batchResults.results).length > 0 && (
-              <div className="xl:col-span-1 glass-card overflow-hidden">
+              <div className="xl:col-span-1 glass-card overflow-hidden flex flex-col">
                 <button
                   onClick={() => togglePanel('recommendations')}
                   className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
@@ -802,104 +664,115 @@ export default function PreprocessingPanel() {
                   )}
                 </button>
 
-              {expandedPanels.recommendations && (
-                <div className="px-4 pb-4 border-t border-slate-200">
-                  <div className="mt-4 space-y-2">
-                    {Object.entries(batchResults.results).map(([columnName, columnResult]) => (
-                    <div key={columnName} className="border border-slate-200 rounded-lg p-2 bg-white/50">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <h4 className="font-semibold text-slate-800 text-xs truncate flex-1 min-w-0">{columnName}</h4>
-                        <div className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
-                          columnResult.confidence >= 0.9
-                            ? 'bg-green-100 text-green-700'
-                            : columnResult.confidence >= 0.7
-                            ? 'bg-yellow-100 text-yellow-700'
-                            : 'bg-red-100 text-red-700'
-                        }`}>
-                          {(columnResult.confidence * 100).toFixed(0)}%
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-1 mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-600">Action:</span>
-                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                            {columnResult.action}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-600">Source:</span>
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            columnResult.source === 'user_override'
+                {expandedPanels.recommendations && (
+                  <div className="px-4 pb-4 border-t border-slate-200 flex-1">
+                    <div className="mt-4 space-y-2 max-h-[600px] overflow-y-auto pr-2">
+                      {Object.entries(batchResults.results).map(([columnName, columnResult]) => (
+                        <div key={columnName} className="border border-slate-200 rounded-lg p-2 bg-white/50">
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <h4 className="font-semibold text-slate-800 text-xs truncate flex-1 min-w-0">{columnName}</h4>
+                            <div className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${columnResult.confidence >= 0.9
                               ? 'bg-green-100 text-green-700'
-                              : columnResult.source === 'meta_learning'
-                              ? 'bg-orange-100 text-orange-700'
-                              : columnResult.source === 'conservative_fallback'
-                              ? 'bg-slate-100 text-slate-700'
-                              : 'bg-purple-100 text-purple-700'
-                          }`}>
-                            {columnResult.source}
-                          </span>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => setShowCorrectionFor(showCorrectionFor === columnName ? null : columnName)}
-                        className="w-full flex items-center justify-center gap-1 px-2 py-1 bg-white hover:bg-blue-50 text-blue-600 rounded text-xs font-medium border border-blue-200 transition"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                        Override
-                      </button>
-
-                      {/* Override Form */}
-                      {showCorrectionFor === columnName && (
-                        <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mt-3">
-                          <div className="flex items-start gap-2 mb-2">
-                            <Edit2 className="w-4 h-4 text-blue-600 mt-0.5" />
-                            <div className="flex-1">
-                              <p className="text-xs font-semibold text-blue-800">Override Recommendation</p>
-                              <p className="text-xs text-blue-600 mt-0.5">
-                                Select the correct action for "{columnName}"
-                              </p>
+                              : columnResult.confidence >= 0.7
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-red-100 text-red-700'
+                              }`}>
+                              {(columnResult.confidence * 100).toFixed(0)}%
                             </div>
                           </div>
-                          <div className="flex gap-2">
-                            <select
-                              value={correctActions[columnName] || ''}
-                              onChange={(e) => setCorrectActions(prev => ({ ...prev, [columnName]: e.target.value }))}
-                              className="flex-1 px-2 py-1.5 rounded-lg border border-blue-300 text-xs bg-white"
-                            >
-                              <option value="">-- Select Action --</option>
-                              <option value="keep_as_is">Keep (No preprocessing)</option>
-                              <option value="standard_scale">Standard Scale</option>
-                              <option value="minmax_scale">Min-Max Scale</option>
-                              <option value="robust_scale">Robust Scale</option>
-                              <option value="log_transform">Log Transform</option>
-                              <option value="box_cox">Box-Cox Transform</option>
-                              <option value="yeo_johnson">Yeo-Johnson Transform</option>
-                              <option value="onehot_encode">One-Hot Encode</option>
-                              <option value="label_encode">Label Encode</option>
-                              <option value="target_encode">Target Encode</option>
-                              <option value="fill_null_mean">Fill Nulls (Mean)</option>
-                              <option value="fill_null_median">Fill Nulls (Median)</option>
-                              <option value="fill_null_mode">Fill Nulls (Mode)</option>
-                              <option value="drop_column">Drop Column</option>
-                            </select>
+
+                          <div className="flex flex-col gap-1 mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-600">Action:</span>
+                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                {columnResult.action}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-600">Source:</span>
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${columnResult.source === 'user_override'
+                                ? 'bg-green-100 text-green-700'
+                                : columnResult.source === 'meta_learning'
+                                  ? 'bg-orange-100 text-orange-700'
+                                  : columnResult.source === 'conservative_fallback'
+                                    ? 'bg-slate-100 text-slate-700'
+                                    : 'bg-purple-100 text-purple-700'
+                                }`}>
+                                {columnResult.source}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2 mb-2">
                             <button
-                              onClick={() => handleBatchCorrection(columnName, columnResult.action, columnResult.confidence)}
-                              disabled={isSubmittingCorrection[columnName] || !correctActions[columnName]}
-                              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                              onClick={() => {
+                                setShowExplanationFor(columnName);
+                                setExplanationColumnName(columnName);
+                                setExplanationColumnData(originalData?.[columnName] || []);
+                              }}
+                              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-white hover:bg-purple-50 text-purple-600 rounded text-xs font-medium border border-purple-200 transition"
                             >
-                              {isSubmittingCorrection[columnName] ? 'Submitting...' : 'Apply'}
+                              <BookOpen className="w-3 h-3" />
+                              Explain
+                            </button>
+                            <button
+                              onClick={() => setShowCorrectionFor(showCorrectionFor === columnName ? null : columnName)}
+                              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-white hover:bg-blue-50 text-blue-600 rounded text-xs font-medium border border-blue-200 transition"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              Override
                             </button>
                           </div>
+
+                          {/* Override Form */}
+                          {showCorrectionFor === columnName && (
+                            <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mt-3">
+                              <div className="flex items-start gap-2 mb-2">
+                                <Edit2 className="w-4 h-4 text-blue-600 mt-0.5" />
+                                <div className="flex-1">
+                                  <p className="text-xs font-semibold text-blue-800">Override Recommendation</p>
+                                  <p className="text-xs text-blue-600 mt-0.5">
+                                    Select the correct action for "{columnName}"
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <select
+                                  value={correctActions[columnName] || ''}
+                                  onChange={(e) => setCorrectActions(prev => ({ ...prev, [columnName]: e.target.value }))}
+                                  className="flex-1 px-2 py-1.5 rounded-lg border border-blue-300 text-xs bg-white"
+                                >
+                                  <option value="">-- Select Action --</option>
+                                  <option value="keep_as_is">Keep (No preprocessing)</option>
+                                  <option value="standard_scale">Standard Scale</option>
+                                  <option value="minmax_scale">Min-Max Scale</option>
+                                  <option value="robust_scale">Robust Scale</option>
+                                  <option value="log_transform">Log Transform</option>
+                                  <option value="box_cox">Box-Cox Transform</option>
+                                  <option value="yeo_johnson">Yeo-Johnson Transform</option>
+                                  <option value="onehot_encode">One-Hot Encode</option>
+                                  <option value="label_encode">Label Encode</option>
+                                  <option value="target_encode">Target Encode</option>
+                                  <option value="fill_null_mean">Fill Nulls (Mean)</option>
+                                  <option value="fill_null_median">Fill Nulls (Median)</option>
+                                  <option value="fill_null_mode">Fill Nulls (Mode)</option>
+                                  <option value="drop_column">Drop Column</option>
+                                </select>
+                                <button
+                                  onClick={() => handleBatchCorrection(columnName, columnResult.action, columnResult.confidence)}
+                                  disabled={isSubmittingCorrection[columnName] || !correctActions[columnName]}
+                                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {isSubmittingCorrection[columnName] ? 'Submitting...' : 'Apply'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      ))}
                     </div>
-                    ))}
                   </div>
-                </div>
-              )}
+                )}
               </div>
             )}
           </div>
@@ -936,6 +809,20 @@ export default function PreprocessingPanel() {
           </div>
         </div>
       </div>
+
+      {/* Explanation Modal */}
+      {showExplanationFor && explanationColumnData && explanationColumnName && (
+        <ExplanationModal
+          isOpen={!!showExplanationFor}
+          onClose={() => {
+            setShowExplanationFor(null);
+            setExplanationColumnName(null);
+            setExplanationColumnData(null);
+          }}
+          columnData={explanationColumnData}
+          columnName={explanationColumnName}
+        />
+      )}
     </div>
   );
 }

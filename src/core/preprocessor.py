@@ -1,6 +1,6 @@
 """
 Main Preprocessing Pipeline - Integrates all layers.
-Symbolic Engine (with adaptive learning) -> Meta-Learning -> NeuralOracle
+Symbolic Engine (with adaptive learning) -> NeuralOracle
 """
 
 from typing import Any, Dict, List, Optional, Union
@@ -11,13 +11,12 @@ import uuid
 import time
 
 from ..symbolic.engine import SymbolicEngine
-from ..symbolic.meta_learner import get_meta_learner, MetaLearner
 from ..neural.oracle import NeuralOracle, get_neural_oracle
-from ..learning.adaptive_rules import AdaptiveSymbolicRules
 from ..features.minimal_extractor import MinimalFeatureExtractor, get_feature_extractor
-from ..features.intelligent_cache import get_cache
 from .actions import PreprocessingAction, PreprocessingResult
-from ..utils.layer_metrics import LayerMetrics
+from .actions import PreprocessingAction, PreprocessingResult
+from .explainer import get_explainer
+from ..analysis.dataset_analyzer import DatasetAnalyzer  # NEW: Inter-column analysis
 
 # Confidence thresholds for decision quality
 CONFIDENCE_HIGH = 0.9      # Auto-apply decision (highly confident)
@@ -32,8 +31,7 @@ class IntelligentPreprocessor:
     0. Cache (validated decisions) - Instant lookup
     1. Symbolic rules (185+ rules, including learned) - PRIMARY & ONLY DECISION LAYER
        └─ Dynamically enhanced: Learner creates NEW symbolic rules from corrections
-    2. Meta-learning (statistical heuristics) - Bridge layer for edge cases
-    3. NeuralOracle (ML predictions) - Ambiguous cases only
+    2. NeuralOracle (ML predictions) - Ambiguous cases only
 
     NEW Learning Architecture (V3):
     - Learner NEVER makes direct decisions (prevents overgeneralization)
@@ -51,12 +49,11 @@ class IntelligentPreprocessor:
 
     def __init__(
         self,
-        confidence_threshold: float = 0.9,
+        confidence_threshold: float = 0.75,  # CHANGED: 0.9 → 0.75 for more neural participation
         use_neural_oracle: bool = True,
         enable_learning: bool = True,
         neural_model_path: Optional[Path] = None,
-        enable_cache: bool = True,
-        enable_meta_learning: bool = True
+        db_url: Optional[str] = None  # NEW: Database URL for learning engine
     ):
         """
         Initialize the intelligent preprocessor.
@@ -67,7 +64,6 @@ class IntelligentPreprocessor:
             enable_learning: Whether to enable pattern learning
             neural_model_path: Path to neural oracle model
             enable_cache: Whether to enable intelligent caching
-            enable_meta_learning: Whether to enable meta-learning (statistical heuristics)
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -75,8 +71,7 @@ class IntelligentPreprocessor:
         self.confidence_threshold = confidence_threshold
         self.use_neural_oracle = use_neural_oracle
         self.enable_learning = enable_learning
-        self.enable_cache = enable_cache
-        self.enable_meta_learning = enable_meta_learning
+        self.db_url = db_url or "sqlite:///./aurora.db"
 
         # Initialize components with error handling
         try:
@@ -85,37 +80,31 @@ class IntelligentPreprocessor:
             logger.error(f"Failed to initialize symbolic engine: {e}")
             raise RuntimeError(f"Critical component failed: symbolic engine - {e}")
 
-        # Note: Legacy pattern learner removed in V3 - now using adaptive_rules only
+        # Adaptive Learning Engine (database-backed with validation and A/B testing)
+        self.learning_engine = None
+        if enable_learning:
+            try:
+                from ..learning.adaptive_engine import AdaptiveLearningEngine
+                self.learning_engine = AdaptiveLearningEngine(
+                    db_url=self.db_url,
+                    min_support=10,  # Require 10+ corrections per pattern
+                    similarity_threshold=0.85,
+                    validation_sample_size=20,
+                    ab_test_min_decisions=100,
+                    ab_test_success_threshold=0.80
+                )
+                
+                # Load active production rules into symbolic engine
+                active_rules = self.learning_engine.get_active_rules()
+                if active_rules:
+                    logger.info(f"Loaded {len(active_rules)} validated production rules")
+                    # TODO: Convert LearnedRule database objects to Rule objects and inject
+                    
+            except Exception as e:
+                logger.warning(f"Learning engine initialization failed, continuing without it: {e}")
+                self.learning_engine = None
+                self.enable_learning = False
 
-        # Adaptive rules (with graceful degradation)
-        try:
-            self.adaptive_rules = AdaptiveSymbolicRules(
-                min_corrections_for_adjustment=2,  # Compute adjustments after 2 corrections (TRAINING)
-                max_confidence_delta=0.20,  # Strong adjustments (20% boost/penalty)
-                min_corrections_for_production=10,  # Use adjustments in decisions after 10 corrections (PRODUCTION)
-                persistence_file=Path("data/adaptive_rules.json")
-            ) if enable_learning else None
-
-            # CRITICAL: Inject learned rules into symbolic engine
-            # This is the KEY architectural change: learner creates rules, doesn't make decisions
-            if self.adaptive_rules:
-                learned_rules = self.adaptive_rules.get_all_learned_rules()
-                for rule in learned_rules:
-                    self.symbolic_engine.add_rule(rule)
-                if learned_rules:
-                    logger.info(f"Injected {len(learned_rules)} learned rules into symbolic engine")
-
-        except Exception as e:
-            logger.warning(f"Adaptive rules initialization failed, continuing without it: {e}")
-            self.adaptive_rules = None
-            self.enable_learning = False  # Disable learning if adaptive rules fail
-
-        # Meta learner
-        try:
-            self.meta_learner = get_meta_learner() if enable_meta_learning else None
-        except Exception as e:
-            logger.warning(f"Meta learner initialization failed, continuing without it: {e}")
-            self.meta_learner = None
 
         # Feature extractor (required for neural oracle)
         try:
@@ -125,35 +114,17 @@ class IntelligentPreprocessor:
             self.feature_extractor = None
             self.use_neural_oracle = False  # Disable neural oracle if feature extractor fails
 
-        # Cache
-        try:
-            self.cache = get_cache() if enable_cache else None
-        except Exception as e:
-            logger.warning(f"Cache initialization failed, continuing without it: {e}")
-            self.cache = None
-
         # Initialize neural oracle (lazy loading)
         self._neural_oracle: Optional[NeuralOracle] = None
         self.neural_model_path = neural_model_path
-
-        # Initialize layer metrics tracker
-        try:
-            self.layer_metrics = LayerMetrics(
-                persistence_file=Path("data/layer_metrics.json")
-            )
-        except Exception as e:
-            logger.warning(f"Layer metrics initialization failed, continuing without it: {e}")
-            self.layer_metrics = None
 
         # Statistics
         self.stats = {
             'total_decisions': 0,
             'learned_decisions': 0,
             'symbolic_decisions': 0,
-            'meta_learning_decisions': 0,
             'neural_decisions': 0,
             'high_confidence_decisions': 0,
-            'cache_hits': 0,
             'total_time_ms': 0.0
         }
 
@@ -183,7 +154,8 @@ class IntelligentPreprocessor:
         column: Union[pd.Series, List, np.ndarray],
         column_name: str = "",
         target_available: bool = False,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        context: str = "general"
     ) -> PreprocessingResult:
         """
         Preprocess a single column using the three-layer architecture.
@@ -205,91 +177,42 @@ class IntelligentPreprocessor:
         elif not isinstance(column, pd.Series):
             raise TypeError(f"Column must be pd.Series, list, or np.ndarray, got {type(column)}")
 
+        # CRITICAL FIX: Infer numeric types from object dtype (handles JSON data)
+        # When data comes from frontend as JSON, pandas treats everything as object dtype
+        # We need to attempt numeric conversion to get proper type detection
+        if column.dtype == 'object' or column.dtype == 'O':
+            try:
+                # Try to convert to numeric
+                numeric_column = pd.to_numeric(column, errors='coerce')
+                # If most values successfully converted (>50%), use numeric version
+                conversion_rate = numeric_column.notna().sum() / len(column) if len(column) > 0 else 0
+                if conversion_rate > 0.5:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.info(f"Type inference: '{column_name}' converted from object to numeric (success rate: {conversion_rate:.2%})")
+                    column = numeric_column
+                    # Update the series name to maintain consistency
+                    column.name = column_name
+            except Exception as e:
+                # If conversion fails completely, keep as object dtype
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Type inference failed for '{column_name}': {e}")
+
         # Update statistics
         self.stats['total_decisions'] += 1
 
         # Generate decision ID
         decision_id = str(uuid.uuid4())
 
-        # LAYER 0: Check intelligent cache (ultra-fast - <0.1ms for L1 hits)
-        # NOTE: Cache confidence reduced and validated to prevent overconfident incorrect decisions
-        if self.enable_cache and self.cache:
-            # Compute stats for cache lookup
-            stats = self.symbolic_engine.compute_column_statistics(
-                column, column_name, target_available
-            )
-            stats_dict = stats.to_dict()
-
-            # Check cache
-            cached_decision, cache_level = self.cache.get(stats_dict, column_name)
-            if cached_decision:
-                self.stats['cache_hits'] += 1
-
-                elapsed_ms = (time.time() - start_time) * 1000
-                self.stats['total_time_ms'] += elapsed_ms
-
-                # Get validation-adjusted confidence
-                validation_adj = self.cache.get_validation_confidence(stats_dict)
-
-                # Base confidence depends on cache level
-                if cache_level == 'l1':
-                    base_confidence = 0.85  # Exact match - high but not overconfident
-                elif cache_level == 'l2':
-                    base_confidence = 0.75  # Similar (98% cosine) - moderate confidence
-                else:  # l3
-                    base_confidence = 0.65  # Pattern match - lower confidence
-
-                # Apply validation adjustment
-                final_confidence = max(0.4, min(0.95, base_confidence + validation_adj))
-
-                # Only count as high confidence if >= threshold
-                if final_confidence >= self.confidence_threshold:
-                    self.stats['high_confidence_decisions'] += 1
-
-                result = PreprocessingResult(
-                    action=cached_decision,
-                    confidence=final_confidence,
-                    source='learned',
-                    explanation=f"Cached decision from {cache_level} (validated: {validation_adj:+.2f} confidence adjustment)",
-                    alternatives=[],
-                    parameters={},
-                    context=stats_dict,
-                    decision_id=decision_id
-                )
-                return self._add_confidence_warnings(result)
-
         # LAYER 1: Symbolic engine (THE ONLY DECISION-MAKER)
-        # Note: Symbolic engine now includes dynamically learned rules injected during correction
-        # This ensures learner NEVER makes independent decisions - it only enhances symbolic engine
+        # Note: Symbolic engine now includes validated production rules from learning engine
+        # NEW: Pass metadata as context to symbolic engine
         symbolic_result = self.symbolic_engine.evaluate(
-            column, column_name, target_available
+            column, column_name, target_available, context=metadata
         )
 
-        # Optional: Apply confidence adjustments from adaptive learning (legacy behavior)
-        # This is kept for smooth transition but learned rules are the primary mechanism
-        original_confidence = symbolic_result.confidence
-        if self.enable_learning and self.adaptive_rules and symbolic_result.context:
-            # Check if this pattern has learned rules
-            is_production_ready = self.adaptive_rules.is_production_ready(symbolic_result.context)
-
-            # Slight confidence boost if this matches a learned pattern
-            # (mainly for patterns not yet converted to full rules)
-            adjusted_confidence = self.adaptive_rules.adjust_confidence(
-                symbolic_result.action,
-                original_confidence,
-                symbolic_result.context
-            )
-
-            # Update explanation if confidence was adjusted
-            if abs(adjusted_confidence - original_confidence) > 0.01:
-                adjustment = self.adaptive_rules.get_adjustment(symbolic_result.context)
-                if adjustment and is_production_ready:
-                    delta = adjusted_confidence - original_confidence
-                    symbolic_result.explanation += f" [Learned pattern: {delta:+.2f} confidence from {adjustment.correction_count} corrections]"
-
-            symbolic_result.confidence = adjusted_confidence
-
-        # If symbolic engine has high confidence (possibly boosted by adaptive learning), use it
+        # If symbolic engine has high confidence, use it
         if symbolic_result.confidence >= self.confidence_threshold:
             self.stats['symbolic_decisions'] += 1
             self.stats['high_confidence_decisions'] += 1
@@ -297,47 +220,28 @@ class IntelligentPreprocessor:
             elapsed_ms = (time.time() - start_time) * 1000
             self.stats['total_time_ms'] += elapsed_ms
 
-            # Update cache with symbolic decision
-            if self.enable_cache and self.cache and symbolic_result.context:
-                self.cache.set(symbolic_result.context, symbolic_result.action, column_name)
-
             symbolic_result.decision_id = decision_id
-            return self._add_confidence_warnings(symbolic_result)
+            return self._add_confidence_warnings(symbolic_result, context, column_name)
 
-        # LAYER 2.5: Try meta-learning (statistical heuristics) for universal coverage
-        # This bridges the gap between symbolic rules and neural oracle
-        if self.enable_meta_learning and self.meta_learner:
-            # Use the same stats computed for symbolic engine
-            stats_dict = symbolic_result.context if symbolic_result.context else {}
-
-            meta_result = self.meta_learner.decide(stats_dict, column_name)
-            if meta_result and meta_result.confidence >= (self.confidence_threshold - 0.1):
-                # Accept meta-learning if confidence is close to threshold
-                # (e.g., threshold=0.9, accept >=0.8)
-                self.stats['meta_learning_decisions'] += 1
-
-                if meta_result.confidence >= self.confidence_threshold:
-                    self.stats['high_confidence_decisions'] += 1
-
-                elapsed_ms = (time.time() - start_time) * 1000
-                self.stats['total_time_ms'] += elapsed_ms
-
-                # Update cache with meta-learning decision
-                if self.enable_cache and self.cache:
-                    self.cache.set(stats_dict, meta_result.action, column_name)
-
-                meta_result.decision_id = decision_id
-                return self._add_confidence_warnings(meta_result)
+        # LAYER 2.5: Meta-learning removed to simplify architecture and enable Neural Oracle
+        # (Meta-learner code removed)
 
         # LAYER 3: Use NeuralOracle for ambiguous cases (<5ms)
         if self.use_neural_oracle and self.neural_oracle:
             # Extract minimal features
-            features = self.feature_extractor.extract(column, column_name)
-
-            # Get neural prediction with SHAP explanation
             try:
-                # Try SHAP-enabled prediction first
+                features = self.feature_extractor.extract(column, column_name)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Feature extraction failed for '{column_name}': {e}")
+                # Fall through to conservative fallback
+                features = None
+
+            if features is not None:
+                # Get neural prediction with SHAP explanation
                 try:
+                    # Try SHAP-enabled prediction first
                     neural_shap_result = self.neural_oracle.predict_with_shap(features, top_k=3)
 
                     # Blend symbolic and neural if both have medium confidence
@@ -443,10 +347,12 @@ class IntelligentPreprocessor:
                     )
                     return self._add_confidence_warnings(result)
 
-            except Exception as e:
-                print(f"Warning: Neural oracle failed: {e}")
-                # Fall back to symbolic result
-                pass
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Neural oracle prediction failed for '{column_name}': {e}")
+                    # Fall back to symbolic result or conservative fallback
+                    pass
 
         # LAYER 4: Ultra-conservative fallback
         # When all layers are uncertain, make the safest possible decision
@@ -458,7 +364,7 @@ class IntelligentPreprocessor:
             self.stats['symbolic_decisions'] += 1
             symbolic_result.decision_id = decision_id
             symbolic_result.explanation = f"[LOW CONFIDENCE] {symbolic_result.explanation}"
-            return self._add_confidence_warnings(symbolic_result)
+            return self._add_confidence_warnings(symbolic_result, context, column_name)
 
         # Otherwise, use ultra-conservative fallback
         stats_dict = symbolic_result.context if symbolic_result.context else {}
@@ -468,7 +374,7 @@ class IntelligentPreprocessor:
         elapsed_ms = (time.time() - start_time) * 1000
         self.stats['total_time_ms'] += elapsed_ms
 
-        return self._add_confidence_warnings(fallback_result)
+        return self._add_confidence_warnings(fallback_result, context, column_name)
 
     def _blend_decisions(
         self,
@@ -543,16 +449,85 @@ class IntelligentPreprocessor:
                 f"Neural oracle ({neural_confidence:.2f}) vs symbolic ({symbolic_result.confidence:.2f})"
             )
 
-    def _add_confidence_warnings(self, result: PreprocessingResult) -> PreprocessingResult:
+    def _apply_context_bias(
+        self,
+        result: PreprocessingResult,
+        context: str,
+        column_name: str
+    ) -> PreprocessingResult:
+        """Apply context-specific bias to the decision."""
+        if context == "general":
+            return result
+
+        explanation_prefix = f"[CONTEXT: {context.upper()}]"
+        
+        # REGRESSION CONTEXT (Predicting Numbers)
+        if context == "regression":
+            # Prefer scaling for numerics
+            if result.action == PreprocessingAction.KEEP_AS_IS and "numeric" in result.explanation.lower():
+                # If it's numeric but kept as is, suggest scaling
+                result.action = PreprocessingAction.STANDARD_SCALE
+                result.confidence = 0.85
+                result.explanation = f"{explanation_prefix} Regression models require scaled features. Changed from KEEP_AS_IS to STANDARD_SCALE."
+                result.source = "context_bias"
+            
+            # Prefer One-Hot over Label Encoding for low cardinality (to avoid ordinal assumption)
+            elif result.action == PreprocessingAction.LABEL_ENCODE:
+                # Check if we can switch to One-Hot
+                for alt_action, alt_conf in result.alternatives:
+                    if alt_action == PreprocessingAction.ONEHOT_ENCODE.value:
+                        result.action = PreprocessingAction.ONEHOT_ENCODE
+                        result.confidence = max(result.confidence, alt_conf)
+                        result.explanation = f"{explanation_prefix} Regression models prefer One-Hot Encoding to avoid ordinal assumptions."
+                        result.source = "context_bias"
+                        break
+
+        # CLASSIFICATION CONTEXT (Predicting Categories)
+        elif context == "classification":
+            # If target column (heuristic check on name), prefer Label Encoding
+            if column_name.lower() in ['target', 'class', 'label', 'y']:
+                result.action = PreprocessingAction.LABEL_ENCODE
+                result.confidence = 0.95
+                result.explanation = f"{explanation_prefix} Likely target column for classification. Enforcing Label Encoding."
+                result.source = "context_bias"
+
+        return result
+
+    def _add_confidence_warnings(
+        self,
+        result: PreprocessingResult,
+        context: str = "general",
+        column_name: str = ""
+    ) -> PreprocessingResult:
         """
         Add warnings based on confidence level and record metrics.
-
-        Args:
-            result: Preprocessing result to enhance with warnings
-
-        Returns:
-            Enhanced result with appropriate warnings
+        Also applies context-specific bias and enhances explanation.
         """
+        # Apply context bias first
+        if context != "general":
+            result = self._apply_context_bias(result, context, column_name)
+
+        # Enhance explanation with detailed reasoning
+        explainer = get_explainer()
+        try:
+            enhanced_explanation = explainer.generate_explanation(
+                action=result.action,
+                confidence=result.confidence,
+                source=result.source,
+                context=result.context or {},
+                column_name=column_name or "column"
+            )
+            result.explanation = enhanced_explanation
+        except Exception as e:
+            # If explanation enhancement fails, keep original but ensure it's not empty
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to enhance explanation: {e}")
+            
+            # Fallback explanation if original is missing or empty
+            if not result.explanation:
+                result.explanation = f"Recommended action: {result.action.value} (confidence: {result.confidence:.1%})"
+
         # Add confidence warnings
         if result.confidence < CONFIDENCE_LOW:
             result.warning = "⚠️ Very low confidence - manual review strongly recommended"
@@ -560,25 +535,6 @@ class IntelligentPreprocessor:
         elif result.confidence < CONFIDENCE_MEDIUM:
             result.warning = "⚠️ Low confidence - consider reviewing this decision"
         # No warning needed for confidence >= CONFIDENCE_MEDIUM
-
-        # Record layer metrics (Phase 4)
-        if hasattr(self, 'layer_metrics') and self.layer_metrics is not None:
-            try:
-                self.layer_metrics.record_decision(
-                    layer=result.source,
-                    confidence=result.confidence
-                )
-
-                # Save metrics periodically (every 100 decisions)
-                if self.layer_metrics.stats.get(result.source):
-                    total = self.layer_metrics.stats[result.source].total_decisions
-                    if total % 100 == 0:
-                        self.layer_metrics.save()
-            except Exception as e:
-                # Don't fail preprocessing if metrics recording fails
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.warning(f"Failed to record layer metrics: {e}")
 
         return result
 
@@ -662,8 +618,8 @@ class IntelligentPreprocessor:
                     parameters={},
                     context=column_stats
                 )
-            # Medium cardinality → frequency encoding
-            elif cardinality <= 50:
+            # Medium/High cardinality → frequency encoding (safer than hash)
+            elif cardinality <= 1000:
                 return PreprocessingResult(
                     action=PreprocessingAction.FREQUENCY_ENCODE,
                     confidence=0.65,
@@ -676,13 +632,13 @@ class IntelligentPreprocessor:
                     parameters={},
                     context=column_stats
                 )
-            # High cardinality → hash encoding
+            # Very high cardinality → hash encoding
             else:
                 return PreprocessingResult(
                     action=PreprocessingAction.HASH_ENCODE,
                     confidence=0.68,
                     source='conservative_fallback',
-                    explanation=f"[CONSERVATIVE] High cardinality ({cardinality}): hash encoding prevents dimensionality explosion",
+                    explanation=f"[CONSERVATIVE] Very high cardinality ({cardinality}): hash encoding prevents dimensionality explosion",
                     alternatives=[
                         (PreprocessingAction.FREQUENCY_ENCODE, 0.62)
                     ],
@@ -708,15 +664,18 @@ class IntelligentPreprocessor:
         column_name: str,
         wrong_action: Union[str, PreprocessingAction],
         correct_action: Union[str, PreprocessingAction],
-        confidence: float = 0.0
+        confidence: float = 0.0,
+        user_id: str = "default_user"
     ) -> Dict[str, Any]:
         """
-        Process a user correction to adapt symbolic rules (privacy-preserving).
+        Process a user correction with validation and A/B testing (Option B).
 
-        NEW APPROACH (V2.1):
-        Instead of creating separate learned patterns, corrections are used to
-        fine-tune symbolic rule parameters and confidence scores. This prevents
-        overgeneralization while still learning from user feedback.
+        NEW APPROACH (V4 - Option B):
+        - Records correction in database (privacy-preserving)
+        - Requires 10+ corrections per pattern type before rule creation
+        - Validates rules before activation (80% accuracy threshold)
+        - A/B tests new rules before promoting to production
+        - No cache invalidation (cache removed)
 
         Args:
             column: Column data (only used to extract stats, not stored)
@@ -724,118 +683,85 @@ class IntelligentPreprocessor:
             wrong_action: Action that was incorrect
             correct_action: Correct action
             confidence: Confidence of the wrong prediction
+            user_id: User ID for tracking (from JWT in production)
 
         Returns:
-            Learning result with adaptive rule information
+            Learning result with validation and A/B test information
         """
-        if not self.enable_learning or not self.adaptive_rules:
+        if not self.enable_learning or not self.learning_engine:
             return {'learned': False, 'reason': 'Learning disabled'}
 
         # Convert to pandas Series if needed
         if isinstance(column, (list, np.ndarray)):
             column = pd.Series(column, name=column_name)
 
-        # Convert actions to enum if strings
-        if isinstance(wrong_action, str):
-            wrong_action = PreprocessingAction(wrong_action)
-        if isinstance(correct_action, str):
-            correct_action = PreprocessingAction(correct_action)
+        # Convert actions to strings if enums
+        if isinstance(wrong_action, PreprocessingAction):
+            wrong_action = wrong_action.value
+        if isinstance(correct_action, PreprocessingAction):
+            correct_action = correct_action.value
 
         # Extract column statistics (privacy-preserving)
         stats = self.symbolic_engine.compute_column_statistics(column, column_name)
         stats_dict = stats.to_dict()
 
-        # IMPORTANT: Invalidate cache if the decision was cached
-        # This prevents reusing incorrect decisions
-        if self.enable_cache and self.cache:
-            self.cache.invalidate_decision(stats_dict, column_name)
-
-        # Record correction to adapt symbolic rules
-        self.adaptive_rules.record_correction(
+        # Record correction in database
+        result = self.learning_engine.record_correction(
+            user_id=user_id,
             column_stats=stats_dict,
             wrong_action=wrong_action,
-            correct_action=correct_action
+            correct_action=correct_action,
+            confidence=confidence
         )
 
-        # Get pattern information
-        pattern_key = self.adaptive_rules._identify_pattern(stats_dict)
-        pattern_corrections = self.adaptive_rules.correction_patterns.get(pattern_key, [])
-        correction_count = len(pattern_corrections)
+        if not result.get('recorded'):
+            return {
+                'learned': False,
+                'error': result.get('error', 'Failed to record correction')
+            }
 
-        # CRITICAL: Try to create and inject new rule if production-ready
-        # This is where the learner enhances the symbolic engine
-        newly_created_rule = None
-        if correction_count >= self.adaptive_rules.min_corrections_for_production:
-            newly_created_rule = self.adaptive_rules.create_learned_rule(pattern_key)
-            if newly_created_rule:
-                # Check if rule already exists (by name)
-                existing_rule_names = {r.name for r in self.symbolic_engine.rules}
-                if newly_created_rule.name not in existing_rule_names:
-                    self.symbolic_engine.add_rule(newly_created_rule)
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.info(f"Injected new learned rule: {newly_created_rule.name}")
-
-        # Get adjustment information
-        adjustment = self.adaptive_rules.get_adjustment(stats_dict)
-        stats = self.adaptive_rules.get_statistics()
-
-        # Check production readiness
-        is_production_ready = self.adaptive_rules.is_production_ready(stats_dict)
-
-        result = {
+        # Build response with learning progress
+        response = {
             'learned': True,
-            'approach': 'symbolic_rule_creation',  # NEW: Creates rules, doesn't make decisions
-            'pattern_category': str(pattern_key),
-            'cache_invalidated': True,
-            'rule_created': bool(newly_created_rule is not None),
-            'production_ready': bool(is_production_ready),
-            'total_corrections': int(stats['total_corrections']),
-            'patterns_tracked': int(stats['patterns_tracked']),
-            'pattern_corrections': int(correction_count),
-            'corrections_needed_for_training': int(max(0, self.adaptive_rules.min_corrections_for_adjustment - correction_count)),
-            'corrections_needed_for_production': int(max(0, self.adaptive_rules.min_corrections_for_production - correction_count)),
-            'total_symbolic_rules': int(len(self.symbolic_engine.rules))
+            'approach': 'database_with_validation_and_ab_testing',
+            'pattern_hash': result.get('pattern_hash'),
+            'pattern_type': result.get('pattern_type', 'unknown'),
+            'correction_support': result.get('correction_support', 0),
+            'corrections_needed': result.get('corrections_needed_for_production', 0),
         }
 
-        if newly_created_rule:
-            result['rule_name'] = newly_created_rule.name
-            result['rule_action'] = newly_created_rule.action.value
-            result['rule_priority'] = newly_created_rule.priority
-            result['message'] = f"🎯 RULE CREATED: New symbolic rule '{newly_created_rule.name}' " + \
-                              f"injected into engine! Learned from {correction_count} corrections. " + \
-                              f"This rule will now handle all '{pattern_key}' cases automatically. " + \
-                              f"Total rules: {len(self.symbolic_engine.rules)}"
-        elif adjustment:
-            result['confidence_boost'] = f"+{adjustment.confidence_delta:.3f}"
-            result['preferred_action'] = str(adjustment.action.value)
-            result['correction_support'] = int(adjustment.correction_count)
-            result['applicable_to'] = f"Similar columns matching '{adjustment.rule_category}' pattern"
-
-            # Phase-specific messaging
-            if is_production_ready:
-                result['message'] = f"✓ PRODUCTION: Pattern '{pattern_key}' learned from {correction_count} corrections. " + \
-                                  f"Ready to create symbolic rule on next decision."
-            else:
-                corrections_left = self.adaptive_rules.min_corrections_for_production - correction_count
-                result['message'] = f"⚙ TRAINING: Adjustment computed from {correction_count} corrections. " + \
-                                  f"{corrections_left} more needed to create symbolic rule."
+        # If rule was created, add rule information
+        if result.get('new_rule_created'):
+            response.update({
+                'rule_created': True,
+                'rule_name': result.get('rule_name'),
+                'rule_confidence': result.get('rule_confidence'),
+                'rule_support': result.get('rule_support'),
+                'ab_test_started': result.get('ab_test_started', False),
+                'validation_required': result.get('validation_required', False),
+                'message': f"🎯 NEW RULE CREATED: Rule '{result.get('rule_name')}' created for pattern '{result.get('pattern_type')}' " +
+                          f"with {result.get('rule_support')} corrections. Starting A/B test and validation."
+            })
         else:
-            # Provide feedback even if no adjustment yet
-            if correction_count > 0:
-                corrections_left = self.adaptive_rules.min_corrections_for_adjustment - correction_count
-                result['message'] = f"📝 Recording: {correction_count}/{self.adaptive_rules.min_corrections_for_adjustment} corrections for pattern '{pattern_key}'. " + \
-                                  f"{corrections_left} more needed to compute pattern."
-            else:
-                result['message'] = f"📝 First correction for pattern '{pattern_key}' recorded. " + \
-                                  f"{self.adaptive_rules.min_corrections_for_adjustment - 1} more needed to compute pattern."
+            # Still collecting corrections
+            corrections_left = result.get('corrections_needed_for_production', 0)
+            current_count = result.get('correction_support', 0)
+            pattern_type = result.get('pattern_type', 'unknown')
+            
+            response.update({
+                'rule_created': False,
+                'message': f"📝 Correction recorded for pattern '{pattern_type}'. " +
+                          f"Progress: {current_count}/10 corrections. " +
+                          f"{corrections_left} more needed to create validated rule."
+            })
 
-        return result
+        return response
 
     def preprocess_dataframe(
         self,
         df: pd.DataFrame,
-        target_column: Optional[str] = None
+        target_column: Optional[str] = None,
+        context: str = "general"
     ) -> Dict[str, PreprocessingResult]:
         """
         Preprocess all columns in a dataframe.
@@ -847,6 +773,12 @@ class IntelligentPreprocessor:
         Returns:
             Dictionary mapping column names to PreprocessingResults
         """
+        # NEW: Run inter-column analysis
+        analyzer = DatasetAnalyzer()
+        primary_keys = analyzer.detect_primary_keys(df)
+        correlations = analyzer.find_numeric_correlations(df)
+        foreign_keys = analyzer.analyze_foreign_key_candidates(df)
+        
         results = {}
 
         for column_name in df.columns:
@@ -854,10 +786,28 @@ class IntelligentPreprocessor:
                 continue  # Skip target column
 
             target_available = target_column is not None
+            
+            # NEW: Prepare context for this column
+            col_context = {
+                "is_primary_key": column_name in primary_keys,
+                "is_foreign_key": column_name in foreign_keys,
+                "correlation_with_target": 0.0
+            }
+            
+            # Add target correlation if available
+            if target_available and column_name in correlations:
+                # correlations[column_name] is a list of (other_col, corr_value) tuples
+                for other_col, corr_value in correlations[column_name]:
+                    if other_col == target_column:
+                        col_context["correlation_with_target"] = corr_value
+                        break
+
             result = self.preprocess_column(
                 df[column_name],
                 column_name,
-                target_available
+                target_available,
+                context=context,
+                metadata=col_context  # Pass analysis results as metadata
             )
             results[column_name] = result
 
@@ -871,7 +821,6 @@ class IntelligentPreprocessor:
             **self.stats,
             'learned_pct': self.stats['learned_decisions'] / total * 100 if total > 0 else 0,
             'symbolic_pct': self.stats['symbolic_decisions'] / total * 100 if total > 0 else 0,
-            'meta_learning_pct': self.stats['meta_learning_decisions'] / total * 100 if total > 0 else 0,
             'neural_pct': self.stats['neural_decisions'] / total * 100 if total > 0 else 0,
             'high_confidence_pct': self.stats['high_confidence_decisions'] / total * 100 if total > 0 else 0,
             'avg_time_ms': self.stats['total_time_ms'] / total if total > 0 else 0,
@@ -882,10 +831,6 @@ class IntelligentPreprocessor:
         if self.adaptive_rules:
             stats['adaptive_learning'] = self.adaptive_rules.get_statistics()
 
-        # Add meta-learning statistics if available
-        if self.meta_learner:
-            stats['meta_learning'] = self.meta_learner.get_statistics()
-
         return stats
 
     def reset_statistics(self):
@@ -894,15 +839,12 @@ class IntelligentPreprocessor:
             'total_decisions': 0,
             'learned_decisions': 0,
             'symbolic_decisions': 0,
-            'meta_learning_decisions': 0,
             'neural_decisions': 0,
             'high_confidence_decisions': 0,
             'cache_hits': 0,
             'total_time_ms': 0.0
         }
         self.symbolic_engine.reset_stats()
-        if self.meta_learner:
-            self.meta_learner.reset_statistics()
 
     def save_learned_rules(self, path: Path):
         """

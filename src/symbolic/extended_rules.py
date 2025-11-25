@@ -339,7 +339,8 @@ def create_domain_pattern_rules() -> List[Rule]:
         action=PreprocessingAction.KEEP_AS_IS,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            0 <= stats.get("min_value", -1) <= stats.get("max_value", 200) <= 100 and
+            stats.get("min_value") is not None and stats.get("max_value") is not None and
+            0 <= stats.get("min_value") <= stats.get("max_value") <= 100 and
             _column_name_contains(stats, ["rate", "ratio", "percentage", "pct", "percent", "_pct", "bounce_rate", "conversion"])
         ),
         confidence_fn=lambda stats: 0.91,
@@ -354,7 +355,7 @@ def create_domain_pattern_rules() -> List[Rule]:
         action=PreprocessingAction.LOG1P_TRANSFORM,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            stats.get("min_value", -1) >= 0 and
+            stats.get("min_value") is not None and stats.get("min_value") >= 0 and
             stats.get("skewness", 0) > 1.5 and
             _column_name_contains(stats, ["count", "frequency", "num_", "total_", "_count", "quantity"])
         ),
@@ -385,7 +386,7 @@ def create_domain_pattern_rules() -> List[Rule]:
         action=PreprocessingAction.LOG1P_TRANSFORM,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            stats.get("min_value", -1) >= 0 and
+            stats.get("min_value") is not None and stats.get("min_value") >= 0 and
             stats.get("skewness", 0) > 2.0 and
             _column_name_contains(stats, ["duration", "time", "_ms", "_seconds", "latency", "elapsed", "session_time"])
         ),
@@ -495,7 +496,8 @@ def create_domain_pattern_rules() -> List[Rule]:
         action=PreprocessingAction.KEEP_AS_IS,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            -100 < stats.get("min_value", -1000) < stats.get("max_value", 1000) < 200 and
+            stats.get("min_value") is not None and stats.get("max_value") is not None and
+            -100 < stats.get("min_value") < stats.get("max_value") < 200 and
             _column_name_contains(stats, ["temp", "temperature", "_celsius", "_fahrenheit", "_kelvin"])
         ),
         confidence_fn=lambda stats: 0.85,
@@ -542,7 +544,8 @@ def create_domain_pattern_rules() -> List[Rule]:
         action=PreprocessingAction.KEEP_AS_IS,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            0 <= stats.get("min_value", -1) <= stats.get("max_value", 200) <= 120 and
+            stats.get("min_value") is not None and stats.get("max_value") is not None and
+            0 <= stats.get("min_value") <= stats.get("max_value") <= 120 and
             abs(stats.get("skewness", 0)) < 2.0 and
             _column_name_contains(stats, ["age", "patient_age", "age_years"])
         ),
@@ -623,6 +626,73 @@ def create_composite_rules() -> List[Rule]:
     """Create composite rules for complex edge cases."""
     rules = []
 
+    # =============================================================================
+    # CLASS IMBALANCE HANDLING RULES (HIGH PRIORITY - prevent dropping)
+    # =============================================================================
+    
+    # Rule 0a: NEVER drop target columns (highest priority)
+    rules.append(Rule(
+        name="PRESERVE_TARGET_COLUMN",
+        category=RuleCategory.DATA_QUALITY,
+        action=PreprocessingAction.KEEP_AS_IS,
+        condition=lambda stats: (
+            _column_name_contains(stats, ["target", "label", "class", "y", "outcome", "response"]) and
+            (stats.get("entropy", 1.0) < 0.5 or stats.get("unique_ratio", 1.0) < 0.1)
+        ),
+        confidence_fn=lambda stats: 0.99,
+        explanation_fn=lambda stats: f"Target column with class imbalance: KEEPING (imbalance = {1 - stats.get('entropy', 0):.1%}). Handle with SMOTE/class weights during training.",
+        priority=98  # Highest priority to override DROP rules
+    ))
+    
+    # Rule 0b: Keep imbalanced binary indicators (flags, is_, has_)
+    rules.append(Rule(
+        name="PRESERVE_IMBALANCED_BINARY_FLAGS",
+        category=RuleCategory.DATA_QUALITY,
+        action=PreprocessingAction.KEEP_AS_IS,
+        condition=lambda stats: (
+            stats.get("unique_count", 100) <= 3 and
+            stats.get("entropy", 1.0) < 0.3 and  # Very imbalanced
+            _column_name_contains(stats, ["flag", "indicator", "is_", "has_", "bool", "binary"])
+        ),
+        confidence_fn=lambda stats: 0.95,
+        explanation_fn=lambda stats: f"Imbalanced binary flag (entropy={stats.get('entropy', 0):.2f}): KEEPING as-is. Rare events may be important.",
+        priority=97
+    ))
+    
+    # Rule 0c: Handle imbalanced categorical features (use frequency encoding)
+    rules.append(Rule(
+        name="HANDLE_IMBALANCED_CATEGORICAL",
+        category=RuleCategory.CATEGORICAL,
+        action=PreprocessingAction.FREQUENCY_ENCODE,
+        condition=lambda stats: (
+            stats.get("is_categorical", False) and
+            stats.get("entropy", 1.0) < 0.3 and  # Imbalanced
+            stats.get("unique_ratio", 1.0) < 0.05 and
+            stats.get("cardinality", 0) >= 5 and  # At least 5 categories
+            not _column_name_contains(stats, ["target", "label", "class", "y"])
+        ),
+        confidence_fn=lambda stats: 0.88,
+        explanation_fn=lambda stats: f"Imbalanced categorical (entropy={stats.get('entropy', 0):.2f}): using frequency encoding to preserve rare categories",
+        priority=96
+    ))
+    
+    # Rule 0d: Handle imbalanced numeric features (keep and note for SMOTE)
+    rules.append(Rule(
+        name="PRESERVE_IMBALANCED_NUMERIC",
+        category=RuleCategory.DATA_QUALITY,
+        action=PreprocessingAction.KEEP_AS_IS,
+        condition=lambda stats: (
+            stats.get("is_numeric", False) and
+            stats.get("entropy", 1.0) < 0.25 and  # Very imbalanced
+            stats.get("unique_ratio", 1.0) < 0.05 and
+            stats.get("unique_count", 100) >= 5 and  # At least 5 unique values
+            not _column_name_contains(stats, ["target", "label", "class"])
+        ),
+        confidence_fn=lambda stats: 0.85,
+        explanation_fn=lambda stats: f"Imbalanced numeric feature (entropy={stats.get('entropy', 0):.2f}): KEEPING. Consider SMOTE for minority class augmentation.",
+        priority=96
+    ))
+
     # Rule 1: Bimodal numeric (likely mixed data types)
     rules.append(Rule(
         name="COMPOSITE_BIMODAL_MIXED_TYPE",
@@ -677,7 +747,7 @@ def create_composite_rules() -> List[Rule]:
         action=PreprocessingAction.LOG1P_TRANSFORM,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            stats.get("min_value", -1) >= 0 and
+            stats.get("min_value") is not None and stats.get("min_value") >= 0 and
             stats.get("has_zeros", False) and
             stats.get("skewness", 0) > 2.5 and
             not stats.get("is_already_scaled", False)
@@ -755,7 +825,7 @@ def create_composite_rules() -> List[Rule]:
         action=PreprocessingAction.FREQUENCY_ENCODE,
         condition=lambda stats: (
             stats.get("is_categorical", False) and
-            50 < stats.get("cardinality", 0) <= 500 and
+            50 < stats.get("cardinality", 0) <= 1000 and  # Increased from 500 to 1000
             not stats.get("target_available", False)
         ),
         confidence_fn=lambda stats: 0.84,
@@ -763,14 +833,14 @@ def create_composite_rules() -> List[Rule]:
         priority=84
     ))
 
-    # Rule 10: Very high cardinality (>500 categories)
+    # Rule 10: Very high cardinality (>1000 categories)
     rules.append(Rule(
         name="COMPOSITE_VERY_HIGH_CARDINALITY",
         category=RuleCategory.CATEGORICAL,
         action=PreprocessingAction.HASH_ENCODE,
         condition=lambda stats: (
             stats.get("is_categorical", False) and
-            stats.get("cardinality", 0) > 500 and
+            stats.get("cardinality", 0) > 1000 and  # Increased from 500 to 1000
             stats.get("unique_ratio", 1.0) < 0.95  # Not an ID
         ),
         confidence_fn=lambda stats: 0.86,
@@ -787,7 +857,7 @@ def create_composite_rules() -> List[Rule]:
             stats.get("is_numeric", False) and
             not stats.get("all_positive", True) and
             abs(stats.get("skewness", 0)) > 1.8 and
-            stats.get("min_value", 0) < 0
+            stats.get("min_value") is not None and stats.get("min_value") < 0
         ),
         confidence_fn=lambda stats: 0.88,
         explanation_fn=lambda stats: "Mixed sign with high skew: Yeo-Johnson handles negative values",
@@ -801,7 +871,8 @@ def create_composite_rules() -> List[Rule]:
         action=PreprocessingAction.KEEP_AS_IS,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            0 <= stats.get("min_value", -1) <= stats.get("max_value", 2) <= 1.0 and
+            stats.get("min_value") is not None and stats.get("max_value") is not None and
+            0 <= stats.get("min_value") <= stats.get("max_value") <= 1.0 and
             stats.get("max_value", 0) - stats.get("min_value", 0) > 0.5  # Uses significant part of range
         ),
         confidence_fn=lambda stats: 0.90,
@@ -816,7 +887,8 @@ def create_composite_rules() -> List[Rule]:
         action=PreprocessingAction.KEEP_AS_IS,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            -1 <= stats.get("min_value", -10) <= stats.get("max_value", 10) <= 1 and
+            stats.get("min_value") is not None and stats.get("max_value") is not None and
+            -1 <= stats.get("min_value") <= stats.get("max_value") <= 1 and
             stats.get("unique_count", 100) <= 5
         ),
         confidence_fn=lambda stats: 0.87,
@@ -861,8 +933,8 @@ def create_composite_rules() -> List[Rule]:
         action=PreprocessingAction.KEEP_AS_IS,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            -3 <= stats.get("min_value", -10) and
-            stats.get("max_value", 10) <= 3 and
+            stats.get("min_value") is not None and -3 <= stats.get("min_value") and
+            stats.get("max_value") is not None and stats.get("max_value") <= 3 and
             abs(stats.get("mean", 100)) < 0.3 and
             0.7 <= stats.get("std", 0) <= 1.3
         ),
@@ -879,7 +951,7 @@ def create_composite_rules() -> List[Rule]:
         condition=lambda stats: (
             stats.get("unique_count", 100) == 2 and
             stats.get("entropy", 1.0) < 0.3 and  # Very imbalanced
-            stats.get("min_value", -1) >= 0
+            (stats.get("min_value") is not None and stats.get("min_value") >= 0)
         ),
         confidence_fn=lambda stats: 0.88,
         explanation_fn=lambda stats: "Sparse binary indicator: keeping as-is (optimal encoding)",
@@ -893,8 +965,8 @@ def create_composite_rules() -> List[Rule]:
         action=PreprocessingAction.PARSE_DATETIME,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            stats.get("min_value", 0) > 1_000_000_000_000 and  # After year 2001 in ms
-            stats.get("max_value", 0) < 2_000_000_000_000 and  # Before year 2033 in ms
+            stats.get("min_value") is not None and stats.get("min_value") > 1_000_000_000_000 and  # After year 2001 in ms
+            stats.get("max_value") is not None and stats.get("max_value") < 2_000_000_000_000 and  # Before year 2033 in ms
             _column_name_contains(stats, ["time", "timestamp", "created", "updated", "date"])
         ),
         confidence_fn=lambda stats: 0.91,
@@ -1106,8 +1178,441 @@ def _has_priority_ordering(stats: Dict[str, Any]) -> bool:
 
 
 # =============================================================================
-# REGISTRY FUNCTION
+# DOMAIN-SPECIFIC PATTERN RULES (26 rules)
 # =============================================================================
+
+def create_domain_pattern_rules() -> List[Rule]:
+    """Create domain-specific pattern rules for Finance, Healthcare, and E-commerce."""
+    rules = []
+
+    # -------------------------------------------------------------------------
+    # FINANCE DOMAIN (10 rules)
+    # -------------------------------------------------------------------------
+
+    # Rule 1: Currency Detection
+    rules.append(Rule(
+        name="FINANCE_CURRENCY_DETECTION",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            stats.get("domain_pattern_matches", {}).get("currency", 0) > 0.8
+        ),
+        action=PreprocessingAction.TEXT_CLEAN,
+        confidence_fn=lambda stats: 0.95,
+        explanation_fn=lambda stats: "Column contains currency values. Clean text to remove symbols and convert to numeric.",
+        priority=50,
+        parameters={"tags": ["finance", "currency", "cleaning"]}
+    ))
+
+    # Rule 2: Account Number
+    rules.append(Rule(
+        name="FINANCE_ACCOUNT_NUMBER",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            any(k in str(stats.get("column_name", "")).lower() for k in ["account", "acct_no", "iban"]) and
+            stats.get("unique_ratio", 0) > 0.8
+        ),
+        action=PreprocessingAction.KEEP_AS_IS,
+        confidence_fn=lambda stats: 0.9,
+        explanation_fn=lambda stats: "Column appears to be an account number. Keep as identifier.",
+        priority=45,
+        parameters={"tags": ["finance", "pii", "identifier"]}
+    ))
+
+    # Rule 3: Stock Ticker
+    rules.append(Rule(
+        name="FINANCE_STOCK_TICKER",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            stats.get("domain_pattern_matches", {}).get("stock_ticker", 0) > 0.9 and
+            stats.get("avg_length", 0) < 6 and
+            any(k in str(stats.get("column_name", "")).lower() for k in ["ticker", "symbol", "stock"])
+        ),
+        action=PreprocessingAction.LABEL_ENCODE,
+        confidence_fn=lambda stats: 0.85,
+        explanation_fn=lambda stats: "Column appears to be stock ticker symbols. Treat as categorical.",
+        priority=45,
+        parameters={"tags": ["finance", "categorical"]}
+    ))
+
+    # Rule 4: Credit Card (Masking)
+    rules.append(Rule(
+        name="FINANCE_CREDIT_CARD",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            stats.get("domain_pattern_matches", {}).get("credit_card", 0) > 0.5
+        ),
+        action=PreprocessingAction.DROP_COLUMN,
+        confidence_fn=lambda stats: 0.98,
+        explanation_fn=lambda stats: "Column contains credit card numbers. Drop for privacy/security.",
+        priority=90,
+        parameters={"tags": ["finance", "pii", "security"]}
+    ))
+
+    # Rule 5: Tax ID / SSN
+    rules.append(Rule(
+        name="FINANCE_TAX_ID",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            (stats.get("domain_pattern_matches", {}).get("ssn", 0) > 0.5 or
+             stats.get("domain_pattern_matches", {}).get("ein", 0) > 0.5)
+        ),
+        action=PreprocessingAction.DROP_COLUMN,
+        confidence_fn=lambda stats: 0.98,
+        explanation_fn=lambda stats: "Column contains Tax IDs or SSNs. Drop for privacy.",
+        priority=90,
+        parameters={"tags": ["finance", "pii", "security"]}
+    ))
+
+    # Rule 6: IBAN
+    rules.append(Rule(
+        name="FINANCE_IBAN",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            stats.get("domain_pattern_matches", {}).get("iban", 0) > 0.5
+        ),
+        action=PreprocessingAction.KEEP_AS_IS,
+        confidence_fn=lambda stats: 0.95,
+        explanation_fn=lambda stats: "Column contains IBANs. Keep as identifier.",
+        priority=45,
+        parameters={"tags": ["finance", "identifier"]}
+    ))
+
+    # Rule 7: SWIFT/BIC
+    rules.append(Rule(
+        name="FINANCE_SWIFT_CODE",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            stats.get("domain_pattern_matches", {}).get("swift", 0) > 0.5
+        ),
+        action=PreprocessingAction.LABEL_ENCODE,
+        confidence_fn=lambda stats: 0.9,
+        explanation_fn=lambda stats: "Column contains SWIFT/BIC codes. Treat as categorical.",
+        priority=45,
+        parameters={"tags": ["finance", "categorical"]}
+    ))
+
+    # Rule 8: Percentage Rate
+    rules.append(Rule(
+        name="FINANCE_PERCENTAGE_RATE",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            stats.get("domain_pattern_matches", {}).get("percentage", 0) > 0.8
+        ),
+        action=PreprocessingAction.TEXT_CLEAN,
+        confidence_fn=lambda stats: 0.95,
+        explanation_fn=lambda stats: "Column contains percentage values. Clean text to remove '%' and convert to numeric.",
+        priority=50,
+        parameters={"tags": ["finance", "numeric", "cleaning"]}
+    ))
+
+    # Rule 9: Amount Column
+    rules.append(Rule(
+        name="FINANCE_AMOUNT_COLUMN",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("is_numeric") and
+            any(k in str(stats.get("column_name", "")).lower() for k in ["amount", "balance", "price", "cost", "revenue"]) and
+            stats.get("skewness", 0) > 3.0
+        ),
+        action=PreprocessingAction.LOG_TRANSFORM,
+        confidence_fn=lambda stats: 0.85,
+        explanation_fn=lambda stats: "Highly skewed financial amount column. Log transform to normalize distribution.",
+        priority=40,
+        parameters={"tags": ["finance", "numeric", "transformation"]}
+    ))
+
+    # Rule 10: Ratio Detection
+    rules.append(Rule(
+        name="FINANCE_RATIO_DETECTION",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("is_numeric") and
+            any(k in str(stats.get("column_name", "")).lower() for k in ["ratio", "margin", "yield", "roi", "roe"]) and
+            stats.get("min_value", 0) >= -1 and stats.get("max_value", 0) <= 1
+        ),
+        action=PreprocessingAction.KEEP_AS_IS,
+        confidence_fn=lambda stats: 0.85,
+        explanation_fn=lambda stats: "Financial ratio column (already normalized). Keep original.",
+        priority=40,
+        parameters={"tags": ["finance", "numeric"]}
+    ))
+
+    # -------------------------------------------------------------------------
+    # HEALTHCARE DOMAIN (8 rules)
+    # -------------------------------------------------------------------------
+
+    # Rule 11: ICD Code
+    rules.append(Rule(
+        name="HEALTH_ICD_CODE",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            stats.get("domain_pattern_matches", {}).get("icd_code", 0) > 0.5
+        ),
+        action=PreprocessingAction.LABEL_ENCODE,
+        confidence_fn=lambda stats: 0.9,
+        explanation_fn=lambda stats: "Column contains ICD diagnostic codes. Treat as categorical.",
+        priority=45,
+        parameters={"tags": ["healthcare", "categorical", "medical_coding"]}
+    ))
+
+    # Rule 12: CPT Code
+    rules.append(Rule(
+        name="HEALTH_CPT_CODE",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            stats.get("domain_pattern_matches", {}).get("cpt_code", 0) > 0.5
+        ),
+        action=PreprocessingAction.LABEL_ENCODE,
+        confidence_fn=lambda stats: 0.9,
+        explanation_fn=lambda stats: "Column contains CPT procedure codes. Treat as categorical.",
+        priority=45,
+        parameters={"tags": ["healthcare", "categorical", "medical_coding"]}
+    ))
+
+    # Rule 13: Patient ID
+    rules.append(Rule(
+        name="HEALTH_PATIENT_ID",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            any(k in str(stats.get("column_name", "")).lower() for k in ["patient", "mrn", "subject_id"]) and
+            stats.get("unique_ratio", 0) > 0.9
+        ),
+        action=PreprocessingAction.KEEP_AS_IS,
+        confidence_fn=lambda stats: 0.95,
+        explanation_fn=lambda stats: "Column appears to be a Patient ID. Keep as identifier.",
+        priority=45,
+        parameters={"tags": ["healthcare", "identifier", "pii"]}
+    ))
+
+    # Rule 14: Medical Record Number (MRN)
+    rules.append(Rule(
+        name="HEALTH_MRN",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            stats.get("domain_pattern_matches", {}).get("mrn", 0) > 0.8 and
+            "mrn" in str(stats.get("column_name", "")).lower()
+        ),
+        action=PreprocessingAction.KEEP_AS_IS,
+        confidence_fn=lambda stats: 0.95,
+        explanation_fn=lambda stats: "Column appears to be a Medical Record Number. Keep as identifier.",
+        priority=45,
+        parameters={"tags": ["healthcare", "identifier", "pii"]}
+    ))
+
+    # Rule 15: DOB Validation
+    rules.append(Rule(
+        name="HEALTH_DOB_VALIDATION",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            (stats.get("dtype") == "datetime" or "date" in str(stats.get("column_name", "")).lower()) and
+            any(k in str(stats.get("column_name", "")).lower() for k in ["dob", "birth"])
+        ),
+        action=PreprocessingAction.DATETIME_EXTRACT_YEAR,
+        confidence_fn=lambda stats: 0.9,
+        explanation_fn=lambda stats: "Date of Birth column. Extract year for age calculation/anonymization.",
+        priority=45,
+        parameters={"tags": ["healthcare", "datetime", "pii"]}
+    ))
+
+    # Rule 16: Age Detection
+    rules.append(Rule(
+        name="HEALTH_AGE_DETECTION",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("is_numeric") and
+            str(stats.get("column_name", "")).lower() == "age" and
+            stats.get("min_value", 0) >= 0 and stats.get("max_value", 0) <= 120
+        ),
+        action=PreprocessingAction.BINNING_EQUAL_FREQ,
+        confidence_fn=lambda stats: 0.85,
+        explanation_fn=lambda stats: "Age column detected. Binning recommended for privacy and generalization.",
+        priority=40,
+        parameters={"tags": ["healthcare", "numeric", "privacy"]}
+    ))
+
+    # Rule 17: Vital Signs
+    rules.append(Rule(
+        name="HEALTH_VITAL_SIGNS",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("is_numeric") and
+            any(k in str(stats.get("column_name", "")).lower() for k in ["bp", "systolic", "diastolic", "heart_rate", "pulse", "bmi"])
+        ),
+        action=PreprocessingAction.STANDARD_SCALE,
+        confidence_fn=lambda stats: 0.85,
+        explanation_fn=lambda stats: "Vital signs column. Standardize for model stability.",
+        priority=40,
+        parameters={"tags": ["healthcare", "numeric", "normalization"]}
+    ))
+
+    # Rule 18: Lab Values
+    rules.append(Rule(
+        name="HEALTH_LAB_VALUES",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("is_numeric") and
+            any(k in str(stats.get("column_name", "")).lower() for k in ["lab", "test", "result", "glucose", "cholesterol"]) and
+            stats.get("outlier_count", 0) > 0
+        ),
+        action=PreprocessingAction.ROBUST_SCALE,
+        confidence_fn=lambda stats: 0.85,
+        explanation_fn=lambda stats: "Laboratory values with outliers. Use Robust Scaler.",
+        priority=40,
+        parameters={"tags": ["healthcare", "numeric", "outliers"]}
+    ))
+
+    # -------------------------------------------------------------------------
+    # E-COMMERCE DOMAIN (8 rules)
+    # -------------------------------------------------------------------------
+
+    # Rule 19: SKU Format
+    rules.append(Rule(
+        name="ECOMMERCE_SKU_FORMAT",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            "sku" in str(stats.get("column_name", "")).lower() and
+            stats.get("unique_ratio", 0) > 0.5
+        ),
+        action=PreprocessingAction.KEEP_AS_IS,
+        confidence_fn=lambda stats: 0.9,
+        explanation_fn=lambda stats: "Product SKU column. Keep as identifier.",
+        priority=45,
+        parameters={"tags": ["ecommerce", "identifier"]}
+    ))
+
+    # Rule 20: Order ID
+    rules.append(Rule(
+        name="ECOMMERCE_ORDER_ID",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            "order" in str(stats.get("column_name", "")).lower() and
+            "id" in str(stats.get("column_name", "")).lower() and
+            stats.get("unique_ratio", 0) > 0.9
+        ),
+        action=PreprocessingAction.KEEP_AS_IS,
+        confidence_fn=lambda stats: 0.95,
+        explanation_fn=lambda stats: "Order ID column. Keep as identifier.",
+        priority=45,
+        parameters={"tags": ["ecommerce", "identifier"]}
+    ))
+
+    # Rule 21: Price Format
+    rules.append(Rule(
+        name="ECOMMERCE_PRICE_FORMAT",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("is_numeric") and
+            any(k in str(stats.get("column_name", "")).lower() for k in ["price", "cost", "msrp"])
+        ),
+        action=PreprocessingAction.STANDARD_SCALE,
+        confidence_fn=lambda stats: 0.85,
+        explanation_fn=lambda stats: "Price column. Standardize for model input.",
+        priority=40,
+        parameters={"tags": ["ecommerce", "numeric"]}
+    ))
+
+    # Rule 22: Discount Code
+    rules.append(Rule(
+        name="ECOMMERCE_DISCOUNT_CODE",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            any(k in str(stats.get("column_name", "")).lower() for k in ["discount", "promo", "coupon"])
+        ),
+        action=PreprocessingAction.ONEHOT_ENCODE,
+        confidence_fn=lambda stats: 0.85,
+        explanation_fn=lambda stats: "Discount/Promo code. One-hot encode if cardinality is low.",
+        priority=40,
+        parameters={"tags": ["ecommerce", "categorical"]}
+    ))
+
+    # Rule 23: Quantity
+    rules.append(Rule(
+        name="ECOMMERCE_QUANTITY",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("is_numeric") and
+            any(k in str(stats.get("column_name", "")).lower() for k in ["qty", "quantity", "units"]) and
+            stats.get("min_value", 0) >= 0
+        ),
+        action=PreprocessingAction.KEEP_AS_IS,
+        confidence_fn=lambda stats: 0.8,
+        explanation_fn=lambda stats: "Quantity column. Keep original numeric values.",
+        priority=40,
+        parameters={"tags": ["ecommerce", "numeric"]}
+    ))
+
+    # Rule 24: Tracking Number
+    rules.append(Rule(
+        name="ECOMMERCE_TRACKING_NUMBER",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            any(k in str(stats.get("column_name", "")).lower() for k in ["tracking", "shipment"]) and
+            stats.get("domain_pattern_matches", {}).get("tracking", 0) > 0.5
+        ),
+        action=PreprocessingAction.DROP_COLUMN,
+        confidence_fn=lambda stats: 0.9,
+        explanation_fn=lambda stats: "Shipping tracking number. Drop as it has no predictive value.",
+        priority=45,
+        parameters={"tags": ["ecommerce", "text"]}
+    ))
+
+    # Rule 25: Product Code
+    rules.append(Rule(
+        name="ECOMMERCE_PRODUCT_CODE",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("dtype") == "object" and
+            any(k in str(stats.get("column_name", "")).lower() for k in ["product_code", "item_code", "upc", "ean"])
+        ),
+        action=PreprocessingAction.KEEP_AS_IS,
+        confidence_fn=lambda stats: 0.9,
+        explanation_fn=lambda stats: "Product code/UPC/EAN. Keep as identifier.",
+        priority=45,
+        parameters={"tags": ["ecommerce", "identifier"]}
+    ))
+
+    # Rule 26: Rating Score
+    rules.append(Rule(
+        name="ECOMMERCE_RATING_SCORE",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        condition=lambda stats: (
+            stats.get("is_numeric") and
+            any(k in str(stats.get("column_name", "")).lower() for k in ["rating", "stars", "score"]) and
+            stats.get("min_value", 0) >= 0 and stats.get("max_value", 0) <= 5
+        ),
+        action=PreprocessingAction.MINMAX_SCALE,
+        confidence_fn=lambda stats: 0.85,
+        explanation_fn=lambda stats: "Product rating (0-5). MinMax scale to 0-1 range.",
+        priority=40,
+        parameters={"tags": ["ecommerce", "numeric", "normalization"]}
+    ))
+
+    return rules
+
+
+def create_composite_rules() -> List[Rule]:
+    """Create composite rules that use multiple conditions."""
+    rules = []
+    # Placeholder for future composite rules
+    return rules
+
+
 
 def get_extended_rules() -> List[Rule]:
     """Get all extended rules sorted by priority."""
