@@ -308,8 +308,8 @@ export default function PreprocessingPanel() {
           <button
             onClick={() => setMode('single')}
             className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${mode === 'single'
-                ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-                : 'bg-white/50 text-slate-600 hover:bg-white/80'
+              ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+              : 'bg-white/50 text-slate-600 hover:bg-white/80'
               }`}
           >
             <div className="flex items-center justify-center gap-2">
@@ -320,8 +320,8 @@ export default function PreprocessingPanel() {
           <button
             onClick={() => setMode('file')}
             className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${mode === 'file'
-                ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-                : 'bg-white/50 text-slate-600 hover:bg-white/80'
+              ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+              : 'bg-white/50 text-slate-600 hover:bg-white/80'
               }`}
           >
             <div className="flex items-center justify-center gap-2">
@@ -536,10 +536,10 @@ export default function PreprocessingPanel() {
           </div>
 
           {/* Intelligent 2-Panel Layout: Health + Recommendations */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
             {/* PANEL 2: Data Health (30% on XL screens) */}
             {batchResults.health && (
-              <div className="xl:col-span-1 glass-card overflow-hidden">
+              <div className="xl:col-span-1 glass-card overflow-hidden flex flex-col">
                 <button
                   onClick={() => togglePanel('dataHealth')}
                   className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
@@ -550,8 +550,8 @@ export default function PreprocessingPanel() {
                       <h3 className="text-base font-bold text-slate-800">Health</h3>
                     </div>
                     <span className={`px-2 py-1 text-xs rounded-full font-medium w-fit ${batchResults.health.overall_health_score >= 80 ? 'bg-green-100 text-green-700' :
-                        batchResults.health.overall_health_score >= 50 ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-red-100 text-red-700'
+                      batchResults.health.overall_health_score >= 50 ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'
                       }`}>
                       {batchResults.health.overall_health_score.toFixed(0)}/100
                     </span>
@@ -564,7 +564,7 @@ export default function PreprocessingPanel() {
                 </button>
 
                 {expandedPanels.dataHealth && (
-                  <div className="px-4 pb-4 border-t border-slate-200">
+                  <div className="px-4 pb-4 border-t border-slate-200 flex-1">
                     {/* Overall Health Score - Compact */}
                     <div className="mt-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-100">
                       <p className="text-xs text-slate-600 mb-2">Dataset Health</p>
@@ -598,8 +598,8 @@ export default function PreprocessingPanel() {
                       <h4 className="text-xs font-semibold text-slate-700">Columns</h4>
                       {Object.values(batchResults.health.column_health).map((health: ColumnHealthMetrics) => (
                         <div key={health.column_name} className={`border rounded-lg p-2 transition-all ${health.severity === 'healthy' ? 'border-green-200 bg-green-50/30' :
-                            health.severity === 'warning' ? 'border-yellow-200 bg-yellow-50/30' :
-                              'border-red-200 bg-red-50/30'
+                          health.severity === 'warning' ? 'border-yellow-200 bg-yellow-50/30' :
+                            'border-red-200 bg-red-50/30'
                           }`}>
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -612,8 +612,8 @@ export default function PreprocessingPanel() {
                               </div>
                             </div>
                             <div className={`text-lg font-bold ${health.severity === 'healthy' ? 'text-green-600' :
-                                health.severity === 'warning' ? 'text-yellow-600' :
-                                  'text-red-600'
+                              health.severity === 'warning' ? 'text-yellow-600' :
+                                'text-red-600'
                               }`}>
                               {health.health_score.toFixed(0)}
                             </div>
@@ -622,8 +622,8 @@ export default function PreprocessingPanel() {
                             <div className="mt-1 flex flex-wrap gap-1">
                               {health.anomalies.slice(0, 2).map((anomaly, idx) => (
                                 <span key={idx} className={`text-xs px-1 py-0.5 rounded ${health.severity === 'critical' ? 'bg-red-100 text-red-700' :
-                                    health.severity === 'warning' ? 'bg-yellow-100 text-yellow-700' :
-                                      'bg-blue-100 text-blue-700'
+                                  health.severity === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-blue-100 text-blue-700'
                                   }`}>
                                   {anomaly}
                                 </span>
@@ -643,7 +643,7 @@ export default function PreprocessingPanel() {
 
             {/* PANEL 3: Column Recommendations (30% on XL screens) */}
             {Object.keys(batchResults.results).length > 0 && (
-              <div className="xl:col-span-1 glass-card overflow-hidden">
+              <div className="xl:col-span-1 glass-card overflow-hidden flex flex-col">
                 <button
                   onClick={() => togglePanel('recommendations')}
                   className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
@@ -665,17 +665,17 @@ export default function PreprocessingPanel() {
                 </button>
 
                 {expandedPanels.recommendations && (
-                  <div className="px-4 pb-4 border-t border-slate-200">
+                  <div className="px-4 pb-4 border-t border-slate-200 flex-1">
                     <div className="mt-4 space-y-2 max-h-[600px] overflow-y-auto pr-2">
                       {Object.entries(batchResults.results).map(([columnName, columnResult]) => (
                         <div key={columnName} className="border border-slate-200 rounded-lg p-2 bg-white/50">
                           <div className="flex items-center justify-between gap-2 mb-2">
                             <h4 className="font-semibold text-slate-800 text-xs truncate flex-1 min-w-0">{columnName}</h4>
                             <div className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${columnResult.confidence >= 0.9
-                                ? 'bg-green-100 text-green-700'
-                                : columnResult.confidence >= 0.7
-                                  ? 'bg-yellow-100 text-yellow-700'
-                                  : 'bg-red-100 text-red-700'
+                              ? 'bg-green-100 text-green-700'
+                              : columnResult.confidence >= 0.7
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-red-100 text-red-700'
                               }`}>
                               {(columnResult.confidence * 100).toFixed(0)}%
                             </div>
@@ -691,12 +691,12 @@ export default function PreprocessingPanel() {
                             <div className="flex items-center gap-2">
                               <span className="text-xs text-slate-600">Source:</span>
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${columnResult.source === 'user_override'
-                                  ? 'bg-green-100 text-green-700'
-                                  : columnResult.source === 'meta_learning'
-                                    ? 'bg-orange-100 text-orange-700'
-                                    : columnResult.source === 'conservative_fallback'
-                                      ? 'bg-slate-100 text-slate-700'
-                                      : 'bg-purple-100 text-purple-700'
+                                ? 'bg-green-100 text-green-700'
+                                : columnResult.source === 'meta_learning'
+                                  ? 'bg-orange-100 text-orange-700'
+                                  : columnResult.source === 'conservative_fallback'
+                                    ? 'bg-slate-100 text-slate-700'
+                                    : 'bg-purple-100 text-purple-700'
                                 }`}>
                                 {columnResult.source}
                               </span>

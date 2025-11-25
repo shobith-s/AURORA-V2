@@ -41,6 +41,7 @@ class PreprocessingAction(Enum):
     PARSE_NUMERIC = "parse_numeric"
     PARSE_JSON = "parse_json"
     PARSE_CATEGORICAL = "parse_categorical"
+    DATETIME_EXTRACT_YEAR = "datetime_extract_year"
 
     # Scaling Actions
     STANDARD_SCALE = "standard_scale"
@@ -221,6 +222,17 @@ ACTION_REGISTRY: Dict[PreprocessingAction, ActionMetadata] = {
         requirements=[],
         parameters={},
         reversible=True,
+        preserves_nulls=True
+    ),
+
+    # DateTime Actions
+    PreprocessingAction.DATETIME_EXTRACT_YEAR: ActionMetadata(
+        action=PreprocessingAction.DATETIME_EXTRACT_YEAR,
+        category=ActionCategory.FEATURE_ENGINEERING,
+        description="Extract year from datetime column",
+        requirements=["temporal"],
+        parameters={},
+        reversible=False,
         preserves_nulls=True
     ),
 }

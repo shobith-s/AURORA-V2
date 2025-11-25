@@ -392,7 +392,30 @@ async def preprocess_column(request: PreprocessRequest):
         )
 
 
-@app.post("/api/explain/enhanced")
+def convert_numpy_types(obj):
+    """Convert numpy types to native Python types for JSON serialization."""
+    import numpy as np
+    
+    if isinstance(obj, (np.bool_, np.generic)) and hasattr(obj, 'item'):
+        # Handle numpy scalars including bool_
+        return obj.item()
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_numpy_types(item) for item in obj)
+    else:
+        return obj
+
+
+@app.post("/explain/enhanced")
 async def explain_enhanced(request: PreprocessRequest):
     """
     Get enhanced explanation for a column decision with markdown report.
@@ -424,45 +447,72 @@ async def explain_enhanced(request: PreprocessRequest):
 
 """
         
+        # Get metadata from result.context (that's where stats are stored)
+        metadata = result.context if result.context else {}
+        
+        # Convert numpy types in metadata to native Python types
+        metadata = convert_numpy_types(metadata)
+        
         # Add metadata insights if available
-        if result.metadata:
-            if result.metadata.get("skewness"):
-                markdown_report += f"- **Skewness:** {result.metadata['skewness']:.2f}\n"
-            if result.metadata.get("null_pct"):
-                markdown_report += f"- **Missing Values:** {result.metadata['null_pct'] * 100:.1f}%\n"
-            if result.metadata.get("outlier_pct"):
-                markdown_report += f"- **Outliers:** {result.metadata['outlier_pct'] * 100:.1f}%\n"
-            if result.metadata.get("unique_ratio"):
-                markdown_report += f"- **Unique Ratio:** {result.metadata['unique_ratio'] * 100:.1f}%\n"
+        if metadata:
+            if metadata.get("skewness"):
+                markdown_report += f"- **Skewness:** {metadata['skewness']:.2f}\n"
+            if metadata.get("null_pct"):
+                markdown_report += f"- **Missing Values:** {metadata['null_pct'] * 100:.1f}%\n"
+            if metadata.get("outlier_pct"):
+                markdown_report += f"- **Outliers:** {metadata['outlier_pct'] * 100:.1f}%\n"
+            if metadata.get("unique_ratio"):
+                markdown_report += f"- **Unique Ratio:** {metadata['unique_ratio'] * 100:.1f}%\n"
         
         # Add alternatives section
+        alternatives_serializable = []
         if result.alternatives:
             markdown_report += "\n### Alternative Approaches\n\n"
             for alt in result.alternatives[:3]:  # Top 3 alternatives
-                action_name = alt.get("action", "unknown").replace('_', ' ').title()
-                conf = alt.get("confidence", 0)
+                # Handle both tuple and dict formats
+                if isinstance(alt, tuple):
+                    action, conf = alt
+                    action_name = action.value if hasattr(action, 'value') else str(action)
+                    alternatives_serializable.append({
+                        "action": action_name,
+                        "confidence": float(conf)
+                    })
+                else:
+                    action_name = alt.get("action", "unknown")
+                    conf = alt.get("confidence", 0)
+                    alternatives_serializable.append({
+                        "action": action_name,
+                        "confidence": float(conf)
+                    })
+                action_name = action_name.replace('_', ' ').title()
                 markdown_report += f"- **{action_name}** ({conf * 100:.1f}% confidence)\n"
         
         # Construct response matching frontend expectations
-        return {
+        response = {
             "decision": {
                 "action": result.action.value,
-                "confidence": result.confidence,
+                "confidence": float(result.confidence),
                 "source": result.source,
                 "decision_id": result.decision_id
             },
             "markdown_report": markdown_report,
-            "alternatives": result.alternatives,
-            "metadata": result.metadata,
+            "alternatives": alternatives_serializable,
+            "metadata": metadata,  # Frontend expects this field
             "context": {
                 "column_name": request.column_name,
                 "sample_size": len(request.column_data),
                 "context": request.context
             }
         }
+        
+        # Final safety conversion
+        return convert_numpy_types(response)
+        
     except Exception as e:
+        import traceback
         logger.error(f"Explanation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate enhanced explanation: {str(e)}")
 
 
 def compute_column_health(column: pd.Series, column_name: str) -> 'ColumnHealthMetrics':
@@ -485,29 +535,43 @@ def compute_column_health(column: pd.Series, column_name: str) -> 'ColumnHealthM
     unique_count = int(column.nunique())
     unique_ratio = float(unique_count / total_count) if total_count > 0 else 0.0
 
-    # Detect data type - try to infer numeric types from object dtype
+    # Detect data type - check actual pandas dtype first
     non_null = column.dropna()
     if len(non_null) == 0:
         data_type = "empty"
         anomalies.append("All values are null")
         health_score = 0.0
     else:
-        # Try to convert to numeric first (handles JSON data that comes as strings)
-        try:
-            numeric_column = pd.to_numeric(column, errors='coerce')
-            # If most values successfully converted, it's numeric
-            if numeric_column.notna().sum() / len(column) > 0.5:
-                column = numeric_column  # Use the numeric version
-                data_type = "numeric"
-            elif pd.api.types.is_datetime64_any_dtype(column):
-                data_type = "datetime"
-            else:
-                data_type = "categorical"
-        except:
-            if pd.api.types.is_datetime64_any_dtype(column):
-                data_type = "datetime"
-            else:
-                data_type = "categorical"
+        # Check if already numeric dtype
+        if pd.api.types.is_numeric_dtype(column):
+            data_type = "numeric"
+        elif pd.api.types.is_datetime64_any_dtype(column):
+            data_type = "datetime"
+        # For object/string types, try to infer
+        elif pd.api.types.is_object_dtype(column) or pd.api.types.is_string_dtype(column):
+            try:
+                # Try to convert to numeric
+                numeric_column = pd.to_numeric(column, errors='coerce')
+                # If most values successfully converted, it's numeric
+                successful_conversions = numeric_column.notna().sum()
+                if successful_conversions / len(column) > 0.8:  # 80% threshold
+                    column = numeric_column  # Use the numeric version
+                    data_type = "numeric"
+                else:
+                    # Check unique ratio to determine if categorical
+                    if unique_ratio < 0.5:  # Less than 50% unique -> categorical
+                        data_type = "categorical"
+                    else:
+                        data_type = "text"  # High unique ratio -> text
+            except:
+                # Default to categorical for object types with low unique ratio
+                if unique_ratio < 0.5:
+                    data_type = "categorical"
+                else:
+                    data_type = "text"
+        else:
+            # Fallback for unknown types
+            data_type = "categorical"
 
     # Numeric-specific metrics
     outlier_count = None

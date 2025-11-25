@@ -250,30 +250,55 @@ class ExplanationGenerator:
         reasons = []
 
         # Check which reasons apply based on context
-        if "null_percentage" in context and context["null_percentage"] > 50:
-            reasons.append(reason_templates.get("high_null", "").format(**context))
+        null_pct = context.get("null_percentage")
+        if null_pct is not None and null_pct > 50:
+            try:
+                reasons.append(reason_templates.get("high_null", "").format(**context))
+            except (KeyError, ValueError):
+                pass
 
-        if "is_constant" in context and context["is_constant"]:
+        if context.get("is_constant"):
             reasons.append(reason_templates.get("constant", ""))
 
-        if "skewness" in context and abs(context.get("skewness", 0)) > 2:
-            reasons.append(reason_templates.get("high_skew", "").format(**context))
+        skewness = context.get("skewness")
+        if skewness is not None and abs(skewness) > 2:
+            try:
+                reasons.append(reason_templates.get("high_skew", "").format(**context))
+            except (KeyError, ValueError):
+                pass
 
-        if "outlier_percentage" in context and context["outlier_percentage"] > 5:
-            reasons.append(reason_templates.get("outliers_present", "").format(**context))
+        outlier_pct = context.get("outlier_percentage")
+        if outlier_pct is not None and outlier_pct > 5:
+            try:
+                reasons.append(reason_templates.get("outliers_present", "").format(**context))
+            except (KeyError, ValueError):
+                pass
 
-        if "unique_ratio" in context and context["unique_ratio"] < 0.05:
-            reasons.append(reason_templates.get("low_cardinality", "").format(**context))
+        unique_ratio = context.get("unique_ratio")
+        if unique_ratio is not None and unique_ratio < 0.05:
+            try:
+                reasons.append(reason_templates.get("low_cardinality", "").format(**context))
+            except (KeyError, ValueError):
+                pass
 
-        if "unique_count" in context and context["unique_count"] > 50:
-            reasons.append(reason_templates.get("high_cardinality", "").format(
-                n_categories=context["unique_count"]
-            ))
+        unique_count = context.get("unique_count")
+        if unique_count is not None and unique_count > 50:
+            try:
+                reasons.append(reason_templates.get("high_cardinality", "").format(
+                    n_categories=unique_count
+                ))
+            except (KeyError, ValueError):
+                pass
 
-        if "min_value" in context and "max_value" in context:
-            reasons.append(reason_templates.get("large_range", "").format(**context))
+        min_val = context.get("min_value")
+        max_val = context.get("max_value")
+        if min_val is not None and max_val is not None:
+            try:
+                reasons.append(reason_templates.get("large_range", "").format(**context))
+            except (KeyError, ValueError):
+                pass
 
-        if "all_positive" in context and context.get("all_positive", False):
+        if context.get("all_positive", False):
             reasons.append(reason_templates.get("positive_only", ""))
 
         # If no specific reasons matched, use first available
@@ -306,13 +331,14 @@ class ExplanationGenerator:
         if "std_dev" in context:
             stats.append(f"Std deviation: {context['std_dev']:.2f}")
 
-        if "skewness" in context:
-            skew = context['skewness']
-            direction = "right" if skew > 0 else "left"
-            stats.append(f"Skewness: {skew:.2f} ({direction}-skewed)")
+        skewness = context.get('skewness')
+        if skewness is not None:
+            direction = "right" if skewness > 0 else "left"
+            stats.append(f"Skewness: {skewness:.2f} ({direction}-skewed)")
 
-        if "outlier_percentage" in context and context['outlier_percentage'] > 0:
-            stats.append(f"Outliers: {context['outlier_percentage']:.1f}%")
+        outlier_pct = context.get('outlier_percentage')
+        if outlier_pct is not None and outlier_pct > 0:
+            stats.append(f"Outliers: {outlier_pct:.1f}%")
 
         return stats
 

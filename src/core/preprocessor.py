@@ -14,7 +14,9 @@ from ..symbolic.engine import SymbolicEngine
 from ..neural.oracle import NeuralOracle, get_neural_oracle
 from ..features.minimal_extractor import MinimalFeatureExtractor, get_feature_extractor
 from .actions import PreprocessingAction, PreprocessingResult
+from .actions import PreprocessingAction, PreprocessingResult
 from .explainer import get_explainer
+from ..analysis.dataset_analyzer import DatasetAnalyzer  # NEW: Inter-column analysis
 
 # Confidence thresholds for decision quality
 CONFIDENCE_HIGH = 0.9      # Auto-apply decision (highly confident)
@@ -51,7 +53,6 @@ class IntelligentPreprocessor:
         use_neural_oracle: bool = True,
         enable_learning: bool = True,
         neural_model_path: Optional[Path] = None,
-        enable_meta_learning: bool = True,
         db_url: Optional[str] = None  # NEW: Database URL for learning engine
     ):
         """
@@ -70,7 +71,6 @@ class IntelligentPreprocessor:
         self.confidence_threshold = confidence_threshold
         self.use_neural_oracle = use_neural_oracle
         self.enable_learning = enable_learning
-        self.enable_meta_learning = enable_meta_learning
         self.db_url = db_url or "sqlite:///./aurora.db"
 
         # Initialize components with error handling
@@ -105,12 +105,6 @@ class IntelligentPreprocessor:
                 self.learning_engine = None
                 self.enable_learning = False
 
-        # Meta learner
-        try:
-            self.meta_learner = get_meta_learner() if enable_meta_learning else None
-        except Exception as e:
-            logger.warning(f"Meta learner initialization failed, continuing without it: {e}")
-            self.meta_learner = None
 
         # Feature extractor (required for neural oracle)
         try:
@@ -213,8 +207,9 @@ class IntelligentPreprocessor:
 
         # LAYER 1: Symbolic engine (THE ONLY DECISION-MAKER)
         # Note: Symbolic engine now includes validated production rules from learning engine
+        # NEW: Pass metadata as context to symbolic engine
         symbolic_result = self.symbolic_engine.evaluate(
-            column, column_name, target_available
+            column, column_name, target_available, context=metadata
         )
 
         # If symbolic engine has high confidence, use it
@@ -228,30 +223,8 @@ class IntelligentPreprocessor:
             symbolic_result.decision_id = decision_id
             return self._add_confidence_warnings(symbolic_result, context, column_name)
 
-        # LAYER 2.5: Try meta-learning (statistical heuristics) for universal coverage
-        # This bridges the gap between symbolic rules and neural oracle
-        if self.enable_meta_learning and self.meta_learner:
-            # Use the same stats computed for symbolic engine
-            stats_dict = symbolic_result.context if symbolic_result.context else {}
-
-            meta_result = self.meta_learner.decide(stats_dict, column_name)
-            if meta_result and meta_result.confidence >= (self.confidence_threshold - 0.1):
-                # Accept meta-learning if confidence is close to threshold
-                # (e.g., threshold=0.9, accept >=0.8)
-                self.stats['meta_learning_decisions'] += 1
-
-                if meta_result.confidence >= self.confidence_threshold:
-                    self.stats['high_confidence_decisions'] += 1
-
-                elapsed_ms = (time.time() - start_time) * 1000
-                self.stats['total_time_ms'] += elapsed_ms
-
-                # Update cache with meta-learning decision
-                if self.enable_cache and self.cache:
-                    self.cache.set(stats_dict, meta_result.action, column_name)
-
-                meta_result.decision_id = decision_id
-                return self._add_confidence_warnings(meta_result, context, column_name)
+        # LAYER 2.5: Meta-learning removed to simplify architecture and enable Neural Oracle
+        # (Meta-learner code removed)
 
         # LAYER 3: Use NeuralOracle for ambiguous cases (<5ms)
         if self.use_neural_oracle and self.neural_oracle:
@@ -546,10 +519,14 @@ class IntelligentPreprocessor:
             )
             result.explanation = enhanced_explanation
         except Exception as e:
-            # If explanation enhancement fails, keep original
+            # If explanation enhancement fails, keep original but ensure it's not empty
             import logging
             logger = logging.getLogger(__name__)
             logger.warning(f"Failed to enhance explanation: {e}")
+            
+            # Fallback explanation if original is missing or empty
+            if not result.explanation:
+                result.explanation = f"Recommended action: {result.action.value} (confidence: {result.confidence:.1%})"
 
         # Add confidence warnings
         if result.confidence < CONFIDENCE_LOW:
@@ -641,8 +618,8 @@ class IntelligentPreprocessor:
                     parameters={},
                     context=column_stats
                 )
-            # Medium cardinality → frequency encoding
-            elif cardinality <= 50:
+            # Medium/High cardinality → frequency encoding (safer than hash)
+            elif cardinality <= 1000:
                 return PreprocessingResult(
                     action=PreprocessingAction.FREQUENCY_ENCODE,
                     confidence=0.65,
@@ -655,13 +632,13 @@ class IntelligentPreprocessor:
                     parameters={},
                     context=column_stats
                 )
-            # High cardinality → hash encoding
+            # Very high cardinality → hash encoding
             else:
                 return PreprocessingResult(
                     action=PreprocessingAction.HASH_ENCODE,
                     confidence=0.68,
                     source='conservative_fallback',
-                    explanation=f"[CONSERVATIVE] High cardinality ({cardinality}): hash encoding prevents dimensionality explosion",
+                    explanation=f"[CONSERVATIVE] Very high cardinality ({cardinality}): hash encoding prevents dimensionality explosion",
                     alternatives=[
                         (PreprocessingAction.FREQUENCY_ENCODE, 0.62)
                     ],
@@ -796,6 +773,12 @@ class IntelligentPreprocessor:
         Returns:
             Dictionary mapping column names to PreprocessingResults
         """
+        # NEW: Run inter-column analysis
+        analyzer = DatasetAnalyzer()
+        primary_keys = analyzer.detect_primary_keys(df)
+        correlations = analyzer.find_numeric_correlations(df)
+        foreign_keys = analyzer.analyze_foreign_key_candidates(df)
+        
         results = {}
 
         for column_name in df.columns:
@@ -803,11 +786,28 @@ class IntelligentPreprocessor:
                 continue  # Skip target column
 
             target_available = target_column is not None
+            
+            # NEW: Prepare context for this column
+            col_context = {
+                "is_primary_key": column_name in primary_keys,
+                "is_foreign_key": column_name in foreign_keys,
+                "correlation_with_target": 0.0
+            }
+            
+            # Add target correlation if available
+            if target_available and column_name in correlations:
+                # correlations[column_name] is a list of (other_col, corr_value) tuples
+                for other_col, corr_value in correlations[column_name]:
+                    if other_col == target_column:
+                        col_context["correlation_with_target"] = corr_value
+                        break
+
             result = self.preprocess_column(
                 df[column_name],
                 column_name,
                 target_available,
-                context=context
+                context=context,
+                metadata=col_context  # Pass analysis results as metadata
             )
             results[column_name] = result
 

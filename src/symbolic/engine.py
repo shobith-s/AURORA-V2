@@ -6,7 +6,7 @@ Handles 80% of preprocessing decisions with deterministic rules.
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 from datetime import datetime
 import json
@@ -26,6 +26,8 @@ class ColumnStatistics:
     unique_count: int
     unique_ratio: float
     dtype: str
+    column_name: str = ""  # NEW: Column name for rule evaluation
+    avg_length: float = 0.0  # NEW: Average string length for text columns
 
     # Type indicators
     is_numeric: bool = False
@@ -60,13 +62,20 @@ class ColumnStatistics:
     # Data quality
     duplicate_ratio: float = 0.0
     null_has_pattern: bool = False
+    encoded_null_ratio: float = 0.0  # NEW: Ratio of likely encoded nulls
 
     # NEW: Additional statistical metrics for universal coverage
+    domain_pattern_matches: Dict[str, float] = field(default_factory=dict)  # NEW: Domain pattern scores
     cv: Optional[float] = None  # Coefficient of variation
     entropy: Optional[float] = None  # Shannon entropy (information content)
     target_correlation: Optional[float] = None  # Correlation with target (if available)
     range_size: Optional[float] = None  # Max - Min
     iqr: Optional[float] = None  # Interquartile range
+
+    # NEW: Inter-column analysis fields
+    is_primary_key: bool = False
+    is_foreign_key: bool = False
+    correlation_with_target: float = 0.0
 
     # Pattern matching
     matches_iso_datetime: float = 0.0
@@ -148,6 +157,12 @@ class ColumnStatistics:
             "looks_like_percentage": self.looks_like_percentage,
             "looks_like_categorical_code": self.looks_like_categorical_code,
             "target_available": self.target_available,
+            "domain_pattern_matches": self.domain_pattern_matches,
+            "column_name": self.column_name,
+            "avg_length": self.avg_length,
+            "is_primary_key": self.is_primary_key,
+            "is_foreign_key": self.is_foreign_key,
+            "correlation_with_target": self.correlation_with_target,
         }
 
 
@@ -173,7 +188,8 @@ class SymbolicEngine:
         self,
         column: pd.Series,
         column_name: str = "",
-        target_available: bool = False
+        target_available: bool = False,
+        context: Optional[Dict[str, Any]] = None  # NEW: Context from DatasetAnalyzer
     ) -> ColumnStatistics:
         """
         Compute comprehensive statistics for a column.
@@ -211,7 +227,8 @@ class SymbolicEngine:
             is_categorical=is_categorical,
             is_text=is_text,
             cardinality=unique_count,
-            target_available=target_available
+            target_available=target_available,
+            column_name=column_name
         )
 
         # Numeric statistics
@@ -267,6 +284,9 @@ class SymbolicEngine:
         if is_text and null_pct < 1.0:
             sample = column.dropna().head(min(1000, len(column)))
             sample_str = sample.astype(str)
+            
+            # NEW: Calculate average length
+            stats.avg_length = float(sample_str.str.len().mean())
 
             # DateTime patterns
             stats.matches_iso_datetime = self._check_pattern(sample_str, r'^\d{4}-\d{2}-\d{2}')
@@ -303,6 +323,54 @@ class SymbolicEngine:
             stats.has_extra_whitespace = sample_str.str.contains(r'\s{2,}').any()
             stats.has_special_chars = sample_str.str.contains(r'[^\w\s]').any()
 
+            # NEW: Domain Pattern Matching
+            patterns = {
+                "currency": r'^[\$€£¥₹]\s*\d+(?:,\d{3})*(?:\.\d{2})?$',
+                "stock_ticker": r'^[A-Z]{1,5}$',
+                "credit_card": r'^\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}$',
+                "ssn": r'^\d{3}-\d{2}-\d{4}$',
+                "ein": r'^\d{2}-\d{7}$',
+                "iban": r'^[A-Z]{2}\d{2}[A-Z0-9]{1,30}$',
+                "swift": r'^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$',
+                "percentage": r'^\d+(?:\.\d+)?%$',
+                "icd_code": r'^[A-Z]\d{2}(?:\.\d{1,3})?$',
+                "cpt_code": r'^\d{4}[A-Z0-9]$',
+                "mrn": r'^\d{6,12}$',
+                "tracking": r'^[A-Z0-9]{10,25}$'
+            }
+            
+            for name, pattern in patterns.items():
+                stats.domain_pattern_matches[name] = self._check_pattern(sample_str, pattern)
+
+        # NEW: Encoded Null Detection
+        if row_count > 0:
+            encoded_null_count = 0
+            
+            # Numeric encoded nulls
+            if is_numeric:
+                # Check for common numeric placeholders
+                placeholders = [-999, -9999, 99999, 999999, -1]
+                encoded_null_count = column.isin(placeholders).sum()
+            
+            # Text/Categorical encoded nulls
+            elif is_text or is_categorical:
+                # Check for common text placeholders (case insensitive)
+                text_placeholders = ["missing", "unknown", "n/a", "null", "?", "-", "none", "undefined"]
+                # Convert to lower string for comparison
+                lower_col = column.astype(str).str.lower()
+                encoded_null_count = lower_col.isin(text_placeholders).sum()
+            
+            # Date encoded nulls (if temporal or text looking like date)
+            if is_text or stats.matches_date_pattern > 0.5:
+                # Check for common date placeholders
+                date_placeholders = ["1900-01-01", "1970-01-01", "0000-00-00", "9999-12-31"]
+                # Check string representation
+                str_col = column.astype(str)
+                for placeholder in date_placeholders:
+                    encoded_null_count += str_col.str.contains(placeholder, regex=False).sum()
+            
+            stats.encoded_null_ratio = encoded_null_count / row_count
+
         # Duplicate ratio
         if row_count > 0:
             duplicates = row_count - unique_count
@@ -324,6 +392,12 @@ class SymbolicEngine:
         # Check for ordinal pattern
         if is_categorical:
             stats.is_ordinal = self._detect_ordinal(column.dropna())
+
+        # NEW: Populate context-aware fields
+        if context:
+            stats.is_primary_key = context.get("is_primary_key", False)
+            stats.is_foreign_key = context.get("is_foreign_key", False)
+            stats.correlation_with_target = context.get("correlation_with_target", 0.0)
 
         return stats
 
@@ -373,7 +447,8 @@ class SymbolicEngine:
         self,
         column: pd.Series,
         column_name: str = "",
-        target_available: bool = False
+        target_available: bool = False,
+        context: Optional[Dict[str, Any]] = None  # NEW: Context argument
     ) -> PreprocessingResult:
         """
         Evaluate column and return preprocessing recommendation.
@@ -387,7 +462,7 @@ class SymbolicEngine:
             PreprocessingResult with action, confidence, and explanation
         """
         # Compute statistics
-        stats = self.compute_column_statistics(column, column_name, target_available)
+        stats = self.compute_column_statistics(column, column_name, target_available, context)
         stats_dict = stats.to_dict()
 
         # Evaluate rules in priority order
