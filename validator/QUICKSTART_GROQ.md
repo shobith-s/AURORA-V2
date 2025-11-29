@@ -47,7 +47,7 @@ GROQ_API_KEY = "gsk_..."  # ⚠️ REPLACE WITH YOUR KEY!
 from groq import Groq
 client = Groq(api_key=GROQ_API_KEY)
 response = client.chat.completions.create(
-    model="llama-3.1-70b-versatile",
+    model="llama-3.3-70b-versatile",
     messages=[{"role": "user", "content": "Hello!"}],
     max_tokens=50
 )

@@ -45,7 +45,7 @@ class LLMClient:
                 raise ValueError("Groq API key required")
             from groq import Groq
             self.groq_client = Groq(api_key=api_key)
-            self.groq_model = "llama-3.1-70b-versatile"
+            self.groq_model = "llama-3.3-70b-versatile"  # Updated to current model
             logger.info(f"✅ Using {self.groq_model} (Groq - FAST & FREE)")
         
         else:
