@@ -26,7 +26,7 @@ print_flush("IMPROVED NEURAL ORACLE TRAINING (Week 1)")
 print_flush("="*70)
 
 # Load validated labels
-labels_file = Path('validated/validated_labels.json')
+labels_file = Path('validator/validated/validated_labels.json')
 
 if not labels_file.exists():
     print_flush(f"❌ ERROR: File not found: {labels_file}")
