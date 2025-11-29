@@ -112,6 +112,94 @@ def create_diverse_synthetic_datasets() -> dict:
     })
     logger.info("✅ Finance: 800 rows, 6 columns")
     
+    # NEW: Titanic-like dataset
+    datasets['passenger_survival'] = pd.DataFrame({
+        'passenger_id': range(600),
+        'age': np.random.normal(35, 15, 600).clip(1, 80),
+        'fare': np.random.lognormal(3, 1.5, 600),
+        'pclass': np.random.choice([1, 2, 3], 600, p=[0.2, 0.3, 0.5]),
+        'sex': np.random.choice(['male', 'female'], 600),
+        'embarked': np.random.choice(['C', 'Q', 'S'], 600, p=[0.2, 0.1, 0.7]),
+        'survived': np.random.choice([0, 1], 600, p=[0.6, 0.4])
+    })
+    logger.info("✅ Passenger Survival: 600 rows, 7 columns")
+    
+    # NEW: House prices dataset
+    datasets['real_estate'] = pd.DataFrame({
+        'property_id': range(700),
+        'price': np.random.lognormal(12, 0.8, 700),
+        'sqft': np.random.normal(2000, 800, 700).clip(500, 10000).astype(int),
+        'bedrooms': np.random.choice([1, 2, 3, 4, 5], 700, p=[0.1, 0.2, 0.4, 0.2, 0.1]),
+        'bathrooms': np.random.choice([1, 1.5, 2, 2.5, 3], 700, p=[0.15, 0.2, 0.35, 0.2, 0.1]),
+        'year_built': np.random.normal(1990, 20, 700).clip(1950, 2023).astype(int),
+        'property_type': np.random.choice(['House', 'Condo', 'Townhouse'], 700),
+        'has_garage': np.random.choice([0, 1], 700, p=[0.3, 0.7]),
+        'lot_size': np.random.lognormal(8, 0.5, 700)
+    })
+    logger.info("✅ Real Estate: 700 rows, 9 columns")
+    
+    # NEW: Customer churn dataset
+    datasets['customer_churn'] = pd.DataFrame({
+        'customer_id': range(900),
+        'tenure_months': np.random.poisson(24, 900),
+        'monthly_charges': np.random.normal(70, 30, 900).clip(20, 200),
+        'total_charges': np.random.lognormal(7, 1, 900),
+        'contract_type': np.random.choice(['Month-to-month', 'One year', 'Two year'], 900),
+        'payment_method': np.random.choice(['Electronic', 'Mailed', 'Bank transfer', 'Credit card'], 900),
+        'internet_service': np.random.choice(['DSL', 'Fiber optic', 'No'], 900),
+        'churn': np.random.choice([0, 1], 900, p=[0.7, 0.3])
+    })
+    logger.info("✅ Customer Churn: 900 rows, 8 columns")
+    
+    # NEW: Student performance dataset
+    datasets['student_performance'] = pd.DataFrame({
+        'student_id': range(500),
+        'study_hours': np.random.gamma(3, 2, 500).clip(0, 40),
+        'attendance_pct': np.random.beta(9, 1, 500) * 100,
+        'previous_score': np.random.normal(75, 15, 500).clip(0, 100),
+        'parent_education': np.random.choice(['High School', 'Bachelor', 'Master', 'PhD'], 500),
+        'test_preparation': np.random.choice(['none', 'completed'], 500, p=[0.6, 0.4]),
+        'final_score': np.random.normal(70, 20, 500).clip(0, 100)
+    })
+    logger.info("✅ Student Performance: 500 rows, 7 columns")
+    
+    # NEW: Credit card transactions
+    datasets['credit_transactions'] = pd.DataFrame({
+        'transaction_id': range(1200),
+        'amount': np.random.lognormal(4, 2, 1200),
+        'merchant_category': np.random.choice(['Retail', 'Food', 'Gas', 'Online', 'Travel'], 1200),
+        'hour_of_day': np.random.randint(0, 24, 1200),
+        'day_of_week': np.random.randint(0, 7, 1200),
+        'distance_from_home': np.random.gamma(2, 10, 1200),
+        'is_fraud': np.random.choice([0, 1], 1200, p=[0.98, 0.02])
+    })
+    logger.info("✅ Credit Transactions: 1200 rows, 7 columns")
+    
+    # NEW: Employee attrition
+    datasets['employee_attrition'] = pd.DataFrame({
+        'employee_id': range(600),
+        'age': np.random.normal(35, 10, 600).clip(22, 65).astype(int),
+        'years_at_company': np.random.gamma(2, 3, 600).clip(0, 40).astype(int),
+        'salary': np.random.lognormal(11, 0.5, 600),
+        'job_satisfaction': np.random.choice([1, 2, 3, 4], 600),
+        'work_life_balance': np.random.choice([1, 2, 3, 4], 600),
+        'department': np.random.choice(['Sales', 'R&D', 'HR', 'IT'], 600),
+        'attrition': np.random.choice([0, 1], 600, p=[0.8, 0.2])
+    })
+    logger.info("✅ Employee Attrition: 600 rows, 8 columns")
+    
+    # NEW: Insurance claims
+    datasets['insurance_claims'] = pd.DataFrame({
+        'claim_id': range(800),
+        'age': np.random.normal(40, 15, 800).clip(18, 80).astype(int),
+        'bmi': np.random.normal(28, 6, 800).clip(15, 50),
+        'children': np.random.poisson(1, 800).clip(0, 5),
+        'smoker': np.random.choice(['yes', 'no'], 800, p=[0.2, 0.8]),
+        'region': np.random.choice(['northeast', 'northwest', 'southeast', 'southwest'], 800),
+        'claim_amount': np.random.lognormal(9, 1, 800)
+    })
+    logger.info("✅ Insurance Claims: 800 rows, 7 columns")
+    
     return datasets
 
 
