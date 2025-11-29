@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Activity, Zap, Brain, Target, TrendingUp, Database } from 'lucide-react';
 import axios from 'axios';
+import { LearnedRulesPanel } from './LearnedRulesPanel';
 
 export default function MetricsDashboard() {
   const [stats, setStats] = useState<any>(null);
@@ -177,6 +178,11 @@ export default function MetricsDashboard() {
             ></div>
           </div>
         </div>
+      </div>
+
+      {/* Learned Rules Section */}
+      <div className="mt-8">
+        <LearnedRulesPanel />
       </div>
     </div>
   );
