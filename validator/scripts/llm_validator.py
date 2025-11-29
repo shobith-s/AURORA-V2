@@ -108,18 +108,28 @@ def main():
                 validation = client.validate_decision(column_info, symbolic_decision)
                 
                 if validation['is_correct']:
+                    # LLM confirmed symbolic decision
                     validated_labels.append(label)
                 else:
-                    # LLM corrected it
-                    corrected_label = label.copy()
-                    corrected_label['action'] = validation['correct_action']
-                    corrected_label['llm_corrected'] = True
-                    corrected_label['llm_reasoning'] = validation['reasoning']
-                    validated_labels.append(corrected_label)
-                    corrections += 1
-                    print(f"\n  [{i+1}/{len(medium_conf)}] Corrected: {label['column']}")
-                    print(f"    {label['action']} → {validation['correct_action']}")
-                    print(f"    Reason: {validation['reasoning']}")
+                    # LLM wants to correct - but only accept if very confident
+                    llm_confidence = validation.get('llm_confidence', 0.5)
+                    
+                    if llm_confidence >= 0.85:  # Stricter threshold
+                        # High confidence correction - accept it
+                        corrected_label = label.copy()
+                        corrected_label['action'] = validation['correct_action']
+                        corrected_label['llm_corrected'] = True
+                        corrected_label['llm_reasoning'] = validation['reasoning']
+                        corrected_label['llm_confidence'] = llm_confidence
+                        validated_labels.append(corrected_label)
+                        corrections += 1
+                        print(f"\n  [{i+1}/{len(medium_conf)}] Corrected (conf: {llm_confidence:.2f}): {label['column']}")
+                        print(f"    {label['action']} → {validation['correct_action']}")
+                        print(f"    Reason: {validation['reasoning']}")
+                    else:
+                        # Low confidence - keep original symbolic decision
+                        validated_labels.append(label)
+                        print(f"\n  [{i+1}/{len(medium_conf)}] Kept original (LLM conf too low: {llm_confidence:.2f})")
                 
                 # Rate limiting
                 # Groq: 14,400/day (no pause needed)
