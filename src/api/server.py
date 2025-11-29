@@ -1143,6 +1143,39 @@ async def submit_correction(request: CorrectionRequest):
         )
 
 
+@app.get("/learned-rules")
+async def get_learned_rules():
+    """
+    Get all learned rules in human-readable format.
+    Simple endpoint - just shows what rules exist.
+    """
+    try:
+        from ..learning.rule_formatter import get_all_learned_rules_readable
+        
+        if not learning_engine:
+            return {
+                "rules": [],
+                "total": 0,
+                "message": "Learning engine not initialized"
+            }
+        
+        rules = get_all_learned_rules_readable(learning_engine)
+        
+        return {
+            "rules": rules,
+            "total": len(rules),
+            "message": f"Found {len(rules)} active learned rules"
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting learned rules: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get learned rules: {str(e)}"
+        )
+
+
+
 @app.get("/explain/{decision_id}", response_model=ExplanationResponse)
 async def explain_decision(decision_id: str):
     """
