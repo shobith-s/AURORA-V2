@@ -16,9 +16,10 @@ from validator.utils.llm_client import LLMClient
 
 def main():
     parser = argparse.ArgumentParser(description='Validate symbolic labels with LLM')
-    parser.add_argument('--mode', type=str, default='gemini', choices=['local', 'gemini'],
-                       help='LLM mode: local (Ollama) or gemini (Google)')
-    parser.add_argument('--api-key', type=str, help='Gemini API key (required for gemini mode)')
+    parser.add_argument('--mode', type=str, default='huggingface', 
+                       choices=['local', 'gemini', 'huggingface'],
+                       help='LLM mode: local (Ollama), gemini (Google), or huggingface (HF)')
+    parser.add_argument('--api-key', type=str, help='API key (required for gemini/huggingface mode)')
     parser.add_argument('--validate-medium', action='store_true', default=True,
                        help='Validate medium confidence cases')
     parser.add_argument('--validate-low', action='store_true', default=True,
@@ -33,9 +34,12 @@ def main():
     print("="*70)
     
     # Initialize LLM client
-    if args.mode == 'gemini' and not args.api_key:
-        print("❌ Gemini API key required!")
-        print("   Get one at: https://aistudio.google.com/app/apikey")
+    if args.mode in ['gemini', 'huggingface'] and not args.api_key:
+        print(f"❌ {args.mode.title()} API key required!")
+        if args.mode == 'gemini':
+            print("   Get one at: https://aistudio.google.com/app/apikey")
+        else:
+            print("   Get one at: https://huggingface.co/settings/tokens")
         return
     
     client = LLMClient(mode=args.mode, api_key=args.api_key)
@@ -115,8 +119,8 @@ def main():
                     print(f"    {label['action']} → {validation['correct_action']}")
                     print(f"    Reason: {validation['reasoning']}")
                 
-                # Rate limiting for Gemini (15 req/min)
-                if args.mode == 'gemini' and (i + 1) % 15 == 0:
+                # Rate limiting for Gemini (15 req/min) and HF (varies)
+                if args.mode in ['gemini', 'huggingface'] and (i + 1) % 15 == 0:
                     print(f"\n  ⏸️  Rate limit pause (15 requests)...")
                     time.sleep(60)
                 
@@ -162,7 +166,7 @@ def main():
                 validated_labels.append(corrected_label)
                 
                 # Rate limiting
-                if args.mode == 'gemini' and (i + 1) % 15 == 0:
+                if args.mode in ['gemini', 'huggingface'] and (i + 1) % 15 == 0:
                     print(f"\n  ⏸️  Rate limit pause...")
                     time.sleep(60)
                 
