@@ -1,6 +1,6 @@
 """
 Generate Simulated User Corrections using FREE Groq API
-Same approach as neural oracle training, but for adaptive learning
+Feeds corrections to EXISTING adaptive learning system
 """
 import os
 import sys
@@ -13,14 +13,10 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from validator.utils.llm_client import LLMClient
+from src.core.preprocessor import IntelligentPreprocessor
 
 
-def generate_corrections_from_datasets():
-    """
-    Generate simulated user corrections using Groq (FREE)
-    Same pipeline as neural oracle training
-    """
-    
+def main():
     print("="*70)
     print("GENERATING SIMULATED USER CORRECTIONS (FREE)")
     print("="*70)
@@ -44,9 +40,15 @@ def generate_corrections_from_datasets():
         return
     print(f"✅ Groq is ready!")
     
-    # Generate corrections
+    # Initialize preprocessor (has adaptive learning built-in)
+    print(f"\n🧠 Initializing AURORA preprocessor...")
+    preprocessor = IntelligentPreprocessor()
+    print(f"✅ Preprocessor ready!")
+    
+    # Generate corrections and feed to adaptive learning
     print(f"\n🔬 Generating corrections (LLM validates symbolic decisions)...")
-    corrections = []
+    corrections_count = 0
+    rules_created = 0
     
     for i, label in enumerate(tqdm(all_labels, desc="Validating")):
         try:
@@ -73,111 +75,59 @@ def generate_corrections_from_datasets():
             
             # If LLM disagrees with high confidence → correction!
             if not validation['is_correct'] and validation.get('llm_confidence', 0) >= 0.85:
-                correction = {
-                    'column_name': label['column'],
-                    'dataset': label['dataset'],
-                    'original_action': label['action'],
-                    'corrected_action': validation['correct_action'],
-                    'reasoning': validation['reasoning'],
-                    'llm_confidence': validation['llm_confidence'],
-                    'column_dtype': label['dtype'],
-                    'null_pct': label['null_pct'],
-                    'unique_ratio': label['unique_count'] / 1000
-                }
-                corrections.append(correction)
+                # Feed to EXISTING adaptive learning system
+                result = preprocessor.process_correction(
+                    column_name=label['column'],
+                    wrong_action=label['action'],
+                    correct_action=validation['correct_action'],
+                    column_stats={
+                        'dtype': label['dtype'],
+                        'null_pct': label['null_pct'],
+                        'unique_ratio': label['unique_count'] / 1000,
+                        'skewness': label['features'].get('skewness', 0)
+                    }
+                )
                 
-                print(f"\n  [{i+1}/{len(all_labels)}] Correction found:")
-                print(f"    Column: {label['column']}")
-                print(f"    {label['action']} → {validation['correct_action']}")
-                print(f"    Reason: {validation['reasoning'][:80]}...")
-            
-            # Rate limiting (Groq: 14,400/day, very generous)
-            # No pause needed unless you hit limit
+                corrections_count += 1
+                
+                # Check if new rule was created
+                if result.get('new_rule_created', False):
+                    rules_created += 1
+                    print(f"\n  ✅ NEW RULE CREATED!")
+                    print(f"     Pattern: {label['action']} → {validation['correct_action']}")
+                    print(f"     Support: {result.get('rule_support', 0)} corrections")
+                
+                elif result.get('correction_support', 0) > 0:
+                    needed = result.get('corrections_needed_for_production', 0)
+                    print(f"\n  [{i+1}/{len(all_labels)}] Correction recorded:")
+                    print(f"     {label['action']} → {validation['correct_action']}")
+                    print(f"     Progress: {result.get('correction_support', 0)}/10 (need {needed} more)")
             
         except Exception as e:
             print(f"\n  ⚠️ Error on {label['column']}: {e}")
             continue
     
-    # Save corrections
+    # Summary
     print(f"\n{'='*70}")
-    print("SAVING CORRECTIONS")
+    print("RESULTS")
     print(f"{'='*70}")
+    print(f"Total corrections: {corrections_count}")
+    print(f"New rules created: {rules_created}")
     
-    corrections_dir = Path('validator/corrections')
-    corrections_dir.mkdir(parents=True, exist_ok=True)
+    # Get adaptive learning stats
+    stats = preprocessor.get_statistics()
+    learning_stats = stats.get('learning', {})
     
-    corrections_file = corrections_dir / 'simulated_corrections.json'
-    with open(corrections_file, 'w') as f:
-        json.dump(corrections, f, indent=2)
+    print(f"\nAdaptive Learning Stats:")
+    print(f"  Total corrections in DB: {learning_stats.get('total_corrections', 0)}")
+    print(f"  Learned rules: {learning_stats.get('learned_rules', 0)}")
+    print(f"  Pattern clusters: {learning_stats.get('pattern_clusters', 0)}")
     
-    print(f"✅ Saved {len(corrections)} corrections")
-    print(f"📁 Output: {corrections_file}")
-    
-    # Analyze corrections
-    from collections import Counter
-    patterns = Counter(f"{c['original_action']} → {c['corrected_action']}" for c in corrections)
-    
-    print(f"\n📊 Top Correction Patterns:")
-    for pattern, count in patterns.most_common(10):
-        print(f"  {pattern:50s}: {count} times")
-    
-    # Identify rule candidates (≥10 similar corrections)
-    rule_candidates = [p for p, c in patterns.items() if c >= 10]
-    print(f"\n✅ Rule candidates (≥10 corrections): {len(rule_candidates)}")
-    
-    return corrections
-
-
-def feed_corrections_to_adaptive_learning(corrections):
-    """
-    Feed corrections to AURORA's adaptive learning system
-    This will create new symbolic rules automatically
-    """
-    
-    print(f"\n{'='*70}")
-    print("FEEDING CORRECTIONS TO ADAPTIVE LEARNING")
-    print(f"{'='*70}")
-    
-    from src.core.preprocessor import IntelligentPreprocessor
-    
-    preprocessor = IntelligentPreprocessor()
-    
-    print(f"\nProcessing {len(corrections)} corrections...")
-    
-    for i, correction in enumerate(corrections, 1):
-        result = preprocessor.process_correction(
-            column_name=correction['column_name'],
-            wrong_action=correction['original_action'],
-            correct_action=correction['corrected_action'],
-            column_stats={
-                'dtype': correction['column_dtype'],
-                'null_pct': correction['null_pct'],
-                'unique_ratio': correction['unique_ratio']
-            }
-        )
-        
-        if result.get('learned', False):
-            print(f"  [{i}] ✅ New rule created!")
-            print(f"      Pattern: {correction['original_action']} → {correction['corrected_action']}")
-    
-    print(f"\n✅ All corrections processed!")
-    print(f"   Check adaptive learning stats for new rules")
+    print(f"\n✅ All corrections fed to adaptive learning!")
+    print(f"   Rules are automatically created when ≥10 similar corrections")
+    print(f"   Check database for learned rules")
 
 
 if __name__ == "__main__":
-    # Step 1: Generate corrections using FREE Groq
-    corrections = generate_corrections_from_datasets()
-    
-    if corrections and len(corrections) > 0:
-        # Step 2: Feed to adaptive learning
-        feed_corrections_to_adaptive_learning(corrections)
-        
-        print(f"\n{'='*70}")
-        print("NEXT STEPS")
-        print(f"{'='*70}")
-        print(f"1. New symbolic rules have been created")
-        print(f"2. Run benchmarks to show improvement")
-        print(f"3. Compare: Before corrections vs After corrections")
-        print(f"4. Expected: 5-10% accuracy improvement")
-    else:
-        print(f"\n⚠️  No corrections generated")
+    main()
+
