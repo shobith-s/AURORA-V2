@@ -14,7 +14,7 @@ import hashlib
 
 @dataclass
 class MinimalFeatures:
-    """Minimal feature set for neural oracle (only 10 features)."""
+    """Feature set for neural oracle (20 features for v2 model)."""
 
     # Basic statistics (4 features)
     null_percentage: float
@@ -31,10 +31,23 @@ class MinimalFeatures:
     cardinality_bucket: int  # 0=low, 1=medium, 2=high, 3=unique
     detected_dtype: int  # 0=numeric, 1=categorical, 2=text, 3=temporal, 4=other
     column_name_signal: float  # Signal from column name tokens
+    
+    # NEW: Additional features for v2 model (10 features)
+    kurtosis: float = 0.0  # Tailedness
+    coefficient_of_variation: float = 0.0  # Normalized std
+    zero_ratio: float = 0.0  # Ratio of zeros
+    has_negative: float = 0.0  # Has negative values (0 or 1)
+    has_decimal: float = 0.0  # Has decimal values (0 or 1)
+    name_contains_id: float = 0.0  # Name signals (0 or 1)
+    name_contains_date: float = 0.0
+    name_contains_price: float = 0.0
+    range_ratio: float = 0.0  # (max-min)/median
+    iqr_ratio: float = 0.0  # IQR/median
 
     def to_array(self) -> np.ndarray:
-        """Convert to numpy array for model input."""
+        """Convert to numpy array for model input (20 features)."""
         return np.array([
+            # Original 10 features
             self.null_percentage,
             self.unique_ratio,
             self.skewness,
@@ -44,7 +57,18 @@ class MinimalFeatures:
             self.multimodality_score,
             float(self.cardinality_bucket),
             float(self.detected_dtype),
-            self.column_name_signal
+            self.column_name_signal,
+            # NEW: 10 additional features
+            self.kurtosis,
+            self.coefficient_of_variation,
+            self.zero_ratio,
+            self.has_negative,
+            self.has_decimal,
+            self.name_contains_id,
+            self.name_contains_date,
+            self.name_contains_price,
+            self.range_ratio,
+            self.iqr_ratio
         ], dtype=np.float32)
 
     def to_dict(self) -> Dict[str, float]:
@@ -296,6 +320,60 @@ class MinimalFeatureExtractor:
 
         # Column name signal
         column_name_signal = self._extract_name_signal(column_name)
+        
+        # NEW: Compute additional features for v2 model
+        kurtosis = 0.0
+        coefficient_of_variation = 0.0
+        zero_ratio = 0.0
+        has_negative = 0.0
+        has_decimal = 0.0
+        range_ratio = 0.0
+        iqr_ratio = 0.0
+        
+        if is_numeric and null_percentage < 1.0:
+            non_null = column.dropna().values.astype(np.float64)
+            
+            if len(non_null) > 0:
+                mean = np.mean(non_null)
+                std = np.std(non_null)
+                
+                # Kurtosis
+                if std > 0 and len(non_null) > 3:
+                    kurtosis = float(np.mean(((non_null - mean) / std) ** 4) - 3)
+                
+                # Coefficient of variation
+                if mean != 0:
+                    coefficient_of_variation = float(std / abs(mean))
+                
+                # Zero ratio
+                zero_ratio = float(np.sum(non_null == 0) / len(non_null))
+                
+                # Has negative
+                has_negative = float(np.any(non_null < 0))
+                
+                # Has decimal
+                has_decimal = float(np.any(non_null % 1 != 0))
+                
+                # Range ratio
+                if len(non_null) > 0:
+                    median = np.median(non_null)
+                    if median != 0:
+                        range_ratio = float((np.max(non_null) - np.min(non_null)) / median)
+                
+                # IQR ratio
+                if len(non_null) > 3:
+                    q1 = np.percentile(non_null, 25)
+                    q3 = np.percentile(non_null, 75)
+                    iqr = q3 - q1
+                    median = np.median(non_null)
+                    if median != 0:
+                        iqr_ratio = float(iqr / median)
+        
+        # Name-based signals
+        name_lower = column_name.lower()
+        name_contains_id = float('id' in name_lower or 'key' in name_lower or 'uuid' in name_lower)
+        name_contains_date = float('date' in name_lower or 'time' in name_lower or 'timestamp' in name_lower)
+        name_contains_price = float('price' in name_lower or 'cost' in name_lower or 'amount' in name_lower or 'revenue' in name_lower)
 
         return MinimalFeatures(
             null_percentage=null_percentage,
@@ -307,7 +385,18 @@ class MinimalFeatureExtractor:
             multimodality_score=multimodality_score,
             cardinality_bucket=cardinality_bucket,
             detected_dtype=detected_dtype,
-            column_name_signal=column_name_signal
+            column_name_signal=column_name_signal,
+            # NEW: v2 features
+            kurtosis=kurtosis,
+            coefficient_of_variation=coefficient_of_variation,
+            zero_ratio=zero_ratio,
+            has_negative=has_negative,
+            has_decimal=has_decimal,
+            name_contains_id=name_contains_id,
+            name_contains_date=name_contains_date,
+            name_contains_price=name_contains_price,
+            range_ratio=range_ratio,
+            iqr_ratio=iqr_ratio
         )
 
     def _compute_entropy(self, column: pd.Series) -> float:
