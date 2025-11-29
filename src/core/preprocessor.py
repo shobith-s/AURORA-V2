@@ -49,7 +49,7 @@ class IntelligentPreprocessor:
 
     def __init__(
         self,
-        confidence_threshold: float = 0.75,  # CHANGED: 0.9 → 0.75 for more neural participation
+        confidence_threshold: float = 0.65,  # LOWERED: 0.75 → 0.65 for more neural participation
         use_neural_oracle: bool = True,
         enable_learning: bool = True,
         neural_model_path: Optional[Path] = None,

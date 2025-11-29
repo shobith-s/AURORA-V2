@@ -173,23 +173,14 @@ class NeuralOracle:
         # Get top prediction
         top_idx = int(np.argmax(probs))
         top_action = self.action_encoder[top_idx]
-        
-        # FIX: Handle numpy array conversion safely
-        def _to_scalar(val):
-            if isinstance(val, (np.ndarray, list)):
-                if hasattr(val, 'item'):
-                    return val.item()
-                return float(val[0])
-            return float(val)
-
-        confidence = _to_scalar(probs[top_idx])
+        confidence = float(probs[top_idx])
 
         # Get probabilities for all actions
         action_probs = {}
         if return_probabilities:
             for idx, prob in enumerate(probs):
                 if idx in self.action_encoder:
-                    action_probs[self.action_encoder[idx]] = _to_scalar(prob)
+                    action_probs[self.action_encoder[idx]] = float(prob)
 
         # Get feature importance
         feature_importance = None
@@ -259,29 +250,12 @@ class NeuralOracle:
                 xgb.DMatrix(X, feature_names=self.feature_names)
             )[0])
             class_shap_values = shap_values[predicted_idx][0]
-        elif len(np.shape(shap_values)) == 3:
-            # (N, features, classes)
-            # Get predicted class index
-            predicted_idx = np.argmax(self.model.predict(
-                xgb.DMatrix(X, feature_names=self.feature_names)
-            )[0])
-            # Select for first sample (0), all features (:), predicted class
-            class_shap_values = shap_values[0, :, predicted_idx]
         else:
-            # For binary classification, shap_values might be (N, features)
             class_shap_values = shap_values[0]
-
-        # Helper for safe conversion
-        def _to_scalar(val):
-            if isinstance(val, (np.ndarray, list)):
-                if hasattr(val, 'item'):
-                    return val.item()
-                return float(val[0])
-            return float(val)
 
         # Create feature contribution dictionary
         contributions = {
-            name: _to_scalar(class_shap_values[idx])
+            name: float(class_shap_values[idx])
             for idx, name in enumerate(self.feature_names)
         }
 
