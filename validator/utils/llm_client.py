@@ -1,5 +1,5 @@
 """
-LLM Client with support for both Local (Ollama) and Cloud (Gemini API)
+LLM Client with support for Hugging Face (FREE alternative to Gemini)
 """
 import requests
 import json
@@ -10,11 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 class LLMClient:
-    """Client for LLM validation - supports local Ollama and Google Gemini"""
+    """Client for LLM validation - supports Ollama, Gemini, and Hugging Face"""
     
     def __init__(
         self, 
-        mode: Literal["local", "gemini"] = "local",
+        mode: Literal["local", "gemini", "huggingface"] = "huggingface",
         model: str = "qwen2.5:7b",
         api_key: Optional[str] = None,
         api_url: str = "http://localhost:11434/api/generate"
@@ -31,6 +31,15 @@ class LLMClient:
             genai.configure(api_key=api_key)
             self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
             logger.info("✅ Using Gemini 1.5 Flash (cloud)")
+        
+        elif mode == "huggingface":
+            if not api_key:
+                raise ValueError("Hugging Face token required")
+            from huggingface_hub import InferenceClient
+            self.hf_client = InferenceClient(token=api_key)
+            self.hf_model = "meta-llama/Llama-3.1-8B-Instruct"
+            logger.info(f"✅ Using {self.hf_model} (Hugging Face - FREE)")
+        
         else:
             logger.info(f"✅ Using {model} (local)")
         
@@ -39,8 +48,52 @@ class LLMClient:
         
         if self.mode == "gemini":
             return self._validate_with_gemini(column_info, symbolic_decision)
+        elif self.mode == "huggingface":
+            return self._validate_with_huggingface(column_info, symbolic_decision)
         else:
             return self._validate_with_ollama(column_info, symbolic_decision)
+    
+    def _validate_with_huggingface(self, column_info: Dict[str, Any], symbolic_decision: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate using Hugging Face Inference API (FREE)"""
+        
+        prompt = self._create_validation_prompt(column_info, symbolic_decision)
+        
+        # Add instruction for JSON output
+        prompt += "\n\nRespond ONLY with valid JSON (no markdown, no code blocks):"
+        
+        try:
+            response = self.hf_client.text_generation(
+                prompt,
+                model=self.hf_model,
+                max_new_tokens=500,
+                temperature=0.1,
+                return_full_text=False
+            )
+            
+            # Parse JSON from response
+            # Sometimes models add extra text, try to extract JSON
+            response_text = response.strip()
+            
+            # Try to find JSON in response
+            if '{' in response_text:
+                json_start = response_text.index('{')
+                json_end = response_text.rindex('}') + 1
+                json_text = response_text[json_start:json_end]
+                result = json.loads(json_text)
+            else:
+                # Fallback: trust symbolic
+                return self._fallback_response(symbolic_decision)
+            
+            return {
+                'is_correct': result.get('is_correct', True),
+                'correct_action': result.get('correct_action', symbolic_decision['action']),
+                'reasoning': result.get('reasoning', ''),
+                'llm_confidence': result.get('confidence', 0.5)
+            }
+            
+        except Exception as e:
+            logger.error(f"Hugging Face validation failed: {e}")
+            return self._fallback_response(symbolic_decision)
     
     def _validate_with_gemini(self, column_info: Dict[str, Any], symbolic_decision: Dict[str, Any]) -> Dict[str, Any]:
         """Validate using Google Gemini API"""
@@ -160,6 +213,13 @@ Respond ONLY with valid JSON (no markdown, no code blocks):
             if self.mode == "gemini":
                 response = self.gemini_model.generate_content("Test")
                 return True
+            elif self.mode == "huggingface":
+                response = self.hf_client.text_generation(
+                    "Test",
+                    model=self.hf_model,
+                    max_new_tokens=10
+                )
+                return True
             else:
                 response = requests.post(
                     self.api_url,
@@ -174,31 +234,19 @@ Respond ONLY with valid JSON (no markdown, no code blocks):
 if __name__ == "__main__":
     import sys
     
-    # Test both modes
     print("="*60)
     print("LLM CLIENT TEST")
     print("="*60)
     
-    # Test local
-    print("\n1. Testing LOCAL mode (Ollama)...")
-    try:
-        client_local = LLMClient(mode="local")
-        if client_local.test_connection():
-            print("✅ Local Ollama is available")
-        else:
-            print("❌ Local Ollama not available")
-    except Exception as e:
-        print(f"❌ Local test failed: {e}")
+    # Test Hugging Face
+    print("\n🤗 Testing Hugging Face (FREE)...")
+    hf_token = input("Enter Hugging Face token (or press Enter to skip): ").strip()
     
-    # Test Gemini
-    print("\n2. Testing GEMINI mode...")
-    api_key = input("Enter Gemini API key (or press Enter to skip): ").strip()
-    
-    if api_key:
+    if hf_token:
         try:
-            client_gemini = LLMClient(mode="gemini", api_key=api_key)
-            if client_gemini.test_connection():
-                print("✅ Gemini API is available")
+            client_hf = LLMClient(mode="huggingface", api_key=hf_token)
+            if client_hf.test_connection():
+                print("✅ Hugging Face is available!")
                 
                 # Test validation
                 column_info = {
@@ -208,30 +256,29 @@ if __name__ == "__main__":
                     'null_pct': 0.0,
                     'unique_count': 50,
                     'unique_ratio': 0.05,
-                    'sample_values': [2020, 2019, 2021, 2020, 2022],
+                    'sample_values': [2020, 2019, 2021],
                     'skewness': 0.1
                 }
                 
                 symbolic_decision = {
                     'action': 'standard_scale',
                     'confidence': 0.75,
-                    'explanation': 'Numeric column with moderate range'
+                    'explanation': 'Numeric column'
                 }
                 
-                result = client_gemini.validate_decision(column_info, symbolic_decision)
+                result = client_hf.validate_decision(column_info, symbolic_decision)
                 print(f"\n✅ Validation test:")
                 print(f"   Is correct: {result['is_correct']}")
                 print(f"   Correct action: {result['correct_action']}")
                 print(f"   Reasoning: {result['reasoning']}")
             else:
-                print("❌ Gemini API not available")
+                print("❌ Hugging Face not available")
         except Exception as e:
-            print(f"❌ Gemini test failed: {e}")
+            print(f"❌ Hugging Face test failed: {e}")
     else:
-        print("⏭️  Skipped Gemini test")
+        print("⏭️  Skipped Hugging Face test")
     
     print("\n" + "="*60)
-    print("RECOMMENDATION:")
-    print("- Local: Free, private, but needs good hardware")
-    print("- Gemini: Free, better quality, works on any hardware")
+    print("Get Hugging Face token:")
+    print("https://huggingface.co/settings/tokens")
     print("="*60)
