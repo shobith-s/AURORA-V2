@@ -16,10 +16,10 @@ from validator.utils.llm_client import LLMClient
 
 def main():
     parser = argparse.ArgumentParser(description='Validate symbolic labels with LLM')
-    parser.add_argument('--mode', type=str, default='huggingface', 
-                       choices=['local', 'gemini', 'huggingface'],
-                       help='LLM mode: local (Ollama), gemini (Google), or huggingface (HF)')
-    parser.add_argument('--api-key', type=str, help='API key (required for gemini/huggingface mode)')
+    parser.add_argument('--mode', type=str, default='groq', 
+                       choices=['local', 'gemini', 'huggingface', 'groq'],
+                       help='LLM mode: local (Ollama), gemini (Google), huggingface (HF), or groq (FAST)')
+    parser.add_argument('--api-key', type=str, help='API key (required for gemini/huggingface/groq mode)')
     parser.add_argument('--validate-medium', action='store_true', default=True,
                        help='Validate medium confidence cases')
     parser.add_argument('--validate-low', action='store_true', default=True,
@@ -34,10 +34,12 @@ def main():
     print("="*70)
     
     # Initialize LLM client
-    if args.mode in ['gemini', 'huggingface'] and not args.api_key:
+    if args.mode in ['gemini', 'huggingface', 'groq'] and not args.api_key:
         print(f"❌ {args.mode.title()} API key required!")
         if args.mode == 'gemini':
             print("   Get one at: https://aistudio.google.com/app/apikey")
+        elif args.mode == 'groq':
+            print("   Get one at: https://console.groq.com")
         else:
             print("   Get one at: https://huggingface.co/settings/tokens")
         return
@@ -119,7 +121,9 @@ def main():
                     print(f"    {label['action']} → {validation['correct_action']}")
                     print(f"    Reason: {validation['reasoning']}")
                 
-                # Rate limiting for Gemini (15 req/min) and HF (varies)
+                # Rate limiting
+                # Groq: 14,400/day (no pause needed)
+                # Gemini/HF: 15 req/min (pause every 15)
                 if args.mode in ['gemini', 'huggingface'] and (i + 1) % 15 == 0:
                     print(f"\n  ⏸️  Rate limit pause (15 requests)...")
                     time.sleep(60)

@@ -10,11 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 class LLMClient:
-    """Client for LLM validation - supports Ollama, Gemini, and Hugging Face"""
+    """Client for LLM validation - supports Ollama, Gemini, Hugging Face, and Groq"""
     
     def __init__(
         self, 
-        mode: Literal["local", "gemini", "huggingface"] = "huggingface",
+        mode: Literal["local", "gemini", "huggingface", "groq"] = "huggingface",
         model: str = "qwen2.5:7b",
         api_key: Optional[str] = None,
         api_url: str = "http://localhost:11434/api/generate"
@@ -37,8 +37,16 @@ class LLMClient:
                 raise ValueError("Hugging Face token required")
             from huggingface_hub import InferenceClient
             self.hf_client = InferenceClient(token=api_key)
-            self.hf_model = "meta-llama/Llama-3.1-8B-Instruct"
+            self.hf_model = "Qwen/Qwen2.5-14B-Instruct"  # Upgraded to Qwen 14B
             logger.info(f"✅ Using {self.hf_model} (Hugging Face - FREE)")
+        
+        elif mode == "groq":
+            if not api_key:
+                raise ValueError("Groq API key required")
+            from groq import Groq
+            self.groq_client = Groq(api_key=api_key)
+            self.groq_model = "llama-3.1-70b-versatile"
+            logger.info(f"✅ Using {self.groq_model} (Groq - FAST & FREE)")
         
         else:
             logger.info(f"✅ Using {model} (local)")
@@ -50,6 +58,8 @@ class LLMClient:
             return self._validate_with_gemini(column_info, symbolic_decision)
         elif self.mode == "huggingface":
             return self._validate_with_huggingface(column_info, symbolic_decision)
+        elif self.mode == "groq":
+            return self._validate_with_groq(column_info, symbolic_decision)
         else:
             return self._validate_with_ollama(column_info, symbolic_decision)
     
@@ -89,6 +99,43 @@ class LLMClient:
             
         except Exception as e:
             logger.error(f"Hugging Face validation failed: {e}")
+            return self._fallback_response(symbolic_decision)
+    
+    def _validate_with_groq(self, column_info: Dict[str, Any], symbolic_decision: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate using Groq API (FASTEST - 10x faster than HF!)"""
+        
+        prompt = self._create_validation_prompt(column_info, symbolic_decision)
+        
+        try:
+            response = self.groq_client.chat.completions.create(
+                model=self.groq_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=500
+            )
+            
+            # Extract response text
+            response_text = response.choices[0].message.content.strip()
+            
+            # Try to find JSON in response
+            if '{' in response_text:
+                json_start = response_text.index('{')
+                json_end = response_text.rindex('}') + 1
+                json_text = response_text[json_start:json_end]
+                result = json.loads(json_text)
+            else:
+                # Fallback: trust symbolic
+                return self._fallback_response(symbolic_decision)
+            
+            return {
+                'is_correct': result.get('is_correct', True),
+                'correct_action': result.get('correct_action', symbolic_decision['action']),
+                'reasoning': result.get('reasoning', ''),
+                'llm_confidence': result.get('confidence', 0.5)
+            }
+            
+        except Exception as e:
+            logger.error(f"Groq validation failed: {e}")
             return self._fallback_response(symbolic_decision)
     
     def _validate_with_gemini(self, column_info: Dict[str, Any], symbolic_decision: Dict[str, Any]) -> Dict[str, Any]:
@@ -213,6 +260,13 @@ Respond ONLY with valid JSON (no markdown, no code blocks):
                 response = self.hf_client.chat_completion(
                     messages=[{"role": "user", "content": "Hello"}],
                     model=self.hf_model,
+                    max_tokens=10
+                )
+                return True
+            elif self.mode == "groq":
+                response = self.groq_client.chat.completions.create(
+                    model=self.groq_model,
+                    messages=[{"role": "user", "content": "Test"}],
                     max_tokens=10
                 )
                 return True
