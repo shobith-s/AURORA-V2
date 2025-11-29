@@ -33,6 +33,23 @@ def main():
     
     print(f"\n✅ Loaded {len(labels)} validated examples")
     
+    # Normalize action names (LLM sometimes uses different names)
+    action_mapping = {
+        # Normalize variations
+        'normalize': 'standard_scale',
+        'standardize': 'standard_scale',
+        'scaling': 'standard_scale',
+        'robust_scaler': 'robust_scale',
+        'log transformation': 'log_transform',
+        'log_scale': 'log_transform',
+        'no_action': 'keep_as_is',
+        'retain_column': 'keep_as_is',
+        'encode_categorical': 'onehot_encode',
+        'normalize_longitude': 'robust_scale',
+        'transform': 'standard_scale',
+        'handle_outliers': 'robust_scale'
+    }
+    
     # Prepare data
     X = []
     y = []
@@ -41,6 +58,9 @@ def main():
     for label in labels:
         features = label['features']
         action = label['action']
+        
+        # Normalize action name
+        action = action_mapping.get(action, action)
         
         # Convert features dict to array
         feature_array = [
@@ -70,16 +90,16 @@ def main():
     # Encode labels
     y_encoded = np.array([action_decoder[action] for action in y])
     
-    print(f"\n📊 Dataset:")
+    print(f"\n📊 Dataset (after normalization):")
     print(f"  Features: {X.shape}")
     print(f"  Actions: {len(actions_list)}")
     for i, action in enumerate(actions_list):
         count = sum(1 for a in y if a == action)
         print(f"    {i}: {action:30s} ({count} examples)")
     
-    # Train/val split
+    # Train/val split (NO stratification due to class imbalance)
     X_train, X_val, y_train, y_val = train_test_split(
-        X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
+        X, y_encoded, test_size=0.2, random_state=42  # Removed stratify
     )
     
     print(f"\n📊 Split:")
