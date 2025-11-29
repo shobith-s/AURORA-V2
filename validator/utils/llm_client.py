@@ -58,21 +58,17 @@ class LLMClient:
         
         prompt = self._create_validation_prompt(column_info, symbolic_decision)
         
-        # Add instruction for JSON output
-        prompt += "\n\nRespond ONLY with valid JSON (no markdown, no code blocks):"
-        
         try:
-            response = self.hf_client.text_generation(
-                prompt,
+            # Use chat_completion for conversational models
+            response = self.hf_client.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
                 model=self.hf_model,
-                max_new_tokens=500,
-                temperature=0.1,
-                return_full_text=False
+                max_tokens=500,
+                temperature=0.1
             )
             
-            # Parse JSON from response
-            # Sometimes models add extra text, try to extract JSON
-            response_text = response.strip()
+            # Extract response text
+            response_text = response.choices[0].message.content.strip()
             
             # Try to find JSON in response
             if '{' in response_text:
@@ -214,10 +210,10 @@ Respond ONLY with valid JSON (no markdown, no code blocks):
                 response = self.gemini_model.generate_content("Test")
                 return True
             elif self.mode == "huggingface":
-                response = self.hf_client.text_generation(
-                    "Test",
+                response = self.hf_client.chat_completion(
+                    messages=[{"role": "user", "content": "Hello"}],
                     model=self.hf_model,
-                    max_new_tokens=10
+                    max_tokens=10
                 )
                 return True
             else:

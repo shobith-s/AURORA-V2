@@ -60,8 +60,12 @@ HF_TOKEN = "hf_..."  # ⚠️ REPLACE WITH YOUR TOKEN!
 # Test connection
 from huggingface_hub import InferenceClient
 client = InferenceClient(token=HF_TOKEN)
-response = client.text_generation("Hello!", model="meta-llama/Llama-3.1-8B-Instruct", max_new_tokens=50)
-print(f"✅ Hugging Face connected: {response[:50]}...")
+response = client.chat_completion(
+    messages=[{"role": "user", "content": "Hello!"}],
+    model="meta-llama/Llama-3.1-8B-Instruct",
+    max_tokens=50
+)
+print(f"✅ Hugging Face connected: {response.choices[0].message.content[:50]}...")
 
 # Cell 4: Download datasets (30 min)
 !python scripts/download_datasets.py
