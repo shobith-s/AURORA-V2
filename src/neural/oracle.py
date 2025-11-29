@@ -44,27 +44,6 @@ class NeuralOracle:
             model_path: Path to pre-trained model file (optional)
         """
         if xgb is None:
-            raise ImportError(
-                "XGBoost is required for NeuralOracle. "
-                "Install with: pip install xgboost"
-            )
-
-        self.model: Optional[xgb.Booster] = None
-        self.action_encoder: Dict[int, PreprocessingAction] = {}
-        self.action_decoder: Dict[PreprocessingAction, int] = {}
-        self.feature_names = [
-            'null_percentage', 'unique_ratio', 'skewness', 'outlier_percentage',
-            'entropy', 'pattern_complexity', 'multimodality_score',
-            'cardinality_bucket', 'detected_dtype', 'column_name_signal'
-        ]
-
-        if model_path and model_path.exists():
-            self.load(model_path)
-
-    def train(
-        self,
-        features: List[MinimalFeatures],
-        labels: List[PreprocessingAction],
         validation_split: float = 0.2
     ) -> Dict[str, Any]:
         """
