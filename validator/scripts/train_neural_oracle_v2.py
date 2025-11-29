@@ -4,6 +4,7 @@ Improved Neural Oracle Training (Week 1)
 - Better features (20 vs 10)
 - Ensemble (XGBoost + LightGBM)
 """
+import sys
 import json
 import pickle
 import numpy as np
@@ -15,16 +16,37 @@ from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from sklearn.ensemble import VotingClassifier
 
-print("="*70)
-print("IMPROVED NEURAL ORACLE TRAINING (Week 1)")
-print("="*70)
+def print_flush(msg):
+    """Print and flush immediately for Colab"""
+    print(msg)
+    sys.stdout.flush()
+
+print_flush("="*70)
+print_flush("IMPROVED NEURAL ORACLE TRAINING (Week 1)")
+print_flush("="*70)
 
 # Load validated labels
 labels_file = Path('validated/validated_labels.json')
-with open(labels_file, 'r') as f:
-    labels = json.load(f)
 
-print(f"\n✅ Loaded {len(labels)} validated labels")
+if not labels_file.exists():
+    print_flush(f"❌ ERROR: File not found: {labels_file}")
+    print_flush(f"Current directory: {Path.cwd()}")
+    print_flush(f"Files in validator/: {list(Path('.').glob('*'))}")
+    sys.exit(1)
+
+print_flush(f"\n📂 Loading labels from: {labels_file}")
+
+try:
+    with open(labels_file, 'r') as f:
+        labels = json.load(f)
+    print_flush(f"✅ Loaded {len(labels)} validated labels")
+except Exception as e:
+    print_flush(f"❌ ERROR loading labels: {e}")
+    sys.exit(1)
+
+if len(labels) == 0:
+    print_flush("❌ ERROR: No labels found in file!")
+    sys.exit(1)
 
 # Extract features (20 features vs 10)
 def extract_features_v2(label):
@@ -57,6 +79,7 @@ def extract_features_v2(label):
         'iqr_ratio': features.get('iqr_ratio', 0),
     }
 
+
 # Prepare data
 X = []
 y = []
@@ -69,21 +92,23 @@ for label in labels:
 X = np.array(X)
 y = np.array(y)
 
-print(f"\n📊 Dataset shape: {X.shape}")
-print(f"   Features: {X.shape[1]} (vs 10 original)")
-print(f"   Examples: {X.shape[0]} (vs 149 original)")
+print_flush(f"\n📊 Dataset shape: {X.shape}")
+print_flush(f"   Features: {X.shape[1]} (vs 10 original)")
+print_flush(f"   Examples: {X.shape[0]} (vs 149 original)")
 
 # Train/test split
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42
 )
 
-print(f"\n✂️ Split:")
-print(f"   Train: {len(X_train)} examples")
-print(f"   Test: {len(X_test)} examples")
+print_flush(f"\n✂️ Split:")
+print_flush(f"   Train: {len(X_train)} examples")
+print_flush(f"   Test: {len(X_test)} examples")
 
 # Train ensemble (XGBoost + LightGBM)
-print(f"\n🎯 Training ensemble...")
+print_flush(f"\n🎯 Training ensemble...")
+print_flush("   This may take 30-60 seconds...")
+sys.stdout.flush()
 
 # Model 1: XGBoost
 xgb = XGBClassifier(
@@ -91,7 +116,8 @@ xgb = XGBClassifier(
     max_depth=6,
     learning_rate=0.1,
     subsample=0.8,
-    random_state=42
+    random_state=42,
+    verbosity=0  # Suppress XGBoost output
 )
 
 # Model 2: LightGBM
@@ -101,7 +127,7 @@ lgb = LGBMClassifier(
     learning_rate=0.1,
     subsample=0.8,
     random_state=42,
-    verbose=-1
+    verbose=-1  # Suppress LightGBM output
 )
 
 # Ensemble (voting)
@@ -110,26 +136,30 @@ ensemble = VotingClassifier(
     voting='soft'
 )
 
+print_flush("   Training XGBoost...")
+sys.stdout.flush()
 ensemble.fit(X_train, y_train)
+print_flush("   ✅ Training complete!")
 
 # Evaluate
+print_flush("\n📈 Evaluating...")
 train_pred = ensemble.predict(X_train)
 test_pred = ensemble.predict(X_test)
 
 train_acc = accuracy_score(y_train, train_pred)
 test_acc = accuracy_score(y_test, test_pred)
 
-print(f"\n{'='*70}")
-print("RESULTS")
-print(f"{'='*70}")
-print(f"Train accuracy: {train_acc:.1%}")
-print(f"Test accuracy:  {test_acc:.1%}")
-print(f"\n🎯 Target: ≥80% test accuracy")
+print_flush(f"\n{'='*70}")
+print_flush("RESULTS")
+print_flush(f"{'='*70}")
+print_flush(f"Train accuracy: {train_acc:.1%}")
+print_flush(f"Test accuracy:  {test_acc:.1%}")
+print_flush(f"\n🎯 Target: ≥80% test accuracy")
 
 if test_acc >= 0.80:
-    print(f"✅ SUCCESS! Achieved {test_acc:.1%}")
+    print_flush(f"✅ SUCCESS! Achieved {test_acc:.1%}")
 else:
-    print(f"⚠️  Close! Got {test_acc:.1%}, need ≥80%")
+    print_flush(f"⚠️  Close! Got {test_acc:.1%}, need ≥80%")
 
 # Save model
 output_dir = Path('models')
@@ -142,8 +172,8 @@ model_path = output_dir / f'neural_oracle_v2_improved_{timestamp}.pkl'
 with open(model_path, 'wb') as f:
     pickle.dump(ensemble, f)
 
-print(f"\n💾 Model saved: {model_path}")
-print(f"   Size: {model_path.stat().st_size / 1024:.0f} KB")
+print_flush(f"\n💾 Model saved: {model_path}")
+print_flush(f"   Size: {model_path.stat().st_size / 1024:.0f} KB")
 
 # Save training history
 history = {
@@ -159,17 +189,21 @@ history_path = output_dir / 'training_history_v2.json'
 with open(history_path, 'w') as f:
     json.dump(history, f, indent=2)
 
-print(f"📊 History saved: {history_path}")
+print_flush(f"📊 History saved: {history_path}")
 
-print(f"\n{'='*70}")
-print("COMPARISON")
-print(f"{'='*70}")
-print(f"Original model:")
-print(f"  - Features: 10")
-print(f"  - Examples: 149")
-print(f"  - Accuracy: 75.9%")
-print(f"\nImproved model:")
-print(f"  - Features: {X.shape[1]}")
-print(f"  - Examples: {X.shape[0]}")
-print(f"  - Accuracy: {test_acc:.1%}")
-print(f"\nImprovement: +{(test_acc - 0.759)*100:.1f}%")
+print_flush(f"\n{'='*70}")
+print_flush("COMPARISON")
+print_flush(f"{'='*70}")
+print_flush(f"Original model:")
+print_flush(f"  - Features: 10")
+print_flush(f"  - Examples: 149")
+print_flush(f"  - Accuracy: 75.9%")
+print_flush(f"\nImproved model:")
+print_flush(f"  - Features: {X.shape[1]}")
+print_flush(f"  - Examples: {X.shape[0]}")
+print_flush(f"  - Accuracy: {test_acc:.1%}")
+print_flush(f"\nImprovement: +{(test_acc - 0.759)*100:.1f}%")
+print_flush(f"\n{'='*70}")
+print_flush("✅ TRAINING COMPLETE!")
+print_flush(f"{'='*70}")
+
