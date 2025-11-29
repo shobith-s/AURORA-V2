@@ -3,6 +3,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import ExplanationModal from './ExplanationModal';
+import ActionLibraryModal from './ActionLibraryModal';
 
 interface ResultCardProps {
   result: any;
@@ -13,6 +14,7 @@ export default function ResultCard({ result }: ResultCardProps) {
   const [correctAction, setCorrectAction] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
+  const [showActionLibrary, setShowActionLibrary] = useState(false);
 
   const getSourceColor = (source: string) => {
     // Check if learned pattern has limited training
@@ -66,7 +68,10 @@ export default function ResultCard({ result }: ResultCardProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-bold text-slate-800">Recommendation</h3>
-        <div className={`px-3 py-1 rounded-full text-xs font-medium border ${getSourceColor(result.source)}`}>
+        <div
+          className={`px-3 py-1 rounded-full text-xs font-medium border ${getSourceColor(result.source)} cursor-help`}
+          title={result.source === 'neural' ? 'Decision made by Neural Oracle (XGBoost) based on learned patterns' : 'Decision made by Symbolic Engine based on explicit rules'}
+        >
           {result.source === 'symbolic' && '⚡ Symbolic'}
           {result.source === 'neural' && '🧠 Neural'}
           {result.source === 'learned' && '🎓 Learned'}
@@ -90,7 +95,7 @@ export default function ResultCard({ result }: ResultCardProps) {
           <div className="flex gap-2">
             <button
               onClick={() => setShowExplanation(true)}
-              className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg text-sm font-medium transition shadow-md"
+              className={`flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg text-sm font-medium transition shadow-md ${result.source === 'neural' ? 'animate-pulse' : ''}`}
             >
               <BookOpen className="w-4 h-4" />
               Explain
@@ -255,31 +260,24 @@ export default function ResultCard({ result }: ResultCardProps) {
               </div>
             </div>
             <div className="flex gap-2">
-              <select
-                value={correctAction}
-                onChange={(e) => setCorrectAction(e.target.value)}
-                className="flex-1 px-3 py-2 rounded-lg border border-blue-300 text-sm bg-white"
+              <button
+                onClick={() => setShowActionLibrary(true)}
+                className="flex-1 px-4 py-2 bg-white border border-blue-300 rounded-lg text-left text-sm text-slate-700 hover:border-blue-500 hover:ring-2 hover:ring-blue-100 transition-all flex items-center justify-between group"
               >
-                <option value="">-- Select Action --</option>
-                <option value="keep">Keep (No preprocessing)</option>
-                <option value="standard_scale">Standard Scale</option>
-                <option value="min_max_scale">Min-Max Scale</option>
-                <option value="robust_scale">Robust Scale</option>
-                <option value="log_transform">Log Transform</option>
-                <option value="box_cox">Box-Cox Transform</option>
-                <option value="yeo_johnson">Yeo-Johnson Transform</option>
-                <option value="one_hot_encode">One-Hot Encode</option>
-                <option value="label_encode">Label Encode</option>
-                <option value="target_encode">Target Encode</option>
-                <option value="fill_null_mean">Fill Nulls (Mean)</option>
-                <option value="fill_null_median">Fill Nulls (Median)</option>
-                <option value="fill_null_mode">Fill Nulls (Mode)</option>
-                <option value="drop_column">Drop Column</option>
-              </select>
+                <span className={correctAction ? 'text-blue-700 font-medium' : 'text-slate-500'}>
+                  {correctAction
+                    ? correctAction.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+                    : 'Select an action...'}
+                </span>
+                <div className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs font-medium group-hover:bg-blue-100 transition-colors">
+                  Browse Library
+                </div>
+              </button>
+
               <button
                 onClick={handleCorrection}
                 disabled={isSubmitting || !correctAction}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
               >
                 {isSubmitting ? 'Submitting...' : 'Apply Override'}
               </button>
@@ -294,6 +292,17 @@ export default function ResultCard({ result }: ResultCardProps) {
         onClose={() => setShowExplanation(false)}
         columnData={[]} // Will need to pass actual data
         columnName={result.column_name || 'column'}
+      />
+
+      {/* Smart Action Library Modal */}
+      <ActionLibraryModal
+        isOpen={showActionLibrary}
+        onClose={() => setShowActionLibrary(false)}
+        onSelectAction={(action) => {
+          setCorrectAction(action);
+          setShowActionLibrary(false);
+        }}
+        currentAction={correctAction}
       />
     </div>
   );

@@ -155,7 +155,8 @@ class IntelligentPreprocessor:
         column_name: str = "",
         target_available: bool = False,
         metadata: Optional[Dict[str, Any]] = None,
-        context: str = "general"
+        context: str = "general",
+        apply_action: bool = False  # NEW: For future validation integration
     ) -> PreprocessingResult:
         """
         Preprocess a single column using the three-layer architecture.

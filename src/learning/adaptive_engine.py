@@ -460,3 +460,44 @@ class AdaptiveLearningEngine:
             return value
         except TypeError:
             return str(value)
+
+    def record_validation_result(
+        self,
+        rule_id: int,
+        validation_passed: bool,
+        validation_score: float
+    ) -> None:
+        """
+        Record validation result for a learned rule (SIMPLE VERSION).
+        
+        Just tracks pass/fail rate - no complex logic.
+        
+        Args:
+            rule_id: ID of the learned rule
+            validation_passed: Whether validation passed
+            validation_score: Validation score (0.0-1.0)
+        """
+        session = self._get_session()
+        try:
+            rule = session.query(LearnedRule).filter_by(id=rule_id).first()
+            if rule:
+                # Simple tracking: increment counters
+                if validation_passed:
+                    rule.validation_successes = (rule.validation_successes or 0) + 1
+                else:
+                    rule.validation_failures = (rule.validation_failures or 0) + 1
+                
+                # Update average validation score (simple moving average)
+                total_validations = (rule.validation_successes or 0) + (rule.validation_failures or 0)
+                if total_validations > 0:
+                    current_avg = rule.validation_accuracy or 0.0
+                    # Simple update: new_avg = (old_avg * (n-1) + new_score) / n
+                    rule.validation_accuracy = (current_avg * (total_validations - 1) + validation_score) / total_validations
+                
+                session.commit()
+                logger.debug(f"Recorded validation for rule {rule_id}: passed={validation_passed}, score={validation_score:.2f}")
+        except Exception as exc:
+            session.rollback()
+            logger.error(f"Failed to record validation result: {exc}")
+        finally:
+            session.close()

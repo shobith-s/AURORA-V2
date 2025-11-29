@@ -103,7 +103,7 @@ class ColumnStatistics:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for rule evaluation."""
-        return {
+        stats = {
             "row_count": self.row_count,
             "null_count": self.null_count,
             "null_pct": self.null_pct,
@@ -164,6 +164,8 @@ class ColumnStatistics:
             "is_foreign_key": self.is_foreign_key,
             "correlation_with_target": self.correlation_with_target,
         }
+        # Filter out None values so .get(key, default) works as expected
+        return {k: v for k, v in stats.items() if v is not None}
 
 
 class SymbolicEngine:
@@ -493,9 +495,29 @@ class SymbolicEngine:
             matches, key=lambda x: x[2]
         )
 
+        # CONFIDENCE CALIBRATION (DAMPENING)
+        # The symbolic rules are often too confident (0.90-0.98).
+        # We apply a dampening factor to allow the Neural Oracle to participate
+        # in ambiguous cases, while keeping very clear cases high.
+        
+        # 1. Base dampening (reduce all by 10%)
+        calibrated_confidence = best_confidence * 0.90
+        
+        # 2. Boost very high confidence (if it was >0.95, keep it high)
+        if best_confidence > 0.95:
+            calibrated_confidence = max(calibrated_confidence, 0.92)
+            
+        # 3. Penalize DROP_COLUMN (risky action)
+        # REMOVED: KEEP_AS_IS penalty - we want conservative decisions
+        if best_action == PreprocessingAction.DROP_COLUMN:
+            # DROP is risky, reduce confidence slightly
+            calibrated_confidence *= 0.95
+
+        best_confidence = calibrated_confidence
+
         # Get alternatives
         alternatives = [
-            (action, confidence)
+            (action, confidence * 0.9)  # Also dampen alternatives
             for rule, action, confidence, explanation in matches
             if action != best_action
         ][:3]  # Top 3 alternatives

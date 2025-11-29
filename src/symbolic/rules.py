@@ -20,6 +20,7 @@ class RuleCategory(Enum):
     STATISTICAL = "statistical"
     CATEGORICAL = "categorical"
     DOMAIN_SPECIFIC = "domain_specific"
+    FEATURE_ENGINEERING = "feature_engineering"
 
 
 @dataclass
@@ -54,40 +55,42 @@ def create_data_quality_rules() -> List[Rule]:
     """Create data quality rules."""
     rules = []
 
-    # Rule 1: Drop if mostly null
+    # Rule 1: Drop if mostly null (CONSERVATIVE - only drop if >80% null)
     rules.append(Rule(
         name="DROP_IF_MOSTLY_NULL",
         category=RuleCategory.DATA_QUALITY,
         action=PreprocessingAction.DROP_COLUMN,
-        condition=lambda stats: stats.get("null_pct", 0) > 0.6,
-        confidence_fn=lambda stats: min(0.95, stats.get("null_pct", 0) / 0.6 * 0.9),
-        explanation_fn=lambda stats: f"Column has {stats.get('null_pct', 0):.1%} null values (> 60% threshold)",
-        priority=100
+        condition=lambda stats: stats.get("null_pct", 0) > 0.8 or stats.get("unique_count", 1) == 0,
+        confidence_fn=lambda stats: 0.95 if stats.get("null_pct", 0) >= 0.95 else min(0.75, stats.get("null_pct", 0) / 0.8 * 0.7),
+        explanation_fn=lambda stats: f"Column has {stats.get('null_pct', 0):.1%} null values (>80% threshold - mostly empty)" if stats.get("null_pct", 0) > 0 else "Column is completely empty (0 unique values)",
+        priority=150  # INCREASED PRIORITY to ensure it fires first
     ))
 
-    # Rule 2: Drop if constant
+    # Rule 2: Drop if constant (CONSERVATIVE - reduced confidence)
     rules.append(Rule(
         name="DROP_IF_CONSTANT",
         category=RuleCategory.DATA_QUALITY,
         action=PreprocessingAction.DROP_COLUMN,
         condition=lambda stats: stats.get("unique_count", 2) == 1 and stats.get("null_pct", 0) < 0.5,
-        confidence_fn=lambda stats: 0.98,
-        explanation_fn=lambda stats: "Column has only one unique value (constant)",
+        confidence_fn=lambda stats: 0.75,  # Reduced from 0.98 to 0.75
+        explanation_fn=lambda stats: "Column has only one unique value (constant - provides no information)",
         priority=95
     ))
 
-    # Rule 3: Drop if all unique (likely ID)
+
+    # Rule 3: Drop if all unique (VERY CONSERVATIVE - only extreme cases)
     rules.append(Rule(
         name="DROP_IF_ALL_UNIQUE",
         category=RuleCategory.DATA_QUALITY,
         action=PreprocessingAction.DROP_COLUMN,
         condition=lambda stats: (
-            stats.get("unique_ratio", 0) > 0.95 and
-            stats.get("row_count", 0) > 100 and
-            not stats.get("is_numeric", False)
+            stats.get("unique_ratio", 0) > 0.995 and  # Increased from 0.99 to 0.995
+            stats.get("row_count", 0) > 1000 and  # Increased from 100 to 1000
+            not stats.get("is_numeric", False) and
+            stats.get("avg_length", 0) > 20  # Long strings (likely UUIDs/hashes)
         ),
-        confidence_fn=lambda stats: 0.9 if stats.get("unique_ratio", 0) > 0.98 else 0.75,
-        explanation_fn=lambda stats: f"Column has {stats.get('unique_ratio', 0):.1%} unique values (likely ID)",
+        confidence_fn=lambda stats: 0.65,  # Reduced from 0.85 to 0.65
+        explanation_fn=lambda stats: f"Column has {stats.get('unique_ratio', 0):.1%} unique values (likely random ID/hash - no predictive value)",
         priority=90
     ))
 
@@ -109,10 +112,64 @@ def create_data_quality_rules() -> List[Rule]:
         priority=85
     ))
 
+
     # KEEP_AS_IS RULES - HIGH PRIORITY (evaluated first)
     # These catch healthy columns that don't need preprocessing
 
-    # Rule 4a: Keep numeric columns already normalized
+    # Rule 4: CONSERVATIVE FALLBACK - Safety Net (HIGHEST PRIORITY)
+    # If we're not confident about any transformation, keep it as-is
+    # This prevents bad decisions when rules are uncertain
+    rules.append(Rule(
+        name="CONSERVATIVE_FALLBACK",
+        category=RuleCategory.DATA_QUALITY,
+        action=PreprocessingAction.KEEP_AS_IS,
+        condition=lambda stats: (
+            # Only trigger if column has basic quality
+            stats.get("null_pct", 0) < 0.3 and  # Less than 30% nulls
+            stats.get("unique_count", 0) > 1 and  # Not constant
+            stats.get("unique_ratio", 0) < 0.99  # Not all unique (unless it's a key)
+        ),
+        confidence_fn=lambda stats: 0.70,  # Moderate confidence - will be beaten by high-confidence rules
+        explanation_fn=lambda stats: "Column has acceptable quality - keeping as-is (conservative approach)",
+        priority=200  # HIGHEST PRIORITY - acts as default for uncertain cases
+    ))
+
+    # Rule 4a: Keep Primary Keys / IDs (HIGHEST PRIORITY)
+    rules.append(Rule(
+        name="KEEP_IF_PRIMARY_KEY",
+        category=RuleCategory.DATA_QUALITY,
+        action=PreprocessingAction.KEEP_AS_IS,
+        condition=lambda stats: (
+            stats.get("unique_ratio", 0) > 0.95 and  # Relaxed from 0.99 to 0.95
+            stats.get("null_pct", 0) < 0.05 and  # Allow up to 5% nulls (was 0%)
+            stats.get("unique_count", 0) > 10  # Must have reasonable number of unique values
+        ),
+        confidence_fn=lambda stats: 0.95,
+        explanation_fn=lambda stats: f"Column appears to be a Primary Key or ID ({stats.get('unique_ratio', 0):.1%} unique, {stats.get('unique_count', 0)} values) - keeping as identifier",
+        priority=145  # Higher than DROP_IF_ALL_UNIQUE (90)
+    ))
+
+    # Rule 4b: Keep ordinal/year columns (HIGH PRIORITY)
+    rules.append(Rule(
+        name="KEEP_IF_ORDINAL_OR_YEAR",
+        category=RuleCategory.DATA_QUALITY,
+        action=PreprocessingAction.KEEP_AS_IS,
+        condition=lambda stats: (
+            stats.get("is_numeric", False) and
+            (
+                # Year detection: 4-digit integers in range [1900, 2100]
+                (stats.get("min_value", 0) >= 1900 and stats.get("max_value", 0) <= 2100 and stats.get("unique_count", 0) <= 200) or
+                # Ordinal: Few unique values (1-10) in small range
+                (stats.get("unique_count", 0) <= 10 and stats.get("max_value", 100) <= 10)
+            ) and
+            stats.get("null_pct", 0) < 0.1  # Low nulls
+        ),
+        confidence_fn=lambda stats: 0.95,
+        explanation_fn=lambda stats: f"Ordinal/year column with {stats.get('unique_count', 0)} unique values - keeping original values (meaningful as-is)",
+        priority=140  # Higher than scaling rules
+    ))
+
+    # Rule 4b: Keep numeric columns already normalized
     rules.append(Rule(
         name="KEEP_IF_ALREADY_NORMALIZED",
         category=RuleCategory.DATA_QUALITY,
@@ -777,6 +834,20 @@ def get_all_rules(include_extended: bool = True) -> List[Rule]:
         except ImportError:
             # Extended rules not available, continue with base rules
             pass
+
+    # Feature Engineering rules (AutoML capabilities)
+    try:
+        from .feature_engineering_rules import create_feature_engineering_rules
+        all_rules.extend(create_feature_engineering_rules())
+    except ImportError:
+        pass
+
+    # Advanced AutoML rules (leakage, advanced categorical, etc.)
+    try:
+        from .advanced_automl_rules import create_advanced_automl_rules
+        all_rules.extend(create_advanced_automl_rules())
+    except ImportError:
+        pass
 
     # Sort by priority (higher first)
     all_rules.sort(key=lambda r: r.priority, reverse=True)

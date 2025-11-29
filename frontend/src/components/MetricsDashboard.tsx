@@ -50,8 +50,9 @@ export default function MetricsDashboard() {
 
   const totalDecisions = stats.total_decisions || 0;
   const symbolicPct = totalDecisions > 0 ? ((stats.symbolic_decisions || 0) / totalDecisions * 100).toFixed(1) : 0;
-  const metaPct = totalDecisions > 0 ? ((stats.meta_decisions || 0) / totalDecisions * 100).toFixed(1) : 0;
   const neuralPct = totalDecisions > 0 ? ((stats.neural_decisions || 0) / totalDecisions * 100).toFixed(1) : 0;
+  // Calculate fallback as remainder
+  const metaPct = totalDecisions > 0 ? (100 - parseFloat(symbolicPct as string) - parseFloat(neuralPct as string)).toFixed(1) : 0;
 
   return (
     <div className="container mx-auto px-4 py-6 animate-in slide-in-from-top">
@@ -131,24 +132,24 @@ export default function MetricsDashboard() {
           </div>
         </div>
 
-        {/* Meta Learner */}
+        {/* Fallback / Safety */}
         <div className="glass-card p-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-purple-400" />
+            <div className="w-10 h-10 bg-gray-500/20 rounded-lg flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-gray-400" />
             </div>
             <div>
-              <h3 className="font-semibold text-slate-900">Meta Learner</h3>
-              <p className="text-xs text-slate-400">Statistical heuristics</p>
+              <h3 className="font-semibold text-slate-900">Fallback / Safety</h3>
+              <p className="text-xs text-slate-400">Conservative defaults</p>
             </div>
           </div>
           <div className="flex items-end gap-2">
-            <div className="text-4xl font-bold text-purple-400">{metaPct}%</div>
-            <div className="text-sm text-slate-400 mb-1">{stats.meta_decisions} decisions</div>
+            <div className="text-4xl font-bold text-gray-400">{metaPct}%</div>
+            <div className="text-sm text-slate-400 mb-1">decisions</div>
           </div>
           <div className="mt-3 h-2 bg-slate-700 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-purple-500 to-purple-400 rounded-full transition-all duration-500"
+              className="h-full bg-gradient-to-r from-gray-500 to-gray-400 rounded-full transition-all duration-500"
               style={{ width: `${metaPct}%` }}
             ></div>
           </div>

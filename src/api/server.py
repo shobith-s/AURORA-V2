@@ -78,6 +78,10 @@ learning_engine: AdaptiveLearningEngine = None
 decision_cache: Dict[str, Dict[str, Any]] = {}
 MAX_CACHE_SIZE = 1000
 
+# Session storage for preprocessed data (NEW)
+preprocessed_data_store: Dict[str, pd.DataFrame] = {}
+MAX_STORED_DATASETS = 100
+
 
 def convert_to_json_serializable(obj: Any) -> Any:
     """
@@ -139,7 +143,7 @@ async def startup_event():
     # Initialize preprocessor
     try:
         preprocessor = get_preprocessor(
-            confidence_threshold=0.75,  # CHANGED: 0.9 → 0.75 for more neural participation
+            confidence_threshold=0.82,  # CHANGED: 0.55 → 0.82 (works with dampened scores)
             use_neural_oracle=True,
             enable_learning=True
         )
@@ -148,7 +152,7 @@ async def startup_event():
         logger.error(f"Failed to initialize AURORA: {e}")
         # Create basic preprocessor without neural oracle
         preprocessor = IntelligentPreprocessor(
-            confidence_threshold=0.75,
+            confidence_threshold=0.82,
             use_neural_oracle=False,
             enable_learning=True
         )
@@ -195,25 +199,15 @@ async def health_check():
         components["symbolic_engine"] = "error"
         all_healthy = False
 
-    # Check pattern learner (optional)
+    # Check learning engine (combines pattern learning and adaptive rules)
     try:
         if preprocessor.enable_learning:
-            components["pattern_learner"] = "ok" if preprocessor.pattern_learner else "initializing"
+            components["learning_engine"] = "ok" if preprocessor.learning_engine else "initializing"
         else:
-            components["pattern_learner"] = "disabled"
+            components["learning_engine"] = "disabled"
     except Exception as e:
-        logger.warning(f"Health check - pattern learner error: {e}")
-        components["pattern_learner"] = "error"
-
-    # Check adaptive rules (optional)
-    try:
-        if preprocessor.enable_learning:
-            components["adaptive_rules"] = "ok" if preprocessor.adaptive_rules else "unavailable"
-        else:
-            components["adaptive_rules"] = "disabled"
-    except Exception as e:
-        logger.warning(f"Health check - adaptive rules error: {e}")
-        components["adaptive_rules"] = "error"
+        logger.warning(f"Health check - learning engine error: {e}")
+        components["learning_engine"] = "error"
 
     # Check neural oracle (optional)
     try:
@@ -692,12 +686,13 @@ def compute_column_health(column: pd.Series, column_name: str) -> 'ColumnHealthM
 
 
 @app.post("/batch", response_model=BatchPreprocessResponse)
-async def batch_preprocess(request: BatchPreprocessRequest):
+async def batch_preprocess(request: BatchPreprocessRequest, compute_health: bool = True):
     """
     Preprocess multiple columns in batch.
 
     Args:
         request: Batch preprocessing request
+        compute_health: Whether to compute health metrics (can be slow for large files)
 
     Returns:
         Preprocessing recommendations for all columns
@@ -720,34 +715,36 @@ async def batch_preprocess(request: BatchPreprocessRequest):
         batch_latency_ms = (time.time() - start_time) * 1000
         monitor.record_call('overall_pipeline', batch_latency_ms, success=True)
 
-        # Compute health metrics for all columns
-        from ..api.schemas import BatchHealthResponse, ColumnHealthMetrics
-        column_health = {}
-        healthy_count = 0
-        warning_count = 0
-        critical_count = 0
+        # Compute health metrics for all columns (OPTIONAL - can be slow)
+        health_response = None
+        if compute_health:
+            from ..api.schemas import BatchHealthResponse, ColumnHealthMetrics
+            column_health = {}
+            healthy_count = 0
+            warning_count = 0
+            critical_count = 0
 
-        for col_name in df.columns:
-            health = compute_column_health(df[col_name], col_name)
-            column_health[col_name] = health
+            for col_name in df.columns:
+                health = compute_column_health(df[col_name], col_name)
+                column_health[col_name] = health
 
-            if health.severity == "healthy":
-                healthy_count += 1
-            elif health.severity == "warning":
-                warning_count += 1
-            else:
-                critical_count += 1
+                if health.severity == "healthy":
+                    healthy_count += 1
+                elif health.severity == "warning":
+                    warning_count += 1
+                else:
+                    critical_count += 1
 
-        # Overall health score
-        overall_health = sum(h.health_score for h in column_health.values()) / len(column_health) if column_health else 0.0
+            # Overall health score
+            overall_health = sum(h.health_score for h in column_health.values()) / len(column_health) if column_health else 0.0
 
-        health_response = BatchHealthResponse(
-            overall_health_score=float(overall_health),
-            healthy_columns=int(healthy_count),
-            warning_columns=int(warning_count),
-            critical_columns=int(critical_count),
-            column_health=column_health
-        )
+            health_response = BatchHealthResponse(
+                overall_health_score=float(overall_health),
+                healthy_columns=int(healthy_count),
+                warning_columns=int(warning_count),
+                critical_columns=int(critical_count),
+                column_health=column_health
+            )
 
         # Convert results to response format (INCLUDE ALL COLUMNS, even healthy ones)
         results = {}
@@ -829,154 +826,64 @@ async def batch_preprocess(request: BatchPreprocessRequest):
 @app.post("/execute", response_model=ExecutePipelineResponse)
 async def execute_pipeline(request: ExecutePipelineRequest):
     """
-    Execute preprocessing pipeline on data.
-
+    Execute preprocessing pipeline on data using PreprocessingExecutor.
+    
     Args:
         request: Data and preprocessing actions to apply
-
+    
     Returns:
-        Processed data ready for download
+        Processed data ready for download with session_id
     """
     try:
-        from sklearn.preprocessing import (
-            StandardScaler, MinMaxScaler, RobustScaler,
-            LabelEncoder, OneHotEncoder
-        )
-        from scipy.stats import boxcox
-        import warnings
-        warnings.filterwarnings('ignore')
-
+        from ..core.executor import get_executor
+        import uuid
+        
+        # Get executor instance
+        executor = get_executor()
+        
         # Convert to DataFrame
         df = pd.DataFrame(request.columns)
-        processed_df = df.copy()
+        
+        # Prepare decisions dict for executor
+        decisions = {}
+        for col_name, action in request.actions.items():
+            decisions[col_name] = {
+                'action': action,
+                'parameters': {},
+                'accepted': True
+            }
+        
+        # Execute preprocessing with validation
+        processed_df, validation_report = executor.execute_batch(df, decisions)
+        
+        # Generate session ID and store preprocessed data
+        session_id = str(uuid.uuid4())
+        preprocessed_data_store[session_id] = processed_df
+        
+        # Clean old sessions if too many
+        if len(preprocessed_data_store) > MAX_STORED_DATASETS:
+            oldest_key = next(iter(preprocessed_data_store))
+            del preprocessed_data_store[oldest_key]
+        
+        # Track which actions were applied
         applied_actions = {}
         skipped_columns = []
         errors = {}
-
+        
         for col_name, action in request.actions.items():
-            if col_name not in df.columns:
+            if col_name in processed_df.columns or action == 'drop_column':
+                applied_actions[col_name] = action
+            else:
                 skipped_columns.append(col_name)
-                continue
-
-            try:
-                column = df[col_name].copy()
-
-                # Skip if action is keep_as_is
-                if action.lower() in ['keep_as_is', 'keep']:
-                    applied_actions[col_name] = 'keep_as_is'
-                    continue
-
-                # Handle nulls first (if action is not about nulls)
-                if action not in ['fill_null_mean', 'fill_null_median', 'fill_null_mode']:
-                    # Drop rows with nulls for this column temporarily
-                    non_null_mask = column.notna()
-                    if non_null_mask.sum() == 0:
-                        errors[col_name] = "All values are null"
-                        continue
-                    column_clean = column[non_null_mask]
-                else:
-                    column_clean = column
-
-                # Apply preprocessing based on action
-                if action == 'standard_scale':
-                    scaler = StandardScaler()
-                    processed_df[col_name] = scaler.fit_transform(column_clean.values.reshape(-1, 1)).flatten()
-                    applied_actions[col_name] = action
-
-                elif action == 'minmax_scale':
-                    scaler = MinMaxScaler()
-                    processed_df[col_name] = scaler.fit_transform(column_clean.values.reshape(-1, 1)).flatten()
-                    applied_actions[col_name] = action
-
-                elif action == 'robust_scale':
-                    scaler = RobustScaler()
-                    processed_df[col_name] = scaler.fit_transform(column_clean.values.reshape(-1, 1)).flatten()
-                    applied_actions[col_name] = action
-
-                elif action == 'log_transform':
-                    # Ensure positive values
-                    if (column_clean > 0).all():
-                        processed_df[col_name] = np.log(column_clean)
-                        applied_actions[col_name] = action
-                    else:
-                        errors[col_name] = "Log transform requires all positive values"
-
-                elif action == 'log1p_transform':
-                    processed_df[col_name] = np.log1p(column_clean)
-                    applied_actions[col_name] = action
-
-                elif action == 'sqrt_transform':
-                    if (column_clean >= 0).all():
-                        processed_df[col_name] = np.sqrt(column_clean)
-                        applied_actions[col_name] = action
-                    else:
-                        errors[col_name] = "Sqrt transform requires non-negative values"
-
-                elif action == 'box_cox':
-                    if (column_clean > 0).all():
-                        transformed, _ = boxcox(column_clean)
-                        processed_df[col_name] = transformed
-                        applied_actions[col_name] = action
-                    else:
-                        errors[col_name] = "Box-Cox requires all positive values"
-
-                elif action == 'onehot_encode':
-                    # One-hot encoding creates multiple columns
-                    dummies = pd.get_dummies(column_clean, prefix=col_name)
-                    # Drop original column
-                    processed_df = processed_df.drop(columns=[col_name])
-                    # Add dummy columns
-                    for dummy_col in dummies.columns:
-                        processed_df[dummy_col] = dummies[dummy_col]
-                    applied_actions[col_name] = action
-
-                elif action == 'label_encode':
-                    encoder = LabelEncoder()
-                    processed_df[col_name] = encoder.fit_transform(column_clean.astype(str))
-                    applied_actions[col_name] = action
-
-                elif action == 'fill_null_mean':
-                    if pd.api.types.is_numeric_dtype(column):
-                        processed_df[col_name] = column.fillna(column.mean())
-                        applied_actions[col_name] = action
-                    else:
-                        errors[col_name] = "Mean imputation requires numeric column"
-
-                elif action == 'fill_null_median':
-                    if pd.api.types.is_numeric_dtype(column):
-                        processed_df[col_name] = column.fillna(column.median())
-                        applied_actions[col_name] = action
-                    else:
-                        errors[col_name] = "Median imputation requires numeric column"
-
-                elif action == 'fill_null_mode':
-                    mode_value = column.mode()[0] if not column.mode().empty else None
-                    if mode_value is not None:
-                        processed_df[col_name] = column.fillna(mode_value)
-                        applied_actions[col_name] = action
-                    else:
-                        errors[col_name] = "No mode value found"
-
-                elif action == 'drop_column':
-                    processed_df = processed_df.drop(columns=[col_name])
-                    applied_actions[col_name] = action
-
-                else:
-                    skipped_columns.append(col_name)
-                    errors[col_name] = f"Unknown action: {action}"
-
-            except Exception as e:
-                logger.error(f"Error processing column {col_name} with action {action}: {e}")
-                errors[col_name] = str(e)
-                skipped_columns.append(col_name)
-
+                errors[col_name] = f"Column not found or action failed"
+        
         # Convert DataFrame to dictionary of lists
         processed_data = {}
         for col in processed_df.columns:
-            # Convert to native Python types
-            values = processed_df[col].tolist()
+            # Replace NaN with None for JSON compatibility
+            values = processed_df[col].replace({np.nan: None}).tolist()
             processed_data[col] = convert_to_json_serializable(values)
-
+        
         response = ExecutePipelineResponse(
             success=len(errors) == 0,
             processed_data=processed_data,
@@ -984,9 +891,14 @@ async def execute_pipeline(request: ExecutePipelineRequest):
             skipped_columns=skipped_columns,
             errors=errors
         )
-
-        return JSONResponse(content=jsonable_encoder(response))
-
+        
+        # Add session_id and validation_report to response
+        response_dict = jsonable_encoder(response)
+        response_dict['session_id'] = session_id
+        response_dict['validation_report'] = convert_to_json_serializable(validation_report)
+        
+        return JSONResponse(content=response_dict)
+    
     except Exception as e:
         import traceback
         logger.error(f"Error executing pipeline: {e}")
@@ -994,6 +906,104 @@ async def execute_pipeline(request: ExecutePipelineRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Pipeline execution failed: {str(e)}"
+        )
+
+
+@app.get("/download/{session_id}")
+async def download_preprocessed_data(session_id: str, format: str = "csv"):
+    """
+    Download preprocessed data in multiple formats.
+    
+    Creative features:
+    - CSV, Excel, JSON support
+    - Automatic timestamp in filename
+    - Metadata headers
+    - Excel includes summary sheets
+    
+    Args:
+        session_id: Session ID from execute endpoint
+        format: Output format (csv, excel, json)
+    
+    Returns:
+        File download response
+    """
+    from fastapi.responses import StreamingResponse
+    from io import StringIO, BytesIO
+    from datetime import datetime
+    
+    # Check if session exists
+    if session_id not in preprocessed_data_store:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found or expired. Please re-execute preprocessing."
+        )
+    
+    df = preprocessed_data_store[session_id]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    try:
+        if format.lower() == "csv":
+            # CSV with metadata header
+            output = StringIO()
+            output.write(f"# AURORA Preprocessed Data\n")
+            output.write(f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            output.write(f"# Rows: {len(df)}, Columns: {len(df.columns)}\n")
+            output.write(f"#\n")
+            df.to_csv(output, index=False)
+            output.seek(0)
+            
+            return StreamingResponse(
+                iter([output.getvalue()]),
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=aurora_preprocessed_{timestamp}.csv"}
+            )
+        
+        elif format.lower() == "excel":
+            # Excel with multiple sheets
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name='Preprocessed Data', index=False)
+                
+                # Summary sheet
+                summary = pd.DataFrame({
+                    'Metric': ['Rows', 'Columns', 'Generated'],
+                    'Value': [len(df), len(df.columns), datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+                })
+                summary.to_excel(writer, sheet_name='Summary', index=False)
+            
+            output.seek(0)
+            return StreamingResponse(
+                iter([output.getvalue()]),
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f"attachment; filename=aurora_preprocessed_{timestamp}.xlsx"}
+            )
+        
+        elif format.lower() == "json":
+            # JSON with metadata
+            output_data = {
+                "metadata": {
+                    "generated_at": datetime.now().isoformat(),
+                    "rows": len(df),
+                    "columns": len(df.columns)
+                },
+                "data": df.to_dict(orient='records')
+            }
+            return JSONResponse(
+                content=output_data,
+                headers={"Content-Disposition": f"attachment; filename=aurora_preprocessed_{timestamp}.json"}
+            )
+        
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported format: {format}. Use csv, excel, or json."
+            )
+    
+    except Exception as e:
+        logger.error(f"Error generating download: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Download generation failed: {str(e)}"
         )
 
 
