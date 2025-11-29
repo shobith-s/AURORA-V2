@@ -1,8 +1,51 @@
 import React, { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Brain, TrendingUp, CheckCircle, Clock } from 'lucide-react';
+
+// Simple card components (inline to avoid import issues)
+const Card = ({ children, className = '' }: any) => (
+    <div className={`glass-card ${className}`}>{children}</div>
+);
+
+const CardHeader = ({ children }: any) => (
+    <div className="p-6 pb-3">{children}</div>
+);
+
+const CardTitle = ({ children, className = '' }: any) => (
+    <h3 className={`text-lg font-semibold ${className}`}>{children}</h3>
+);
+
+const CardContent = ({ children }: any) => (
+    <div className="p-6 pt-0">{children}</div>
+);
+
+const Badge = ({ children, variant = 'default' }: any) => {
+    const variants = {
+        default: 'bg-blue-500 text-white',
+        secondary: 'bg-slate-200 text-slate-700',
+        outline: 'border border-slate-300 text-slate-700'
+    };
+    return (
+        <span className={`px-2 py-1 rounded text-xs font-medium ${variants[variant as keyof typeof variants]}`}>
+            {children}
+        </span>
+    );
+};
+
+const Table = ({ children }: any) => (
+    <div className="w-full overflow-auto">
+        <table className="w-full">{children}</table>
+    </div>
+);
+
+const TableHeader = ({ children }: any) => <thead>{children}</thead>;
+const TableBody = ({ children }: any) => <tbody>{children}</tbody>;
+const TableRow = ({ children }: any) => <tr className="border-b border-slate-200">{children}</tr>;
+const TableHead = ({ children }: any) => (
+    <th className="text-left p-3 text-sm font-medium text-slate-600">{children}</th>
+);
+const TableCell = ({ children }: any) => (
+    <td className="p-3 text-sm">{children}</td>
+);
 
 interface LearnedRule {
     id: number;

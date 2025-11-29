@@ -76,16 +76,15 @@ def main():
             # If LLM disagrees with high confidence → correction!
             if not validation['is_correct'] and validation.get('llm_confidence', 0) >= 0.85:
                 # Feed to EXISTING adaptive learning system
+                # Create dummy column data for stats extraction
+                dummy_column = pd.Series([0] * 100, name=label['column'])
+                
                 result = preprocessor.process_correction(
+                    column=dummy_column,
                     column_name=label['column'],
                     wrong_action=label['action'],
                     correct_action=validation['correct_action'],
-                    column_stats={
-                        'dtype': label['dtype'],
-                        'null_pct': label['null_pct'],
-                        'unique_ratio': label['unique_count'] / 1000,
-                        'skewness': label['features'].get('skewness', 0)
-                    }
+                    confidence=label['confidence']
                 )
                 
                 corrections_count += 1

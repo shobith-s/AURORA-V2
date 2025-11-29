@@ -829,8 +829,12 @@ class IntelligentPreprocessor:
         }
 
         # Add adaptive learning statistics if available
-        if self.adaptive_rules:
-            stats['adaptive_learning'] = self.adaptive_rules.get_statistics()
+        if self.learning_engine:
+            stats['learning'] = {
+                'total_corrections': 0,  # Would need to query DB
+                'learned_rules': 0,  # Would need to query DB
+                'pattern_clusters': 0  # Would need to query DB
+            }
 
         return stats
 
