@@ -250,8 +250,7 @@ def test_preprocessor_handles_shap_gracefully():
 
     preprocessor = IntelligentPreprocessor(
         use_neural_oracle=True,
-        enable_learning=False,
-        enable_cache=False
+        enable_learning=False
     )
 
     # Should work even if SHAP is not available (falls back to regular predict)

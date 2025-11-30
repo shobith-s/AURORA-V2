@@ -4,7 +4,7 @@
 
 ## Overview
 
-AURORA is an intelligent data preprocessing system that combines symbolic rules, meta-learning, and neural networks to automatically recommend optimal preprocessing strategies for your data.
+AURORA is an intelligent data preprocessing system that combines symbolic rules and neural networks to automatically recommend optimal preprocessing strategies for your data.
 
 ## 🚀 New Features (v2.1.0)
 
@@ -34,7 +34,6 @@ AURORA is an intelligent data preprocessing system that combines symbolic rules,
 
 - **185+ Symbolic Rules** - Expert knowledge encoded
 - **Neural Oracle** - ML-powered decision making
-- **Meta-Learning** - Statistical heuristics for edge cases
 - **Adaptive Learning** - Learns from user corrections
 - **Real-time Processing** - Instant recommendations
 - **Explainable AI** - Transparent decision process
@@ -52,11 +51,9 @@ AURORA is an intelligent data preprocessing system that combines symbolic rules,
 │  ┌────────────────────────────────────┐ │
 │  │  1. Symbolic Engine (185+ rules)   │ │
 │  │     ↓ (if confidence < 0.75)       │ │
-│  │  2. Meta-Learning (heuristics)     │ │
-│  │     ↓ (if still uncertain)         │ │
-│  │  3. Neural Oracle (XGBoost)        │ │
+│  │  2. Neural Oracle (XGBoost)        │ │
 │  │     ↓ (if all fail)                │ │
-│  │  4. Conservative Fallback          │ │
+│  │  3. Conservative Fallback          │ │
 │  └────────────────────────────────────┘ │
 └──────────────┬──────────────────────────┘
                │
@@ -132,21 +129,16 @@ npm start
 ### Decision Process
 
 1. **Symbolic Engine** (Primary)
-   - 185+ hand-crafted rules
+   - 185+ hand-crafted rules with learned rules from user corrections
    - Pattern matching on data characteristics
    - High confidence for known patterns
 
-2. **Meta-Learning** (Bridge)
-   - Statistical heuristics
-   - Covers edge cases
-   - Universal coverage
-
-3. **Neural Oracle** (ML)
+2. **Neural Oracle** (Ambiguous Cases)
    - XGBoost model trained on real data
    - Handles ambiguous cases
    - Provides confidence scores
 
-4. **Conservative Fallback** (Safety)
+3. **Conservative Fallback** (Safety Net)
    - Ultra-safe defaults
    - Preserves data integrity
    - Reversible operations

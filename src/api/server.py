@@ -235,16 +235,6 @@ async def health_check():
         logger.warning(f"Health check - database error: {e}")
         components["database"] = "error"
 
-    # Check cache (optional)
-    try:
-        if preprocessor.enable_cache:
-            components["cache"] = "ok" if preprocessor.cache else "unavailable"
-        else:
-            components["cache"] = "disabled"
-    except Exception as e:
-        logger.warning(f"Health check - cache error: {e}")
-        components["cache"] = "error"
-
     overall_status = "healthy" if all_healthy else "degraded"
 
     return HealthResponse(
@@ -276,8 +266,8 @@ async def get_system_stats():
         return {
             "total_decisions": total,
             "symbolic_decisions": stats.get('symbolic_decisions', 0),
-            "meta_decisions": stats.get('meta_learning_decisions', 0),
             "neural_decisions": stats.get('neural_decisions', 0),
+            "learned_decisions": stats.get('learned_decisions', 0),
             "high_confidence_decisions": stats.get('high_confidence_decisions', 0),
             "avg_confidence": round(avg_confidence, 2),
             "avg_time_ms": round(avg_time, 2),
@@ -1635,7 +1625,6 @@ async def get_performance_metrics():
                     "symbolic": metrics.symbolic_decisions,
                     "neural": metrics.neural_decisions,
                     "learned": metrics.learned_decisions,
-                    "meta_learning": metrics.meta_learning_decisions,
                 },
                 "user_satisfaction": {
                     "average_rating": metrics.average_user_rating,

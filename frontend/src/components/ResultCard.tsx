@@ -24,7 +24,6 @@ export default function ResultCard({ result }: ResultCardProps) {
       learned: isLimitedTraining
         ? 'bg-amber-100 text-amber-700 border-amber-200'  // Warning color for limited training
         : 'bg-green-100 text-green-700 border-green-200',
-      meta_learning: 'bg-slate-100 text-slate-700 border-slate-200',
       conservative_fallback: 'bg-gray-100 text-gray-700 border-gray-200'
     };
     return colors[source as keyof typeof colors] || 'bg-gray-100 text-gray-700';

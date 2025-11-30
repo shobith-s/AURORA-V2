@@ -14,11 +14,6 @@
     "correct_decisions": 0,
     "total_confidence": 0.0
   },
-  "meta_learning": {
-    "total_decisions": 0,
-    "correct_decisions": 0,
-    "total_confidence": 0.0
-  },
   "conservative_fallback": {
     "total_decisions": 0,
     "correct_decisions": 0,

@@ -90,4 +90,7 @@ cache/
 *.swp
 temp/
 tmp/
+
+# Database files
 aurora.db
+*.db

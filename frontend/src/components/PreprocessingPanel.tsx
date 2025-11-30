@@ -280,10 +280,8 @@ export default function PreprocessingPanel() {
     if (!batchResults) return null;
 
     const sources = {
-      cache: 0,
       learned: 0,
       symbolic: 0,
-      meta_learning: 0,
       neural: 0,
       conservative_fallback: 0
     };
@@ -692,11 +690,13 @@ export default function PreprocessingPanel() {
                               <span className="text-xs text-slate-600">Source:</span>
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${columnResult.source === 'user_override'
                                 ? 'bg-green-100 text-green-700'
-                                : columnResult.source === 'meta_learning'
-                                  ? 'bg-orange-100 text-orange-700'
-                                  : columnResult.source === 'conservative_fallback'
-                                    ? 'bg-slate-100 text-slate-700'
-                                    : 'bg-purple-100 text-purple-700'
+                                : columnResult.source === 'conservative_fallback'
+                                  ? 'bg-slate-100 text-slate-700'
+                                  : columnResult.source === 'neural'
+                                    ? 'bg-pink-100 text-pink-700'
+                                    : columnResult.source === 'learned'
+                                      ? 'bg-green-100 text-green-700'
+                                      : 'bg-blue-100 text-blue-700'
                                 }`}>
                                 {columnResult.source}
                               </span>

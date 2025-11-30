@@ -15,7 +15,7 @@ python scripts/train_neural_oracle_real_data.py
 **Features:**
 - Collects 10+ datasets from sklearn and OpenML
 - Trains XGBoost with 30 enhanced features
-- 4-layer safety validation (prevents catastrophic data loss)
+- 3-layer architecture validation (prevents catastrophic data loss)
 - Saves model with comprehensive metadata
 
 **Output:** `models/neural_oracle_v1.pkl`

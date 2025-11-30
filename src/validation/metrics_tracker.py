@@ -72,7 +72,6 @@ class PerformanceMetrics:
     symbolic_decisions: int = 0
     neural_decisions: int = 0
     learned_decisions: int = 0
-    meta_learning_decisions: int = 0
 
     # User satisfaction
     average_user_rating: float = 0.0
@@ -265,7 +264,6 @@ class MetricsTracker:
             symbolic_decisions=source_counts.get('symbolic', 0),
             neural_decisions=source_counts.get('neural', 0),
             learned_decisions=source_counts.get('learned', 0),
-            meta_learning_decisions=source_counts.get('meta', 0),
             average_user_rating=avg_rating,
             explanation_helpfulness_rate=expl_helpful_rate,
             learning_rate=learning_rate,

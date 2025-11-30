@@ -1,6 +1,6 @@
 """
-Main Preprocessing Pipeline - Integrates all layers.
-Symbolic Engine (with adaptive learning) -> NeuralOracle
+Main Preprocessing Pipeline - 3-Layer Architecture.
+Symbolic Engine (with adaptive learning) -> Neural Oracle -> Conservative Fallback
 """
 
 from typing import Any, Dict, List, Optional, Union
@@ -27,19 +27,18 @@ CONFIDENCE_LOW = 0.5       # Require manual review (low confidence)
 
 class IntelligentPreprocessor:
     """
-    Main preprocessing pipeline with adaptive learning architecture (V3):
+    Main preprocessing pipeline with 3-layer architecture:
 
-    0. Cache (validated decisions) - Instant lookup
-    1. Symbolic rules (185+ rules, including learned) - PRIMARY & ONLY DECISION LAYER
+    1. Symbolic Engine (Primary) - 185+ rules including learned rules from corrections
        └─ Dynamically enhanced: Learner creates NEW symbolic rules from corrections
-    2. NeuralOracle (ML predictions) - Ambiguous cases only
+    2. Neural Oracle (Ambiguous Cases) - ML predictions for uncertain cases
+    3. Conservative Fallback (Safety Net) - Ultra-safe defaults when all else fails
 
-    NEW Learning Architecture (V3):
-    - Learner NEVER makes direct decisions (prevents overgeneralization)
+    Learning Architecture:
     - Training phase (2-9 corrections): Analyze patterns, compute adjustments
     - Production phase (10+ corrections): CREATE new symbolic Rule objects
     - New rules are INJECTED into symbolic engine automatically
-    - Symbolic engine remains the ONLY decision-maker at all times
+    - Symbolic engine remains the primary decision-maker
 
     Benefits:
     - No learner decision path = no overgeneralization from limited data
@@ -236,10 +235,7 @@ class IntelligentPreprocessor:
             symbolic_result.decision_id = decision_id
             return self._add_confidence_warnings(symbolic_result, context, column_name)
 
-        # LAYER 2.5: Meta-learning removed to simplify architecture and enable Neural Oracle
-        # (Meta-learner code removed)
-
-        # LAYER 3: Use NeuralOracle for ambiguous cases (<5ms)
+        # LAYER 2: Use NeuralOracle for ambiguous cases (<5ms)
         if self.use_neural_oracle and self.neural_oracle:
             # Extract minimal features
             try:
@@ -359,7 +355,7 @@ class IntelligentPreprocessor:
                     # Fall back to symbolic result or conservative fallback
                     pass
 
-        # LAYER 4: Ultra-conservative fallback
+        # LAYER 3: Ultra-conservative fallback
         # When all layers are uncertain, make the safest possible decision
         elapsed_ms = (time.time() - start_time) * 1000
         self.stats['total_time_ms'] += elapsed_ms
@@ -845,7 +841,6 @@ class IntelligentPreprocessor:
             'symbolic_decisions': 0,
             'neural_decisions': 0,
             'high_confidence_decisions': 0,
-            'cache_hits': 0,
             'total_time_ms': 0.0
         }
         self.symbolic_engine.reset_stats()
