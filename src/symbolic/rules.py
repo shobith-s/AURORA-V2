@@ -54,6 +54,18 @@ def create_data_quality_rules() -> List[Rule]:
     """Create data quality rules."""
     rules = []
 
+    # Rule 0: PRESERVE TARGET VARIABLES (HIGHEST PRIORITY)
+    # This MUST be evaluated before ANY other rule to prevent catastrophic errors
+    rules.append(Rule(
+        name="PRESERVE_TARGET_VARIABLE",
+        category=RuleCategory.DATA_QUALITY,
+        action=PreprocessingAction.KEEP_AS_IS,
+        condition=lambda stats: _column_name_matches_target(stats),
+        confidence_fn=lambda stats: 0.99,
+        explanation_fn=lambda stats: f"Target variable '{stats.get('column_name', '')}' detected: preserving original scale for ML pipeline",
+        priority=99
+    ))
+
     # Rule 1: Drop if mostly null
     rules.append(Rule(
         name="DROP_IF_MOSTLY_NULL",
@@ -792,3 +804,19 @@ def get_rules_by_category(category: RuleCategory) -> List[Rule]:
     """Get all rules in a specific category."""
     all_rules = get_all_rules()
     return [r for r in all_rules if r.category == category]
+
+
+def _column_name_matches_target(stats: Dict[str, Any]) -> bool:
+    """Check if column name matches common target variable patterns."""
+    column_name = str(stats.get("column_name", "")).lower()
+    
+    # Exact match for single-letter target names
+    if column_name == 'y':
+        return True
+    
+    # Partial match for multi-word target keywords
+    target_keywords = [
+        'price', 'cost', 'target', 'label', 'outcome', 
+        'response', 'dependent', 'selling_price', 'sale_price'
+    ]
+    return any(keyword in column_name for keyword in target_keywords)

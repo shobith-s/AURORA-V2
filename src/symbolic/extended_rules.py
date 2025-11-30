@@ -323,10 +323,10 @@ def create_advanced_type_detection_rules() -> List[Rule]:
 
 
 # =============================================================================
-# DOMAIN-SPECIFIC PATTERN RULES (25 rules)
+# DOMAIN-SPECIFIC PATTERN RULES (25 rules) - BUSINESS METRICS
 # =============================================================================
 
-def create_domain_pattern_rules() -> List[Rule]:
+def create_business_metric_rules() -> List[Rule]:
     """Create domain-specific pattern rules."""
     rules = []
 
@@ -357,7 +357,7 @@ def create_domain_pattern_rules() -> List[Rule]:
             stats.get("is_numeric", False) and
             stats.get("min_value") is not None and stats.get("min_value") >= 0 and
             stats.get("skewness", 0) > 1.5 and
-            _column_name_contains(stats, ["count", "frequency", "num_", "total_", "_count", "quantity"])
+            _column_name_contains(stats, ["count", "frequency", "num_", "total_", "_count", "quantity", "reviews", "likes", "views", "clicks", "impressions"])
         ),
         confidence_fn=lambda stats: 0.89,
         explanation_fn=lambda stats: f"Count/frequency column with high skewness ({stats.get('skewness', 0):.2f}): log1p transform",
@@ -619,10 +619,10 @@ def create_domain_pattern_rules() -> List[Rule]:
 
 
 # =============================================================================
-# COMPOSITE RULES (multi-condition edge cases) (20 rules)
+# COMPOSITE RULES (multi-condition edge cases) (20 rules) - CLASS IMBALANCE
 # =============================================================================
 
-def create_composite_rules() -> List[Rule]:
+def create_class_imbalance_rules() -> List[Rule]:
     """Create composite rules for complex edge cases."""
     rules = []
 
@@ -636,7 +636,7 @@ def create_composite_rules() -> List[Rule]:
         category=RuleCategory.DATA_QUALITY,
         action=PreprocessingAction.KEEP_AS_IS,
         condition=lambda stats: (
-            _column_name_contains(stats, ["target", "label", "class", "y", "outcome", "response"]) and
+            _column_name_matches_target_label(stats) and
             (stats.get("entropy", 1.0) < 0.5 or stats.get("unique_ratio", 1.0) < 0.1)
         ),
         confidence_fn=lambda stats: 0.99,
@@ -1028,6 +1028,22 @@ def _column_name_contains(stats: Dict[str, Any], keywords: List[str]) -> bool:
     """Check if column name contains any of the keywords."""
     column_name = str(stats.get("column_name", "")).lower()
     return any(keyword.lower() in column_name for keyword in keywords)
+
+
+def _column_name_matches_target_label(stats: Dict[str, Any]) -> bool:
+    """Check if column name matches target/label patterns (for class imbalance handling).
+    
+    Uses exact matching for short keywords like 'y' and 'class' to avoid false positives.
+    """
+    column_name = str(stats.get("column_name", "")).lower()
+    
+    # Exact match for single-letter or short keywords
+    if column_name in ['y', 'class', 'label', 'target']:
+        return True
+    
+    # Partial match for multi-word target keywords (but not single letters)
+    target_keywords = ['target', 'label', 'outcome', 'response', 'class_label', 'y_train', 'y_test']
+    return any(keyword in column_name for keyword in target_keywords)
 
 
 def _column_name_matches_id(stats: Dict[str, Any]) -> bool:
@@ -1744,6 +1760,14 @@ def get_extended_rules() -> List[Rule]:
     all_rules.extend(create_universal_domain_rules())
     
     all_rules.extend(create_advanced_type_detection_rules())
+    
+    # Add business metric rules (count/frequency, rate/ratio, etc.)
+    all_rules.extend(create_business_metric_rules())
+    
+    # Add class imbalance handling rules
+    all_rules.extend(create_class_imbalance_rules())
+    
+    # Add finance, healthcare, e-commerce domain rules
     all_rules.extend(create_domain_pattern_rules())
     all_rules.extend(create_composite_rules())
 
