@@ -42,6 +42,7 @@ class PreprocessingAction(Enum):
     PARSE_JSON = "parse_json"
     PARSE_CATEGORICAL = "parse_categorical"
     DATETIME_EXTRACT_YEAR = "datetime_extract_year"
+    DATETIME_EXTRACT = "datetime_extract"  # Generic datetime component extraction
 
     # Scaling Actions
     STANDARD_SCALE = "standard_scale"
@@ -231,6 +232,38 @@ ACTION_REGISTRY: Dict[PreprocessingAction, ActionMetadata] = {
         category=ActionCategory.FEATURE_ENGINEERING,
         description="Extract year from datetime column",
         requirements=["temporal"],
+        parameters={},
+        reversible=False,
+        preserves_nulls=True
+    ),
+
+    PreprocessingAction.DATETIME_EXTRACT: ActionMetadata(
+        action=PreprocessingAction.DATETIME_EXTRACT,
+        category=ActionCategory.FEATURE_ENGINEERING,
+        description="Extract multiple datetime components (year, month, day, hour, etc.)",
+        requirements=["temporal"],
+        parameters={"components": ["year", "month", "day", "dayofweek"]},
+        reversible=False,
+        preserves_nulls=True
+    ),
+
+    # Log Transform with zeros (safe)
+    PreprocessingAction.LOG1P_TRANSFORM: ActionMetadata(
+        action=PreprocessingAction.LOG1P_TRANSFORM,
+        category=ActionCategory.TRANSFORMATION,
+        description="Apply log1p transformation (log(1+x)) - safe for zeros",
+        requirements=["numeric", "non_negative"],
+        parameters={},
+        reversible=True,
+        preserves_nulls=True
+    ),
+
+    # Text Actions
+    PreprocessingAction.TEXT_CLEAN: ActionMetadata(
+        action=PreprocessingAction.TEXT_CLEAN,
+        category=ActionCategory.DOMAIN_SPECIFIC,
+        description="Clean text data (lowercase, strip whitespace, normalize)",
+        requirements=["text"],
         parameters={},
         reversible=False,
         preserves_nulls=True
