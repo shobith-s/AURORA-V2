@@ -61,7 +61,12 @@ logs/
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb
+# Keep notebooks in notebooks/ directory, exclude others
+!notebooks/*.ipynb
+
+# Generated evaluation results (to be regenerated on each run)
+results/
+evaluation_results.zip
 
 # Frontend/Next.js
 frontend/.next/

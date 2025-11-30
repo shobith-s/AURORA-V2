@@ -1,0 +1,88 @@
+# Evaluation Configuration for AURORA V2
+# Used by validate_against_ground_truth.py and run_colab_evaluation.py
+
+evaluation:
+  # Quick validation settings
+  ground_truth_file: "validator/validated/validated_labels.json"
+  
+  # Colab evaluation settings
+  num_datasets: 5  # 5 for quick, 10 for thorough
+  datasets:
+    - titanic
+    - wine
+    - diabetes
+    - breast_cancer
+    - california_housing
+    # Additional datasets for thorough evaluation:
+    # - adult
+    # - bank-marketing
+    # - credit-g
+    # - heart-h
+    # - spam
+  
+  # OpenML dataset IDs
+  dataset_ids:
+    titanic: 40945
+    wine: 187
+    diabetes: 37
+    breast_cancer: 13
+    california_housing: 537
+    adult: 1590
+    bank-marketing: 1461
+    credit-g: 31
+    heart-h: 51
+    spam: 44
+  
+  # Ablation variants
+  variants:
+    - random
+    - symbolic_only
+    - neural_only
+    - aurora_hybrid
+  
+  # ML evaluation settings
+  cv_folds: 3
+  random_forest_estimators: 50
+  random_forest_max_depth: 10
+  
+  # Performance settings
+  checkpoint_frequency: 1  # Save after each dataset
+  verbose: true
+  max_columns_per_dataset: 50  # Limit columns for speed
+  
+  # Output settings
+  results_dir: "results"
+  figures_dpi: 300
+  
+  # Action name mapping (for ground truth validation)
+  action_mapping:
+    # Map any alternative action names to canonical names
+    "fill_null_mean": "fill_null_mean"
+    "fill_null_median": "fill_null_median"
+    "fill_null_mode": "fill_null_mode"
+    "keep_as_is": "keep_as_is"
+    "drop_column": "drop_column"
+    "standard_scale": "standard_scale"
+    "minmax_scale": "minmax_scale"
+    "robust_scale": "robust_scale"
+    "log_transform": "log_transform"
+    "log1p_transform": "log1p_transform"
+    "onehot_encode": "onehot_encode"
+    "label_encode": "label_encode"
+    "ordinal_encode": "ordinal_encode"
+    "frequency_encode": "frequency_encode"
+    "parse_datetime": "parse_datetime"
+    "clip_outliers": "clip_outliers"
+    "winsorize": "winsorize"
+
+# Statistical analysis settings
+statistics:
+  confidence_level: 0.95
+  min_samples_for_ttest: 5
+  effect_size_threshold: 0.5
+
+# Logging settings
+logging:
+  level: INFO
+  file: "results/evaluation.log"
+  console: true
