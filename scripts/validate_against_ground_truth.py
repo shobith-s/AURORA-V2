@@ -34,6 +34,9 @@ try:
 except ImportError:
     YAML_AVAILABLE = False
 
+# Constants
+RANDOM_SEED = 42  # Seed for reproducibility in synthetic data generation
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -205,7 +208,7 @@ def reconstruct_column_from_features(features: Dict[str, Any], sample_size: int 
     Returns:
         Synthetic pandas Series matching the features
     """
-    np.random.seed(42)  # For reproducibility
+    np.random.seed(RANDOM_SEED)  # For reproducibility
     
     is_numeric = features.get('is_numeric', features.get('detected_dtype', 0)) == 1.0
     null_pct = features.get('null_pct', features.get('null_ratio', 0))

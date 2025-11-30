@@ -57,11 +57,13 @@ try:
 except ImportError:
     TQDM_AVAILABLE = False
     
-    def tqdm(iterable, desc=None, **kwargs):
-        """Fallback tqdm that just returns the iterable."""
+    def _tqdm_fallback(iterable, desc=None, **kwargs):
+        """Fallback progress indicator when tqdm is not available."""
         if desc:
             print(f"Processing: {desc}...")
         return iterable
+    
+    tqdm = _tqdm_fallback
 
 try:
     import matplotlib
@@ -205,6 +207,7 @@ class SymbolicOnlyVariant(AblationVariant):
     """AURORA with only symbolic rules (no neural oracle)."""
     
     def __init__(self):
+        # Lazy import to avoid import errors if preprocessor not available
         from src.core.preprocessor import IntelligentPreprocessor
         self.preprocessor = IntelligentPreprocessor(use_neural_oracle=False)
     
@@ -564,7 +567,7 @@ class ColabEvaluation:
                     X = df.drop(columns=[target_col])
                     y = df[target_col]
                     
-                    # Encode target if needed
+                    # Encode target if needed (only for categorical/object types)
                     if y.dtype == 'object' or y.dtype.name == 'category':
                         le = LabelEncoder()
                         y = le.fit_transform(y.astype(str))
@@ -572,8 +575,13 @@ class ColabEvaluation:
                     # Preprocess with variant
                     X_processed = variant.preprocess(X)
                     
-                    # Ensure no NaN values
-                    X_processed = X_processed.fillna(0)
+                    # Handle remaining NaN values with column-appropriate defaults
+                    for col in X_processed.columns:
+                        if X_processed[col].isna().any():
+                            if X_processed[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                                X_processed[col] = X_processed[col].fillna(X_processed[col].median())
+                            else:
+                                X_processed[col] = X_processed[col].fillna(0)
                     
                     # Select model
                     if task == 'classification':

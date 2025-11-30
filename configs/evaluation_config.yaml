@@ -48,7 +48,9 @@ evaluation:
   # Performance settings
   checkpoint_frequency: 1  # Save after each dataset
   verbose: true
-  max_columns_per_dataset: 50  # Limit columns for speed
+  # Max columns to process per dataset (for speed). Set to 0 or remove to process all.
+  # When set, only the first N columns are processed; remaining columns are skipped.
+  max_columns_per_dataset: 50
   
   # Output settings
   results_dir: "results"
