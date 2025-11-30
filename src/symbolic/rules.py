@@ -60,9 +60,7 @@ def create_data_quality_rules() -> List[Rule]:
         name="PRESERVE_TARGET_VARIABLE",
         category=RuleCategory.DATA_QUALITY,
         action=PreprocessingAction.KEEP_AS_IS,
-        condition=lambda stats: (
-            _column_name_matches_target(stats)
-        ),
+        condition=lambda stats: _column_name_matches_target(stats),
         confidence_fn=lambda stats: 0.99,
         explanation_fn=lambda stats: f"Target variable '{stats.get('column_name', '')}' detected: preserving original scale for ML pipeline",
         priority=99
