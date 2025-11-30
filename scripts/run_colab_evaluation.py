@@ -110,7 +110,7 @@ logger = logging.getLogger(__name__)
 
 def is_numeric_column(series: pd.Series) -> bool:
     """
-    Check if a column is numeric.
+    Check if a column is numeric using pandas built-in type checking.
     
     Args:
         series: Pandas Series to check
@@ -118,7 +118,7 @@ def is_numeric_column(series: pd.Series) -> bool:
     Returns:
         True if column is numeric (int or float), False otherwise
     """
-    return series.dtype in ['int64', 'float64', 'int32', 'float32', 'int16', 'float16', 'int8']
+    return pd.api.types.is_numeric_dtype(series)
 
 
 def safe_fillna_categorical(series: pd.Series, fill_value: str = 'missing') -> pd.Series:
@@ -137,10 +137,12 @@ def safe_fillna_categorical(series: pd.Series, fill_value: str = 'missing') -> p
     """
     result = series.copy()
     if result.dtype.name == 'category':
+        # Track which values are originally NA before conversion
+        is_na_mask = result.isna()
         # Convert categorical to string to avoid category restrictions
         result = result.astype(str)
-        # Replace string 'nan' with fill_value
-        result = result.replace('nan', fill_value)
+        # Use the original NA mask to fill only actual NaN values
+        result = result.mask(is_na_mask, fill_value)
         return result
     elif result.dtype == 'object':
         return result.fillna(fill_value)
