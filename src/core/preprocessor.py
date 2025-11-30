@@ -98,8 +98,20 @@ class IntelligentPreprocessor:
                 active_rules = self.learning_engine.get_active_rules()
                 if active_rules:
                     logger.info(f"Loaded {len(active_rules)} validated production rules")
-                    # TODO: Convert LearnedRule database objects to Rule objects and inject
-                    
+
+                    # Convert LearnedRule database objects to Rule objects and inject
+                    from ..learning.rule_converter import convert_learned_rules_batch
+                    converted_rules = convert_learned_rules_batch(
+                        active_rules,
+                        similarity_threshold=0.85
+                    )
+
+                    # Inject converted rules into symbolic engine
+                    for rule in converted_rules:
+                        self.symbolic_engine.add_rule(rule)
+
+                    logger.info(f"Successfully injected {len(converted_rules)} learned rules into symbolic engine")
+
             except Exception as e:
                 logger.warning(f"Learning engine initialization failed, continuing without it: {e}")
                 self.learning_engine = None
