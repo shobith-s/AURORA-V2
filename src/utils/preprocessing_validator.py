@@ -209,7 +209,18 @@ class PreprocessingValidator:
         
         # Determine final action
         is_valid = len(blockers) == 0
-        recommended_action = proposed_action if is_valid else self._get_safe_fallback(semantic_type, is_target)
+        
+        # If invalid, try to use suggested action from checks
+        if not is_valid:
+            # Find the first check with a suggested action
+            suggested = None
+            for check in checks:
+                if check.result == ValidationResult.INVALID and check.suggested_action:
+                    suggested = check.suggested_action
+                    break
+            recommended_action = suggested or self._get_safe_fallback(semantic_type, is_target)
+        else:
+            recommended_action = proposed_action
         
         return PreprocessingValidation(
             is_valid=is_valid,
@@ -581,21 +592,29 @@ class PreprocessingValidator:
         if is_target:
             return "keep_as_is", "Target column - no transformation applied"
         
-        # Recommendations by semantic type
-        recommendations = {
-            SemanticType.EMPTY: ("drop_column", "Empty column should be removed"),
-            SemanticType.URL: ("drop_column", "URL column - typically not useful for ML"),
-            SemanticType.PHONE: ("drop_column", "Phone number column - unique identifier, drop to prevent leakage"),
-            SemanticType.EMAIL: ("drop_column", "Email column - unique identifier, drop to prevent leakage"),
-            SemanticType.IDENTIFIER: ("drop_column", "Identifier column - drop to prevent data leakage"),
-            SemanticType.DATETIME: ("datetime_extract", "DateTime column - extract useful components"),
-            SemanticType.BOOLEAN: ("parse_boolean", "Boolean column - convert to 0/1"),
-            SemanticType.NUMERIC: self._get_numeric_recommendation(column),
-            SemanticType.CATEGORICAL: self._get_categorical_recommendation(column),
-            SemanticType.TEXT: ("text_clean", "Text column - clean and optionally vectorize"),
-        }
-        
-        return recommendations.get(semantic_type, ("keep_as_is", "No specific recommendation"))
+        # Lazy recommendations by semantic type
+        if semantic_type == SemanticType.EMPTY:
+            return ("drop_column", "Empty column should be removed")
+        elif semantic_type == SemanticType.URL:
+            return ("drop_column", "URL column - typically not useful for ML")
+        elif semantic_type == SemanticType.PHONE:
+            return ("drop_column", "Phone number column - unique identifier, drop to prevent leakage")
+        elif semantic_type == SemanticType.EMAIL:
+            return ("drop_column", "Email column - unique identifier, drop to prevent leakage")
+        elif semantic_type == SemanticType.IDENTIFIER:
+            return ("drop_column", "Identifier column - drop to prevent data leakage")
+        elif semantic_type == SemanticType.DATETIME:
+            return ("datetime_extract", "DateTime column - extract useful components")
+        elif semantic_type == SemanticType.BOOLEAN:
+            return ("parse_boolean", "Boolean column - convert to 0/1")
+        elif semantic_type == SemanticType.NUMERIC:
+            return self._get_numeric_recommendation(column)
+        elif semantic_type == SemanticType.CATEGORICAL:
+            return self._get_categorical_recommendation(column)
+        elif semantic_type == SemanticType.TEXT:
+            return ("text_clean", "Text column - clean and optionally vectorize")
+        else:
+            return ("keep_as_is", "No specific recommendation")
     
     def _get_numeric_recommendation(
         self,

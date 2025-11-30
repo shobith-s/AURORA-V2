@@ -375,8 +375,9 @@ class SafeTransforms:
             )
         
         # Detect IDs/hashes - should NOT vectorize
+        # Only flag as ID if: high uniqueness, moderate length, AND low space ratio
         unique_ratio = non_null.nunique() / len(non_null)
-        if unique_ratio > 0.95 and avg_length > 10:
+        if unique_ratio > 0.95 and avg_length > 10 and has_spaces < 0.3:
             return SafeTransformResult(
                 status=TransformResult.SKIPPED,
                 data=column,

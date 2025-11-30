@@ -251,7 +251,7 @@ def create_universal_rules() -> List[Rule]:
         category=RuleCategory.UNIVERSAL,
         action=PreprocessingAction.DROP_COLUMN,
         condition=lambda stats: _is_identifier_column(stats),
-        confidence_fn=lambda stats: 0.92,
+        confidence_fn=lambda stats: 0.97,  # Higher than domain-specific rules
         explanation_fn=lambda stats: f"Identifier column '{stats.get('column_name', '')}' should be dropped to prevent data leakage",
         priority=190
     ))

@@ -69,9 +69,9 @@ class UniversalTypeDetector:
     URL_PATTERN = re.compile(r'^https?://[^\s<>"{}|\\^`\[\]]+$', re.IGNORECASE)
     EMAIL_PATTERN = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
     PHONE_PATTERNS = [
-        re.compile(r'^\+?\d{1,4}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9}$'),  # International
+        re.compile(r'^\+\d{1,4}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9}$'),  # International with + prefix
         re.compile(r'^\(\d{3}\)\s*\d{3}[-.\s]?\d{4}$'),  # US (xxx) xxx-xxxx
-        re.compile(r'^\d{10,15}$'),  # Plain digits
+        re.compile(r'^\d{10,15}$'),  # Plain digits (10+ only)
         re.compile(r'^\d{3}[-.\s]\d{3}[-.\s]\d{4}$'),  # xxx-xxx-xxxx
     ]
     ISO_DATETIME_PATTERN = re.compile(
@@ -84,8 +84,8 @@ class UniversalTypeDetector:
         re.compile(r'^\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}$'),  # DD Month YYYY
     ]
     
-    # Identifier detection patterns
-    ID_KEYWORDS = ['id', 'uuid', 'guid', 'hash', 'key', 'code', 'ref', 'num', 'number']
+    # Identifier detection patterns - be conservative to avoid false positives
+    ID_KEYWORDS = ['id', 'uuid', 'guid', 'hash', 'key', 'code', 'ref', 'index', 'row']
     UUID_PATTERN = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$', re.IGNORECASE)
     
     def __init__(self):
@@ -108,13 +108,14 @@ class UniversalTypeDetector:
             TypeDetectionResult with semantic type, confidence, and details
         """
         # Priority-ordered detection methods
+        # Note: datetime MUST come before phone since dates can look like phone numbers
         detection_methods = [
             (self._detect_empty, SemanticType.EMPTY),
             (self._detect_url, SemanticType.URL),
-            (self._detect_phone, SemanticType.PHONE),
+            (self._detect_datetime, SemanticType.DATETIME),  # Before phone!
             (self._detect_email, SemanticType.EMAIL),
+            (self._detect_phone, SemanticType.PHONE),
             (self._detect_identifier, SemanticType.IDENTIFIER),
-            (self._detect_datetime, SemanticType.DATETIME),
             (self._detect_boolean, SemanticType.BOOLEAN),
             (self._detect_numeric, SemanticType.NUMERIC),
             (self._detect_categorical, SemanticType.CATEGORICAL),
