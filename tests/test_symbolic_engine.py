@@ -242,5 +242,73 @@ class TestColumnStatistics:
         assert stats_dict['is_numeric'] == True
 
 
+class TestBestsellersScenario:
+    """Test cases for the bestsellers-like preprocessing scenario."""
+
+    @pytest.fixture
+    def engine(self):
+        """Create a symbolic engine instance."""
+        return SymbolicEngine(confidence_threshold=0.9)
+
+    def test_target_variable_preserved(self, engine):
+        """Test that target variables like Price are preserved (keep_as_is)."""
+        np.random.seed(42)
+        price_data = np.random.uniform(8, 75, 500)
+        column = pd.Series(price_data, name="Price")
+
+        result = engine.evaluate(column, column_name="Price")
+
+        assert result.action == PreprocessingAction.KEEP_AS_IS
+        assert result.confidence >= 0.99
+        assert "Target variable" in result.explanation
+
+    def test_year_column_scaling(self, engine):
+        """Test that Year columns get standard scaling, not log transform."""
+        np.random.seed(42)
+        year_data = np.random.randint(2009, 2020, 500)
+        column = pd.Series(year_data, name="Year")
+
+        result = engine.evaluate(column, column_name="Year")
+
+        assert result.action == PreprocessingAction.STANDARD_SCALE
+        assert result.confidence >= 0.95
+        assert "Year" in result.explanation
+
+    def test_reviews_log_transform(self, engine):
+        """Test that highly skewed count data (Reviews) gets log1p transform."""
+        np.random.seed(42)
+        # Use 550 samples to get sufficient skewness (>1.5)
+        reviews_data = np.random.exponential(scale=20000, size=550).astype(int)
+        column = pd.Series(reviews_data, name="Reviews")
+
+        result = engine.evaluate(column, column_name="Reviews")
+
+        assert result.action == PreprocessingAction.LOG1P_TRANSFORM
+        assert result.confidence >= 0.85
+        assert "skewness" in result.explanation.lower() or "log1p" in result.explanation.lower()
+
+    def test_genre_onehot_encode(self, engine):
+        """Test that low cardinality categorical (Genre) gets one-hot encoding."""
+        np.random.seed(42)
+        genre_data = np.random.choice(['Fiction', 'Non Fiction'], 500)
+        column = pd.Series(genre_data, name="Genre")
+
+        result = engine.evaluate(column, column_name="Genre")
+
+        assert result.action == PreprocessingAction.ONEHOT_ENCODE
+        assert result.confidence >= 0.95
+
+    def test_user_rating_scaling(self, engine):
+        """Test that User Rating columns get standard scaling."""
+        np.random.seed(42)
+        rating_data = np.random.uniform(3.8, 4.9, 500)
+        column = pd.Series(rating_data, name="User Rating")
+
+        result = engine.evaluate(column, column_name="User Rating")
+
+        assert result.action == PreprocessingAction.STANDARD_SCALE
+        assert result.confidence >= 0.90
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
