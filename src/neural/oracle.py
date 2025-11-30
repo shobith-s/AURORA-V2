@@ -156,9 +156,13 @@ class NeuralOracle:
             dmatrix = xgb.DMatrix(X, feature_names=self.feature_names)
             probs = self.model.predict(dmatrix)[0]
 
-        # Map v2 model actions to system actions
+        # Map v2 model actions to system PreprocessingAction enums.
+        # These mappings cover:
+        # 1. V2 model class labels (from the trained ensemble)
+        # 2. Semantic aliases (e.g., 'retain_column' -> KEEP_AS_IS)
+        # 3. Legacy model class labels for backwards compatibility
         mapping = {
-            # V2 model actions
+            # V2 model class labels (from model.classes_)
             'drop_column': PreprocessingAction.DROP_COLUMN,
             'encode_categorical': PreprocessingAction.LABEL_ENCODE,
             'keep_as_is': PreprocessingAction.KEEP_AS_IS,
@@ -166,11 +170,11 @@ class NeuralOracle:
             'onehot_encode': PreprocessingAction.ONEHOT_ENCODE,
             'parse_boolean': PreprocessingAction.PARSE_BOOLEAN,
             'parse_datetime': PreprocessingAction.PARSE_DATETIME,
-            'retain_column': PreprocessingAction.KEEP_AS_IS,  # Same as keep_as_is
+            'retain_column': PreprocessingAction.KEEP_AS_IS,
             'scale': PreprocessingAction.STANDARD_SCALE,
             'scale_or_normalize': PreprocessingAction.STANDARD_SCALE,
             'standard_scale': PreprocessingAction.STANDARD_SCALE,
-            # Legacy mappings
+            # Legacy mappings for backwards compatibility
             'drop': PreprocessingAction.DROP_COLUMN,
             'fill_zero': PreprocessingAction.FILL_NULL_MODE,
             'fill_forward': PreprocessingAction.FILL_NULL_FORWARD,
