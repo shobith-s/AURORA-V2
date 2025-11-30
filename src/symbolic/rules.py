@@ -412,6 +412,8 @@ def create_statistical_rules() -> List[Rule]:
     rules = []
 
     # Rule 1-5: Log transformations for skewed data
+    # NOTE: range_size > 100 check prevents applying log transform to bounded data
+    # like ratings (0-5, 0-10, 0-100) and years (1900-2100)
     rules.append(Rule(
         name="LOG_TRANSFORM_HIGH_SKEW",
         category=RuleCategory.STATISTICAL,
@@ -420,10 +422,11 @@ def create_statistical_rules() -> List[Rule]:
             stats.get("is_numeric", False) and
             stats.get("skewness", 0) > 2.0 and
             stats.get("all_positive", False) and
-            stats.get("min_value", 0) > 0
+            stats.get("min_value", 0) > 0 and
+            stats.get("range_size", 0) > 100  # Avoid log transform on bounded data like ratings, years
         ),
         confidence_fn=lambda stats: min(0.95, 0.7 + (stats.get("skewness", 0) - 2.0) * 0.05),
-        explanation_fn=lambda stats: f"High positive skewness ({stats.get('skewness', 0):.2f}) in positive data",
+        explanation_fn=lambda stats: f"High positive skewness ({stats.get('skewness', 0):.2f}) in positive data with large range ({stats.get('range_size', 0):.0f})",
         priority=85
     ))
 
@@ -435,10 +438,11 @@ def create_statistical_rules() -> List[Rule]:
             stats.get("is_numeric", False) and
             stats.get("skewness", 0) > 2.0 and
             stats.get("min_value", -1) >= 0 and
-            stats.get("has_zeros", False)
+            stats.get("has_zeros", False) and
+            stats.get("range_size", 0) > 100  # Avoid log transform on bounded data like ratings, years
         ),
         confidence_fn=lambda stats: 0.92,
-        explanation_fn=lambda stats: f"High skewness ({stats.get('skewness', 0):.2f}) with zeros present",
+        explanation_fn=lambda stats: f"High skewness ({stats.get('skewness', 0):.2f}) with zeros present and large range ({stats.get('range_size', 0):.0f})",
         priority=87
     ))
 

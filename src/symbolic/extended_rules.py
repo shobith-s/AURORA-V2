@@ -1613,10 +1613,140 @@ def create_composite_rules() -> List[Rule]:
     return rules
 
 
+# =============================================================================
+# UNIVERSAL DOMAIN DETECTION RULES (6 high-priority rules)
+# These rules handle common semantic patterns for ANY dataset
+# =============================================================================
+
+def create_universal_domain_rules() -> List[Rule]:
+    """
+    Create universal domain detection rules with high priority (95-98).
+    These rules detect semantic meaning from column names and value ranges
+    to make correct preprocessing decisions for common patterns like:
+    - Rating/Score (0-100) → standard_scale
+    - Year (1900-2100) → standard_scale
+    - Age (0-120) → standard_scale
+    - Percentage (0-100) → minmax_scale
+    - ID columns → drop_column
+    - Name columns → label_encode
+    """
+    rules = []
+
+    # Rule 1: Rating/Score columns (0-100 or 0-10 or 0-5) → standard_scale
+    # Prevents incorrect log_transform on bounded rating data
+    rules.append(Rule(
+        name="UNIVERSAL_RATING_SCORE_STANDARD_SCALE",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        action=PreprocessingAction.STANDARD_SCALE,
+        condition=lambda stats: (
+            stats.get("is_numeric", False) and
+            _column_name_contains(stats, ["rating", "score", "stars", "grade", "review", "user_rating"]) and
+            stats.get("min_value") is not None and stats.get("max_value") is not None and
+            stats.get("min_value") >= 0 and
+            (stats.get("max_value") <= 5 or stats.get("max_value") <= 10 or stats.get("max_value") <= 100)
+        ),
+        confidence_fn=lambda stats: 0.96,
+        explanation_fn=lambda stats: f"Rating/Score column '{stats.get('column_name', '')}' (range {stats.get('min_value', 0):.1f}-{stats.get('max_value', 0):.1f}): standard scaling preserves bounded distribution",
+        priority=96
+    ))
+
+    # Rule 2: Year columns (1900-2100) → standard_scale
+    # Prevents incorrect log_transform on year data
+    rules.append(Rule(
+        name="UNIVERSAL_YEAR_STANDARD_SCALE",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        action=PreprocessingAction.STANDARD_SCALE,
+        condition=lambda stats: (
+            stats.get("is_numeric", False) and
+            _column_name_contains(stats, ["year", "yr", "model_year", "year_built", "birth_year", "release_year", "publish_year"]) and
+            stats.get("min_value") is not None and stats.get("max_value") is not None and
+            1900 <= stats.get("min_value") <= 2100 and
+            1900 <= stats.get("max_value") <= 2100
+        ),
+        confidence_fn=lambda stats: 0.97,
+        explanation_fn=lambda stats: f"Year column '{stats.get('column_name', '')}' (range {stats.get('min_value', 0):.0f}-{stats.get('max_value', 0):.0f}): standard scaling is appropriate for calendar years",
+        priority=97
+    ))
+
+    # Rule 3: Age columns (0-120) → standard_scale
+    # Age has natural bounds, standard scaling is appropriate
+    rules.append(Rule(
+        name="UNIVERSAL_AGE_STANDARD_SCALE",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        action=PreprocessingAction.STANDARD_SCALE,
+        condition=lambda stats: (
+            stats.get("is_numeric", False) and
+            _column_name_contains(stats, ["age", "patient_age", "age_years", "customer_age"]) and
+            stats.get("min_value") is not None and stats.get("max_value") is not None and
+            0 <= stats.get("min_value") <= stats.get("max_value") <= 120
+        ),
+        confidence_fn=lambda stats: 0.95,
+        explanation_fn=lambda stats: f"Age column '{stats.get('column_name', '')}' (range {stats.get('min_value', 0):.0f}-{stats.get('max_value', 0):.0f}): standard scaling for bounded age data",
+        priority=95
+    ))
+
+    # Rule 4: Percentage columns (0-100) → minmax_scale
+    # Already bounded, minmax keeps in [0,1] range
+    rules.append(Rule(
+        name="UNIVERSAL_PERCENTAGE_MINMAX_SCALE",
+        category=RuleCategory.DOMAIN_SPECIFIC,
+        action=PreprocessingAction.MINMAX_SCALE,
+        condition=lambda stats: (
+            stats.get("is_numeric", False) and
+            _column_name_contains(stats, ["percent", "pct", "percentage", "_pct", "rate"]) and
+            stats.get("min_value") is not None and stats.get("max_value") is not None and
+            0 <= stats.get("min_value") <= stats.get("max_value") <= 100
+        ),
+        confidence_fn=lambda stats: 0.95,
+        explanation_fn=lambda stats: f"Percentage column '{stats.get('column_name', '')}' (range {stats.get('min_value', 0):.1f}-{stats.get('max_value', 0):.1f}): minmax scaling to [0,1] range",
+        priority=95
+    ))
+
+    # Rule 5: ID columns → drop_column
+    # Unique identifiers have no predictive value
+    rules.append(Rule(
+        name="UNIVERSAL_ID_DROP",
+        category=RuleCategory.DATA_QUALITY,
+        action=PreprocessingAction.DROP_COLUMN,
+        condition=lambda stats: (
+            stats.get("unique_ratio", 0) > 0.90 and
+            (
+                _column_name_contains(stats, ["_id", "id", "uuid", "guid", "index", "row_id", "record_id", "key"]) or
+                str(stats.get("column_name", "")).lower() == "id" or
+                str(stats.get("column_name", "")).lower().endswith("_id")
+            )
+        ),
+        confidence_fn=lambda stats: 0.98,
+        explanation_fn=lambda stats: f"ID column '{stats.get('column_name', '')}' with {stats.get('unique_ratio', 0):.1%} unique values: dropping (no predictive value)",
+        priority=98
+    ))
+
+    # Rule 6: Name columns → label_encode
+    # Names are categorical with high cardinality, label encoding is efficient
+    rules.append(Rule(
+        name="UNIVERSAL_NAME_LABEL_ENCODE",
+        category=RuleCategory.CATEGORICAL,
+        action=PreprocessingAction.LABEL_ENCODE,
+        condition=lambda stats: (
+            stats.get("dtype", "") in ["object", "string"] and
+            _column_name_contains(stats, ["name", "title", "author", "artist", "brand", "company", "customer_name", "product_name"]) and
+            stats.get("unique_ratio", 1.0) < 0.95  # Not an ID-like column
+        ),
+        confidence_fn=lambda stats: 0.92,
+        explanation_fn=lambda stats: f"Name column '{stats.get('column_name', '')}': label encoding for categorical names",
+        priority=95
+    ))
+
+    return rules
+
 
 def get_extended_rules() -> List[Rule]:
     """Get all extended rules sorted by priority."""
     all_rules = []
+    
+    # Add universal domain rules first (highest priority)
+    all_rules.extend(create_universal_domain_rules())
+    
     all_rules.extend(create_advanced_type_detection_rules())
     all_rules.extend(create_domain_pattern_rules())
     all_rules.extend(create_composite_rules())
