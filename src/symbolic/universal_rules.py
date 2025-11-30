@@ -16,7 +16,7 @@ Priority: 150-200 (highest priority rules)
 """
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from enum import Enum
 import re
 
@@ -45,7 +45,7 @@ class Rule:
     priority: int = 0
     parameters: Optional[Dict[str, Any]] = None
 
-    def evaluate(self, column_stats: Dict[str, Any]) -> Optional[tuple[PreprocessingAction, float, str]]:
+    def evaluate(self, column_stats: Dict[str, Any]) -> Optional[Tuple[PreprocessingAction, float, str]]:
         """Evaluate the rule against column statistics."""
         if self.condition(column_stats):
             confidence = self.confidence_fn(column_stats)

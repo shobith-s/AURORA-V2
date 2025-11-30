@@ -54,6 +54,11 @@ class SafeTransforms:
     MAX_ONEHOT_CARDINALITY = 50  # Maximum categories for one-hot encoding
     MIN_ROWS_FOR_TRANSFORM = 2   # Minimum rows needed
     
+    # Text vectorization thresholds
+    TEXT_ID_UNIQUE_RATIO_THRESHOLD = 0.95  # Uniqueness ratio to consider as ID
+    TEXT_ID_AVG_LENGTH_THRESHOLD = 10      # Minimum avg length to consider as ID
+    TEXT_ID_SPACE_RATIO_THRESHOLD = 0.3    # Max space ratio to still be considered ID
+    
     def __init__(self):
         """Initialize safe transforms."""
         pass
@@ -377,7 +382,9 @@ class SafeTransforms:
         # Detect IDs/hashes - should NOT vectorize
         # Only flag as ID if: high uniqueness, moderate length, AND low space ratio
         unique_ratio = non_null.nunique() / len(non_null)
-        if unique_ratio > 0.95 and avg_length > 10 and has_spaces < 0.3:
+        if (unique_ratio > self.TEXT_ID_UNIQUE_RATIO_THRESHOLD and 
+            avg_length > self.TEXT_ID_AVG_LENGTH_THRESHOLD and 
+            has_spaces < self.TEXT_ID_SPACE_RATIO_THRESHOLD):
             return SafeTransformResult(
                 status=TransformResult.SKIPPED,
                 data=column,
