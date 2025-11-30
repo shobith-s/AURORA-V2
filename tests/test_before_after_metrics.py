@@ -213,8 +213,10 @@ class TestBeforeAfterMetrics:
         print(f"             {improvement:.1f} percentage points improvement")
         print("="*60)
         
-        # Assertions: new system should have 0 crashes and 0 critical issues
-        # Note: Some errors in decision matching may exist but safety is paramount
+        # Assertions: Safety is the primary concern
+        # - crash_count: Actions that would cause runtime errors (e.g., scaling text)
+        # - critical_count: Dropping target variables or essential predictors
+        # Note: Minor decision differences (e.g., onehot vs label encoding) are acceptable
         assert new_metrics['crash_count'] == 0, \
             f"New system should have 0 crashes, got {new_metrics['crash_count']}"
         assert new_metrics['critical_count'] == 0, \

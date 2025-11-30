@@ -53,6 +53,7 @@ class TestSymbolicEngine:
         # (range_size > 100 is required for log transform to trigger)
         np.random.seed(42)
         # Use power of exponential to get high skewness (>2.0)
+        # This generates data with skewness ~3.6 and range ~23000
         data = np.random.exponential(scale=100, size=1000) ** 1.5
 
         column = pd.Series(data, name="revenue")

@@ -1643,7 +1643,7 @@ def create_universal_domain_rules() -> List[Rule]:
             _column_name_contains(stats, ["rating", "score", "stars", "grade", "review", "user_rating"]) and
             stats.get("min_value") is not None and stats.get("max_value") is not None and
             stats.get("min_value") >= 0 and
-            (stats.get("max_value") <= 5 or stats.get("max_value") <= 10 or stats.get("max_value") <= 100)
+            stats.get("max_value") <= 100  # Common rating scales: 0-5, 0-10, or 0-100
         ),
         confidence_fn=lambda stats: 0.96,
         explanation_fn=lambda stats: f"Rating/Score column '{stats.get('column_name', '')}' (range {stats.get('min_value', 0):.1f}-{stats.get('max_value', 0):.1f}): standard scaling preserves bounded distribution",
@@ -1710,11 +1710,7 @@ def create_universal_domain_rules() -> List[Rule]:
         action=PreprocessingAction.DROP_COLUMN,
         condition=lambda stats: (
             stats.get("unique_ratio", 0) > 0.90 and
-            (
-                _column_name_contains(stats, ["_id", "id", "uuid", "guid", "index", "row_id", "record_id", "key"]) or
-                str(stats.get("column_name", "")).lower() == "id" or
-                str(stats.get("column_name", "")).lower().endswith("_id")
-            )
+            _column_name_contains(stats, ["_id", "id", "uuid", "guid", "index", "row_id", "record_id", "key"])
         ),
         confidence_fn=lambda stats: 0.98,
         explanation_fn=lambda stats: f"ID column '{stats.get('column_name', '')}' with {stats.get('unique_ratio', 0):.1%} unique values: dropping (no predictive value)",
