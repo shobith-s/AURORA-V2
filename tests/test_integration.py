@@ -37,7 +37,7 @@ class TestIntegration:
         assert result is not None
         assert isinstance(result.action, PreprocessingAction)
         assert 0.0 <= result.confidence <= 1.0
-        assert result.source in ['symbolic', 'neural', 'learned', 'smart_classifier', 'conservative_fallback', 'safety_fallback']
+        assert result.source in ['symbolic', 'neural', 'learned', 'conservative_fallback', 'safety_fallback']
         assert result.explanation is not None
         assert result.decision_id is not None
 

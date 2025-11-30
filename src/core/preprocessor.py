@@ -1,6 +1,6 @@
 """
 Main Preprocessing Pipeline - Integrates all layers.
-Smart Classifier -> Symbolic Engine (with adaptive learning) -> NeuralOracle
+Symbolic Engine (with adaptive learning) -> NeuralOracle -> Conservative Fallback
 """
 
 from typing import Any, Dict, List, Optional, Union
@@ -16,7 +16,6 @@ from ..features.minimal_extractor import MinimalFeatureExtractor, get_feature_ex
 from .actions import PreprocessingAction, PreprocessingResult
 from .explainer import get_explainer
 from ..analysis.dataset_analyzer import DatasetAnalyzer
-from ..utils.preprocessing_integration import PreprocessingIntegration
 from ..utils.safety_validator import SafetyValidator
 
 # Confidence thresholds for decision quality
@@ -27,23 +26,23 @@ CONFIDENCE_LOW = 0.5       # Require manual review (low confidence)
 
 class IntelligentPreprocessor:
     """
-    Main preprocessing pipeline with adaptive learning architecture (V4):
+    Main preprocessing pipeline with adaptive learning architecture (V5):
 
-    0. Smart Classifier (keyword-based) - Fast, accurate for common patterns
-    1. Symbolic rules (185+ rules, including learned) - Fallback for edge cases
-    2. NeuralOracle (ML predictions) - Ambiguous cases only
+    1. Symbolic rules (185+ rules, including learned) - Primary decision maker
+    2. NeuralOracle (ML predictions) - Fallback for ambiguous cases
+    3. Conservative fallback - Ultra-safe default for uncertain cases
     
-    NEW V4 Architecture:
-    - Smart Classifier handles 90%+ of common cases with simple keyword matching
-    - Prevents catastrophic errors (dropping targets, scaling text)
+    V5 Architecture:
+    - Symbolic engine is the primary decision maker with universal domain detection
+    - High-priority rules (95-98) handle common patterns like Year, Rating, Age, etc.
     - Safety Validator ensures all decisions are safe before execution
-    - Falls back to symbolic/neural only when smart classifier confidence < 0.80
+    - Falls back to neural only when symbolic confidence is too low
 
     Benefits:
-    - Prevents 58% error rate seen with complex rule systems
+    - Universal domain detection via symbolic rules
+    - Correct decisions for Rating, Year, Age columns (standard_scale, not log_transform)
     - Zero crashes from type mismatches (text scaling, etc.)
-    - Transparent, explainable decisions based on column names
-    - Simple maintenance - keyword lists instead of complex rules
+    - Works on ANY dataset without specific classifiers
     """
 
     def __init__(
@@ -52,8 +51,7 @@ class IntelligentPreprocessor:
         use_neural_oracle: bool = True,
         enable_learning: bool = True,
         neural_model_path: Optional[Path] = None,
-        db_url: Optional[str] = None,
-        use_smart_classifier: bool = True
+        db_url: Optional[str] = None
     ):
         """
         Initialize the intelligent preprocessor.
@@ -64,7 +62,6 @@ class IntelligentPreprocessor:
             enable_learning: Whether to enable pattern learning
             neural_model_path: Path to neural oracle model
             db_url: Database URL for learning engine
-            use_smart_classifier: Whether to use smart classifier as first layer
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -72,7 +69,6 @@ class IntelligentPreprocessor:
         self.confidence_threshold = confidence_threshold
         self.use_neural_oracle = use_neural_oracle
         self.enable_learning = enable_learning
-        self.use_smart_classifier = use_smart_classifier
         self.db_url = db_url or "sqlite:///./aurora.db"
 
         # Initialize components with error handling
@@ -122,7 +118,6 @@ class IntelligentPreprocessor:
         # Statistics
         self.stats = {
             'total_decisions': 0,
-            'smart_classifier_decisions': 0,
             'learned_decisions': 0,
             'symbolic_decisions': 0,
             'neural_decisions': 0,
@@ -206,48 +201,8 @@ class IntelligentPreprocessor:
         # Generate decision ID
         decision_id = str(uuid.uuid4())
 
-        # LAYER 0: Smart Classifier (keyword-based, fast, accurate)
-        # This handles 90%+ of common cases and prevents catastrophic errors
-        if self.use_smart_classifier:
-            try:
-                smart_decision = PreprocessingIntegration.get_preprocessing_decision(
-                    column, column_name
-                )
-                
-                # If smart classifier has high confidence (>= 0.80), use it
-                if smart_decision['confidence'] >= 0.80:
-                    # Convert action string to PreprocessingAction enum
-                    action_str = smart_decision['action']
-                    try:
-                        action = PreprocessingAction(action_str)
-                    except ValueError:
-                        # Handle unknown actions - fall through to symbolic
-                        logger.warning(f"Unknown action '{action_str}' from smart classifier, falling through to symbolic")
-                        action = None
-                    
-                    if action is not None:
-                        self.stats['smart_classifier_decisions'] += 1
-                        self.stats['high_confidence_decisions'] += 1
-                        
-                        elapsed_ms = (time.time() - start_time) * 1000
-                        self.stats['total_time_ms'] += elapsed_ms
-                        
-                        result = PreprocessingResult(
-                            action=action,
-                            confidence=smart_decision['confidence'],
-                            source='smart_classifier',
-                            explanation=smart_decision['explanation'],
-                            alternatives=[],
-                            parameters={},
-                            context={'smart_classifier': True},
-                            decision_id=decision_id,
-                            warning=smart_decision.get('warning')
-                        )
-                        return self._add_confidence_warnings(result, context, column_name)
-            except Exception as e:
-                logger.warning(f"Smart classifier failed for '{column_name}': {e}, falling through to symbolic")
-
-        # LAYER 1: Symbolic engine (rule-based decision maker)
+        # LAYER 1: Symbolic engine (primary decision maker)
+        # Uses 185+ rules including universal domain detection rules
         # Note: Symbolic engine now includes validated production rules from learning engine
         symbolic_result = self.symbolic_engine.evaluate(
             column, column_name, target_available, context=metadata
@@ -864,7 +819,6 @@ class IntelligentPreprocessor:
 
         stats = {
             **self.stats,
-            'smart_classifier_pct': self.stats.get('smart_classifier_decisions', 0) / total * 100 if total > 0 else 0,
             'learned_pct': self.stats['learned_decisions'] / total * 100 if total > 0 else 0,
             'symbolic_pct': self.stats['symbolic_decisions'] / total * 100 if total > 0 else 0,
             'neural_pct': self.stats['neural_decisions'] / total * 100 if total > 0 else 0,
@@ -891,7 +845,6 @@ class IntelligentPreprocessor:
         """Reset all statistics."""
         self.stats = {
             'total_decisions': 0,
-            'smart_classifier_decisions': 0,
             'learned_decisions': 0,
             'symbolic_decisions': 0,
             'neural_decisions': 0,
