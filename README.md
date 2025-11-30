@@ -7,6 +7,7 @@
 ## Overview
 
 AURORA V2 is an intelligent data preprocessing system that combines:
+
 - **Symbolic Engine**: 185+ expert-crafted rules for common preprocessing patterns
 - **Neural Oracle**: Pre-trained ensemble (XGBoost + LightGBM) with 89.4% accuracy for edge cases
 - **Adaptive Learning**: Learns from user corrections to improve over time
@@ -44,12 +45,14 @@ AURORA V2 is an intelligent data preprocessing system that combines:
 ### 1. **Three-Layer Decision System**
 
 **Layer 1: Symbolic Engine (Primary)**
+
 - 185+ hand-crafted rules
 - Handles 85% of cases with high confidence (>0.7)
 - Conservative thresholds (80% null, 99.5% unique)
 - Fast (<1ms per column)
 
 **Layer 2: Neural Oracle (Ensemble - Edge Cases)**
+
 - **Architecture:** XGBoost + LightGBM ensemble with soft voting
 - **Accuracy:** 89.4% on test data (400+ validated examples)
 - **Inference Only:** Uses pre-trained model, no runtime training
@@ -58,6 +61,7 @@ AURORA V2 is an intelligent data preprocessing system that combines:
 - **Handles:** Ambiguous preprocessing decisions (when symbolic confidence < 0.75)
 
 **Layer 3: Adaptive Learning (Continuous Improvement)**
+
 - Learns from user corrections
 - Creates new rules after 10 consistent corrections
 - Validates patterns with LLM before deployment
@@ -140,17 +144,20 @@ print(f"Explanation: {result.explanation}")
 ## Performance
 
 **Symbolic Engine:**
+
 - Accuracy: 85-95% on common patterns
 - Speed: <1ms per column
 - Coverage: ~85% of cases
 
 **Neural Oracle (Ensemble):**
+
 - Validation accuracy: 89.4%
 - Architecture: XGBoost + LightGBM ensemble
 - Inference only: <5ms per column
 - Pre-trained on 400+ LLM-validated examples
 
 **Hybrid System:**
+
 - Overall accuracy: ~92%
 - Handles both common and edge cases
 - Continuous improvement via learning
@@ -160,18 +167,21 @@ print(f"Explanation: {result.explanation}")
 ## Tech Stack
 
 **Backend:**
+
 - Python 3.10+
 - FastAPI
 - XGBoost
 - Pandas, NumPy, Scikit-learn
 
 **Frontend:**
+
 - Next.js 14
 - TypeScript
 - TailwindCSS
 - Zustand (state management)
 
 **ML/AI:**
+
 - XGBoost + LightGBM ensemble (neural oracle)
 - Groq API (LLM validation)
 - SHAP (explainability)

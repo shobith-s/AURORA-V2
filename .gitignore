@@ -97,3 +97,11 @@ temp/
 tmp/
 aurora.db
 #datas/
+
+git fetch origin
+git checkout copilot/fix-preprocessing-system-errors
+git merge origin/main  # or rebase
+# Resolve conflicts in: README.md, aurora.db, requirements.txt, src/core/actions.py
+git add .
+git commit -m "Resolve merge conflicts"
+git push

@@ -814,6 +814,14 @@ def get_all_rules(include_extended: bool = True) -> List[Rule]:
     """
     all_rules = []
 
+    # HIGHEST PRIORITY: Universal rules (catches URLs, phones, emails, IDs, text, targets)
+    try:
+        from .universal_rules import get_universal_rules
+        all_rules.extend(get_universal_rules())
+    except ImportError:
+        # Universal rules not available, continue
+        pass
+
     # HIGH PRIORITY: Simple case rules (catches obvious preprocessing needs)
     try:
         from .simple_case_rules import create_simple_case_rules
