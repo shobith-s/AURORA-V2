@@ -51,6 +51,10 @@ except ImportError:
 
 # Constants
 RANDOM_SEED = 42  # Seed for reproducibility in synthetic data generation
+DEFAULT_SAMPLE_SIZE = 100  # Default number of samples for data reconstruction
+MAX_CATEGORIES = 50  # Maximum number of categories for categorical data reconstruction
+EXPONENTIAL_SCALE_BASE = 100  # Base scale for exponential distribution
+EXPONENTIAL_SCALE_MULTIPLIER = 50  # Multiplier for skewness-based scaling
 
 # Configure logging
 logging.basicConfig(
@@ -239,7 +243,7 @@ def reconstruct_column_from_features(features: Dict[str, Any], sample_size: int 
         # Generate numeric data
         if abs(skewness) > 2:
             # Highly skewed - use exponential with higher scale for extreme skewness
-            scale = max(100, abs(skewness) * 50)
+            scale = max(EXPONENTIAL_SCALE_BASE, abs(skewness) * EXPONENTIAL_SCALE_MULTIPLIER)
             data = np.random.exponential(scale=scale, size=sample_size)
         elif abs(skewness) > 0.5:
             # Moderately skewed - use log-normal
@@ -255,7 +259,7 @@ def reconstruct_column_from_features(features: Dict[str, Any], sample_size: int 
         else:
             # Low-medium cardinality
             n_categories = max(2, int(cardinality_ratio * sample_size))
-            n_categories = min(n_categories, 50)  # Reasonable cap
+            n_categories = min(n_categories, MAX_CATEGORIES)  # Reasonable cap
             categories = [f"cat_{i}" for i in range(n_categories)]
             data = np.random.choice(categories, size=sample_size)
     

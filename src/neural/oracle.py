@@ -18,6 +18,7 @@ Training:
 
 from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
+import pandas as pd
 import pickle
 from pathlib import Path
 from dataclasses import dataclass
@@ -158,7 +159,6 @@ class NeuralOracle:
                 feature_names = [f'Column_{i}' for i in range(X.shape[1])]
             
             # Convert to DataFrame with proper feature names to match training
-            import pandas as pd
             X_df = pd.DataFrame(X, columns=feature_names)
             probs = self.model.predict_proba(X_df)[0]
         else:
