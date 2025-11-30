@@ -327,12 +327,15 @@ class PreprocessingExecutor:
             clean_data = result.dropna()
             if len(clean_data) == 0:
                 return result
+            shift = 0.0
             if (clean_data <= 0).any():
                 # Shift data to make it positive
                 shift = abs(clean_data.min()) + 1
                 logger.warning(f"Box-Cox: shifting data by {shift} to make positive")
-                clean_data = clean_data + shift
+            # Apply shift to all non-null values before transformation
+            if shift > 0:
                 result = result + shift
+                clean_data = result.dropna()
             transformed, _ = stats.boxcox(clean_data)
             result[~result.isna()] = transformed
             return result
@@ -352,7 +355,10 @@ class PreprocessingExecutor:
             clean_data = result.dropna().values.reshape(-1, 1)
             if len(clean_data) < 2:
                 return result
-            transformer = QuantileTransformer(n_quantiles=min(len(clean_data), 1000))
+            # Use conservative n_quantiles to avoid overfitting on small datasets
+            n_quantiles = min(len(clean_data) // 2, 1000)
+            n_quantiles = max(n_quantiles, 2)  # Minimum 2 quantiles
+            transformer = QuantileTransformer(n_quantiles=n_quantiles)
             transformer.fit(clean_data)
             mask = ~result.isna()
             result[mask] = transformer.transform(result[mask].values.reshape(-1, 1)).flatten()
@@ -749,9 +755,11 @@ class PreprocessingExecutor:
         # Work with string representation
         result = column.astype(str)
         
-        # Remove common non-numeric characters
+        # Remove common non-numeric characters (order matters)
+        # First remove percentage signs
+        result = result.str.replace(r'%', '', regex=True)
+        # Then remove currency symbols, commas, and whitespace
         result = result.str.replace(r'[$€£¥₹,\s]', '', regex=True)
-        result = result.str.replace(r'%$', '', regex=True)
         
         # Try to convert to numeric
         numeric_result = pd.to_numeric(result, errors='coerce')

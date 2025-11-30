@@ -46,14 +46,42 @@ class ColumnAnalyzer:
     - email, phone, url: Contact patterns
     """
     
-    def __init__(self, sample_size: int = 1000):
+    # Configuration constants
+    HIGH_CARDINALITY_RATIO = 0.9  # Ratio above which is considered high cardinality
+    HIGH_CARDINALITY_MIN_LENGTH = 10  # Min avg length for identifier detection
+    HIGH_CARDINALITY_THRESHOLD = 50  # Cardinality threshold for high vs low
+    TEXT_MIN_LENGTH = 50  # Min avg length to be considered text
+    YEAR_MIN = 1900  # Minimum year for year detection
+    YEAR_MAX = 2100  # Maximum year for year detection
+    YEAR_MAX_UNIQUE = 200  # Max unique values for year detection
+    NULL_INDICATORS = ['na', 'n/a', 'null', 'none', 'missing', '?', '-', '', 'nan', 'nil', 'undefined']
+    NUMERIC_NULL_PLACEHOLDERS = [-999, -9999, 99999, 999999, -1]
+    
+    def __init__(
+        self, 
+        sample_size: int = 1000,
+        high_cardinality_ratio: float = None,
+        year_range: tuple = None,
+        null_indicators: list = None
+    ):
         """
         Initialize the column analyzer.
         
         Args:
             sample_size: Maximum number of rows to sample for analysis
+            high_cardinality_ratio: Override default high cardinality ratio threshold
+            year_range: Override default year range (min, max) for year detection
+            null_indicators: Additional null indicator strings to detect
         """
         self.sample_size = sample_size
+        
+        # Allow overriding defaults
+        if high_cardinality_ratio is not None:
+            self.HIGH_CARDINALITY_RATIO = high_cardinality_ratio
+        if year_range is not None:
+            self.YEAR_MIN, self.YEAR_MAX = year_range
+        if null_indicators is not None:
+            self.NULL_INDICATORS = list(set(self.NULL_INDICATORS + null_indicators))
         
         # Define regex patterns for various types
         self.patterns = {
@@ -241,7 +269,7 @@ class ColumnAnalyzer:
         avg_length = sample_str.str.len().mean()
         
         # High cardinality categorical (IDs)
-        if cardinality_ratio > 0.9 and avg_length > 10:
+        if cardinality_ratio > self.HIGH_CARDINALITY_RATIO and avg_length > self.HIGH_CARDINALITY_MIN_LENGTH:
             return SemanticTypeResult(
                 semantic_type="high_cardinality_identifier",
                 confidence=0.8,
@@ -254,7 +282,7 @@ class ColumnAnalyzer:
             )
         
         # High cardinality categorical (not IDs)
-        if cardinality > 50 and cardinality_ratio > 0.3:
+        if cardinality > self.HIGH_CARDINALITY_THRESHOLD and cardinality_ratio > 0.3:
             return SemanticTypeResult(
                 semantic_type="high_cardinality_categorical",
                 confidence=0.75,
@@ -266,7 +294,7 @@ class ColumnAnalyzer:
             )
         
         # Text (long strings with high variance)
-        if avg_length > 50:
+        if avg_length > self.TEXT_MIN_LENGTH:
             return SemanticTypeResult(
                 semantic_type="text",
                 confidence=0.8,
@@ -275,7 +303,7 @@ class ColumnAnalyzer:
             )
         
         # Regular categorical
-        if cardinality < 50:
+        if cardinality < self.HIGH_CARDINALITY_THRESHOLD:
             return SemanticTypeResult(
                 semantic_type="categorical",
                 confidence=0.85,
@@ -306,7 +334,9 @@ class ColumnAnalyzer:
         unique_count = non_null.nunique()
         
         # Year detection
-        if 1900 <= min_val <= 2100 and 1900 <= max_val <= 2100 and unique_count <= 200:
+        if (self.YEAR_MIN <= min_val <= self.YEAR_MAX and 
+            self.YEAR_MIN <= max_val <= self.YEAR_MAX and 
+            unique_count <= self.YEAR_MAX_UNIQUE):
             return SemanticTypeResult(
                 semantic_type="year",
                 confidence=0.85,
@@ -390,13 +420,11 @@ class ColumnAnalyzer:
         
         # Detect encoded nulls
         if not pd.api.types.is_numeric_dtype(column):
-            sample = column.astype(str).str.lower()
-            null_indicators = ['na', 'n/a', 'null', 'none', 'missing', '?', '-', '']
-            encoded_nulls = sample.isin(null_indicators).sum()
+            sample = column.astype(str).str.lower().str.strip()
+            encoded_nulls = sample.isin(self.NULL_INDICATORS).sum()
             quality['encoded_null_ratio'] = encoded_nulls / total if total > 0 else 0
         else:
-            placeholder_values = [-999, -9999, 99999, 999999]
-            encoded_nulls = column.isin(placeholder_values).sum()
+            encoded_nulls = column.isin(self.NUMERIC_NULL_PLACEHOLDERS).sum()
             quality['encoded_null_ratio'] = encoded_nulls / total if total > 0 else 0
         
         return quality
