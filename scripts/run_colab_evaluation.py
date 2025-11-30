@@ -240,39 +240,80 @@ class CheckpointManager:
 class AblationVariant:
     """Base class for ablation variants."""
     
+    def __init__(self):
+        self.decision_sources = {'symbolic': 0, 'neural': 0, 'fallback': 0}
+    
     def preprocess(self, X: pd.DataFrame) -> pd.DataFrame:
         raise NotImplementedError
+    
+    def get_decision_sources(self) -> Dict[str, int]:
+        """Get breakdown of decision sources."""
+        return self.decision_sources.copy()
+    
+    def reset_stats(self):
+        """Reset decision tracking."""
+        self.decision_sources = {'symbolic': 0, 'neural': 0, 'fallback': 0}
 
 
 class RandomBaseline(AblationVariant):
-    """Random preprocessing baseline - just standard scaling."""
+    """
+    Random preprocessing baseline - truly naive approach.
+    
+    Uses only basic transformations without any intelligence:
+    - Mean imputation for nulls
+    - Standard scaling for numeric
+    - Label encoding for categorical
+    
+    NO AURORA components used - serves as true baseline.
+    """
+    
+    def __init__(self):
+        super().__init__()
     
     def preprocess(self, X: pd.DataFrame) -> pd.DataFrame:
+        self.reset_stats()
         X_copy = X.copy()
+        
         for col in X_copy.columns:
+            self.decision_sources['fallback'] += 1  # All decisions are "naive"
+            
             if is_numeric_column(X_copy[col]):
-                # Fill nulls with mean
-                X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
-                # Standard scale
+                # Simple mean imputation
+                mean_val = X_copy[col].mean()
+                if pd.isna(mean_val):
+                    mean_val = 0
+                X_copy[col] = X_copy[col].fillna(mean_val)
+                # Standard scale - no intelligence
                 scaler = StandardScaler()
                 X_copy[col] = scaler.fit_transform(X_copy[[col]])
             else:
-                # Label encode categorical (handles categorical dtype properly)
+                # Simple label encode - no semantic analysis
                 X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                 le = LabelEncoder()
                 X_copy[col] = le.fit_transform(X_copy[col].astype(str))
+        
         return X_copy
 
 
 class SymbolicOnlyVariant(AblationVariant):
-    """AURORA with only symbolic rules (no neural oracle)."""
+    """
+    AURORA with only symbolic rules (no neural oracle).
+    
+    Uses AURORA's symbolic engine but never falls back to neural oracle.
+    All decisions come from deterministic rules.
+    """
     
     def __init__(self):
+        super().__init__()
         # Lazy import to avoid import errors if preprocessor not available
         from src.core.preprocessor import IntelligentPreprocessor
-        self.preprocessor = IntelligentPreprocessor(use_neural_oracle=False)
+        self.preprocessor = IntelligentPreprocessor(
+            use_neural_oracle=False,  # Explicitly disable neural oracle
+            confidence_threshold=0.0   # Accept all symbolic decisions
+        )
     
     def preprocess(self, X: pd.DataFrame) -> pd.DataFrame:
+        self.reset_stats()
         return self._preprocess_with_aurora(X)
     
     def _preprocess_with_aurora(self, X: pd.DataFrame) -> pd.DataFrame:
@@ -280,57 +321,50 @@ class SymbolicOnlyVariant(AblationVariant):
         executor = get_executor()
         
         X_copy = X.copy()
-        for col in X_copy.columns:
+        columns_to_process = list(X_copy.columns)
+        
+        for col in columns_to_process:
+            if col not in X_copy.columns:
+                continue
+                
             try:
                 result = self.preprocessor.preprocess_column(X_copy[col], col)
                 action = result.action.value
+                source = result.source
                 
-                # Apply simple transformations based on action
-                if action == 'keep_as_is':
-                    # Handle nulls based on column type
-                    if is_numeric_column(X_copy[col]):
-                        X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
-                    else:
-                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
-                        le = LabelEncoder()
-                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
-                elif action in ['fill_null_mean', 'fill_null_median']:
-                    # Only apply to numeric columns
-                    if is_numeric_column(X_copy[col]):
-                        X_copy[col] = X_copy[col].fillna(X_copy[col].median())
-                    else:
-                        # For non-numeric, fall back to categorical handling
-                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
-                        le = LabelEncoder()
-                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
-                elif action == 'standard_scale':
-                    # Only apply to numeric columns
-                    if is_numeric_column(X_copy[col]):
-                        X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
-                        scaler = StandardScaler()
-                        X_copy[col] = scaler.fit_transform(X_copy[[col]])
-                    else:
-                        # For non-numeric, fall back to categorical handling
-                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
-                        le = LabelEncoder()
-                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
-                elif action in ['label_encode', 'onehot_encode']:
-                    X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
-                    le = LabelEncoder()
-                    X_copy[col] = le.fit_transform(X_copy[col].astype(str))
-                elif action == 'drop_column':
-                    X_copy = X_copy.drop(columns=[col])
+                # Track decision source
+                if source == 'symbolic':
+                    self.decision_sources['symbolic'] += 1
+                elif source == 'neural':
+                    self.decision_sources['neural'] += 1
                 else:
-                    # Default handling based on column type
-                    if is_numeric_column(X_copy[col]):
+                    self.decision_sources['fallback'] += 1
+                
+                # Use executor to apply action when possible
+                try:
+                    X_copy[col] = executor.apply_action(X_copy[col], action)
+                    
+                    # Ensure result is numeric for ML models
+                    if not is_numeric_column(X_copy[col]):
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
+                        le = LabelEncoder()
+                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
+                except Exception as exec_error:
+                    logger.debug(f"Executor failed for {action} on {col}: {exec_error}")
+                    # Fallback to basic handling
+                    if action == 'drop_column':
+                        X_copy = X_copy.drop(columns=[col])
+                    elif is_numeric_column(X_copy[col]):
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
                         X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                         le = LabelEncoder()
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
+                        
             except Exception as e:
                 logger.warning(f"Error processing {col}: {e}")
-                # Safe fallback using is_numeric_column
+                self.decision_sources['fallback'] += 1
+                # Safe fallback
                 if is_numeric_column(X_copy[col]):
                     X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                 else:
@@ -342,66 +376,70 @@ class SymbolicOnlyVariant(AblationVariant):
 
 
 class NeuralOnlyVariant(AblationVariant):
-    """AURORA with only neural oracle (symbolic rules disabled)."""
+    """
+    AURORA with only neural oracle (symbolic rules bypassed).
+    
+    Uses very high confidence threshold to force neural oracle usage.
+    Most decisions should come from neural oracle predictions.
+    """
     
     def __init__(self):
+        super().__init__()
         from src.core.preprocessor import IntelligentPreprocessor
-        # Use very low threshold to force neural oracle usage
+        # Use very high threshold to force neural oracle usage
         self.preprocessor = IntelligentPreprocessor(
-            confidence_threshold=0.99,  # Force neural oracle
+            confidence_threshold=0.99,  # Force neural oracle for most decisions
             use_neural_oracle=True
         )
     
     def preprocess(self, X: pd.DataFrame) -> pd.DataFrame:
+        self.reset_stats()
         from src.core.executor import get_executor
+        executor = get_executor()
         
         X_copy = X.copy()
-        for col in X_copy.columns:
+        columns_to_process = list(X_copy.columns)
+        
+        for col in columns_to_process:
+            if col not in X_copy.columns:
+                continue
+                
             try:
                 result = self.preprocessor.preprocess_column(X_copy[col], col)
                 action = result.action.value
+                source = result.source
                 
-                # Apply based on action (with type checking)
-                if action == 'keep_as_is':
-                    if is_numeric_column(X_copy[col]):
-                        X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
-                    else:
-                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
-                        le = LabelEncoder()
-                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
-                elif action in ['fill_null_mean', 'fill_null_median']:
-                    # Only apply to numeric columns
-                    if is_numeric_column(X_copy[col]):
-                        X_copy[col] = X_copy[col].fillna(X_copy[col].median())
-                    else:
-                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
-                        le = LabelEncoder()
-                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
-                elif action == 'standard_scale':
-                    # Only apply to numeric columns
-                    if is_numeric_column(X_copy[col]):
-                        X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
-                        scaler = StandardScaler()
-                        X_copy[col] = scaler.fit_transform(X_copy[[col]])
-                    else:
-                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
-                        le = LabelEncoder()
-                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
-                elif action in ['label_encode', 'onehot_encode']:
-                    X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
-                    le = LabelEncoder()
-                    X_copy[col] = le.fit_transform(X_copy[col].astype(str))
-                elif action == 'drop_column':
-                    X_copy = X_copy.drop(columns=[col])
+                # Track decision source
+                if source == 'symbolic':
+                    self.decision_sources['symbolic'] += 1
+                elif source == 'neural':
+                    self.decision_sources['neural'] += 1
                 else:
-                    if is_numeric_column(X_copy[col]):
+                    self.decision_sources['fallback'] += 1
+                
+                # Use executor to apply action
+                try:
+                    X_copy[col] = executor.apply_action(X_copy[col], action)
+                    
+                    # Ensure result is numeric for ML models
+                    if not is_numeric_column(X_copy[col]):
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
+                        le = LabelEncoder()
+                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
+                except Exception as exec_error:
+                    logger.debug(f"Executor failed for {action} on {col}: {exec_error}")
+                    if action == 'drop_column':
+                        X_copy = X_copy.drop(columns=[col])
+                    elif is_numeric_column(X_copy[col]):
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
                         X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                         le = LabelEncoder()
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
+                        
             except Exception as e:
                 logger.warning(f"Error processing {col}: {e}")
+                self.decision_sources['fallback'] += 1
                 if is_numeric_column(X_copy[col]):
                     X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                 else:
@@ -413,63 +451,69 @@ class NeuralOnlyVariant(AblationVariant):
 
 
 class AuroraHybridVariant(AblationVariant):
-    """Full AURORA hybrid (symbolic + neural)."""
+    """
+    Full AURORA hybrid (symbolic + neural).
+    
+    Uses the complete AURORA system with both symbolic rules and neural oracle.
+    Symbolic rules handle clear cases, neural oracle helps with ambiguous cases.
+    """
     
     def __init__(self):
+        super().__init__()
         from src.core.preprocessor import IntelligentPreprocessor
         self.preprocessor = IntelligentPreprocessor(
             use_neural_oracle=True,
-            confidence_threshold=0.65
+            confidence_threshold=0.65  # Balanced threshold
         )
     
     def preprocess(self, X: pd.DataFrame) -> pd.DataFrame:
+        self.reset_stats()
+        from src.core.executor import get_executor
+        executor = get_executor()
+        
         X_copy = X.copy()
-        for col in X_copy.columns:
+        columns_to_process = list(X_copy.columns)
+        
+        for col in columns_to_process:
+            if col not in X_copy.columns:
+                continue
+                
             try:
                 result = self.preprocessor.preprocess_column(X_copy[col], col)
                 action = result.action.value
+                source = result.source
                 
-                # Apply based on action (with type checking)
-                if action == 'keep_as_is':
-                    if is_numeric_column(X_copy[col]):
-                        X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
-                    else:
-                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
-                        le = LabelEncoder()
-                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
-                elif action in ['fill_null_mean', 'fill_null_median']:
-                    # Only apply to numeric columns
-                    if is_numeric_column(X_copy[col]):
-                        X_copy[col] = X_copy[col].fillna(X_copy[col].median())
-                    else:
-                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
-                        le = LabelEncoder()
-                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
-                elif action == 'standard_scale':
-                    # Only apply to numeric columns
-                    if is_numeric_column(X_copy[col]):
-                        X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
-                        scaler = StandardScaler()
-                        X_copy[col] = scaler.fit_transform(X_copy[[col]])
-                    else:
-                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
-                        le = LabelEncoder()
-                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
-                elif action in ['label_encode', 'onehot_encode']:
-                    X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
-                    le = LabelEncoder()
-                    X_copy[col] = le.fit_transform(X_copy[col].astype(str))
-                elif action == 'drop_column':
-                    X_copy = X_copy.drop(columns=[col])
+                # Track decision source
+                if source == 'symbolic':
+                    self.decision_sources['symbolic'] += 1
+                elif source == 'neural':
+                    self.decision_sources['neural'] += 1
                 else:
-                    if is_numeric_column(X_copy[col]):
+                    self.decision_sources['fallback'] += 1
+                
+                # Use executor to apply action
+                try:
+                    X_copy[col] = executor.apply_action(X_copy[col], action)
+                    
+                    # Ensure result is numeric for ML models
+                    if not is_numeric_column(X_copy[col]):
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
+                        le = LabelEncoder()
+                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
+                except Exception as exec_error:
+                    logger.debug(f"Executor failed for {action} on {col}: {exec_error}")
+                    if action == 'drop_column':
+                        X_copy = X_copy.drop(columns=[col])
+                    elif is_numeric_column(X_copy[col]):
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
                         X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                         le = LabelEncoder()
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
+                        
             except Exception as e:
                 logger.warning(f"Error processing {col}: {e}")
+                self.decision_sources['fallback'] += 1
                 if is_numeric_column(X_copy[col]):
                     X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                 else:
@@ -716,14 +760,25 @@ class ColabEvaluation:
                     
                     elapsed_ms = (time.time() - start_time) * 1000
                     
+                    # Get decision source breakdown
+                    decision_sources = variant.get_decision_sources() if hasattr(variant, 'get_decision_sources') else {}
+                    
                     results[dataset_name][variant_name] = {
                         'accuracy': float(np.mean(scores)),
                         'std': float(np.std(scores)),
                         'latency_ms': float(elapsed_ms / len(X.columns)),
-                        'scores': [float(s) for s in scores]
+                        'scores': [float(s) for s in scores],
+                        'decision_sources': decision_sources
                     }
                     
-                    print(f"    {variant_name}: {np.mean(scores):.3f} ± {np.std(scores):.3f}")
+                    # Log decision sources
+                    source_str = ""
+                    if decision_sources:
+                        total = sum(decision_sources.values())
+                        if total > 0:
+                            source_str = f" [Sym:{decision_sources.get('symbolic', 0)/total*100:.0f}% Neu:{decision_sources.get('neural', 0)/total*100:.0f}% Fall:{decision_sources.get('fallback', 0)/total*100:.0f}%]"
+                    
+                    print(f"    {variant_name}: {np.mean(scores):.3f} ± {np.std(scores):.3f}{source_str}")
                     
                 except Exception as e:
                     print(f"    ❌ {variant_name} failed: {e}")
