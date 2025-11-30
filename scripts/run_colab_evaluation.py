@@ -108,6 +108,24 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def safe_fillna_categorical(series: pd.Series, fill_value: str = 'missing') -> pd.Series:
+    """
+    Safely fill NA values in a Series, handling categorical dtypes properly.
+    
+    Args:
+        series: Pandas Series to fill
+        fill_value: Value to use for filling NAs
+    
+    Returns:
+        Series with NAs filled
+    """
+    if series.dtype.name == 'category':
+        # Add fill_value to categories if not present
+        if fill_value not in series.cat.categories:
+            series = series.cat.add_categories([fill_value])
+    return series.fillna(fill_value)
+
+
 def is_colab() -> bool:
     """Detect if running in Google Colab."""
     try:
@@ -212,7 +230,7 @@ class RandomBaseline(AblationVariant):
                 X_copy[col] = scaler.fit_transform(X_copy[[col]])
             else:
                 # Label encode categorical
-                X_copy[col] = X_copy[col].fillna('missing')
+                X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                 le = LabelEncoder()
                 X_copy[col] = le.fit_transform(X_copy[col].astype(str))
         return X_copy
@@ -245,7 +263,7 @@ class SymbolicOnlyVariant(AblationVariant):
                     if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
-                        X_copy[col] = X_copy[col].fillna('missing')
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                         le = LabelEncoder()
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action in ['fill_null_mean', 'fill_null_median']:
@@ -255,7 +273,7 @@ class SymbolicOnlyVariant(AblationVariant):
                     scaler = StandardScaler()
                     X_copy[col] = scaler.fit_transform(X_copy[[col]])
                 elif action in ['label_encode', 'onehot_encode']:
-                    X_copy[col] = X_copy[col].fillna('missing')
+                    X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                     le = LabelEncoder()
                     X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action == 'drop_column':
@@ -265,7 +283,7 @@ class SymbolicOnlyVariant(AblationVariant):
                     if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
-                        X_copy[col] = X_copy[col].fillna('missing')
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                         le = LabelEncoder()
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
             except Exception as e:
@@ -274,7 +292,7 @@ class SymbolicOnlyVariant(AblationVariant):
                 if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
                     X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                 else:
-                    X_copy[col] = X_copy[col].fillna('missing')
+                    X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                     le = LabelEncoder()
                     X_copy[col] = le.fit_transform(X_copy[col].astype(str))
         
@@ -306,7 +324,7 @@ class NeuralOnlyVariant(AblationVariant):
                     if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
-                        X_copy[col] = X_copy[col].fillna('missing')
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                         le = LabelEncoder()
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action in ['fill_null_mean', 'fill_null_median']:
@@ -316,7 +334,7 @@ class NeuralOnlyVariant(AblationVariant):
                     scaler = StandardScaler()
                     X_copy[col] = scaler.fit_transform(X_copy[[col]])
                 elif action in ['label_encode', 'onehot_encode']:
-                    X_copy[col] = X_copy[col].fillna('missing')
+                    X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                     le = LabelEncoder()
                     X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action == 'drop_column':
@@ -325,7 +343,7 @@ class NeuralOnlyVariant(AblationVariant):
                     if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
-                        X_copy[col] = X_copy[col].fillna('missing')
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                         le = LabelEncoder()
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
             except Exception as e:
@@ -333,7 +351,7 @@ class NeuralOnlyVariant(AblationVariant):
                 if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
                     X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                 else:
-                    X_copy[col] = X_copy[col].fillna('missing')
+                    X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                     le = LabelEncoder()
                     X_copy[col] = le.fit_transform(X_copy[col].astype(str))
         
@@ -362,7 +380,7 @@ class AuroraHybridVariant(AblationVariant):
                     if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
-                        X_copy[col] = X_copy[col].fillna('missing')
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                         le = LabelEncoder()
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action in ['fill_null_mean', 'fill_null_median']:
@@ -372,7 +390,7 @@ class AuroraHybridVariant(AblationVariant):
                     scaler = StandardScaler()
                     X_copy[col] = scaler.fit_transform(X_copy[[col]])
                 elif action in ['label_encode', 'onehot_encode']:
-                    X_copy[col] = X_copy[col].fillna('missing')
+                    X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                     le = LabelEncoder()
                     X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action == 'drop_column':
@@ -381,7 +399,7 @@ class AuroraHybridVariant(AblationVariant):
                     if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
-                        X_copy[col] = X_copy[col].fillna('missing')
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                         le = LabelEncoder()
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
             except Exception as e:
@@ -389,7 +407,7 @@ class AuroraHybridVariant(AblationVariant):
                 if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
                     X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                 else:
-                    X_copy[col] = X_copy[col].fillna('missing')
+                    X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                     le = LabelEncoder()
                     X_copy[col] = le.fit_transform(X_copy[col].astype(str))
         
@@ -806,7 +824,7 @@ class ColabEvaluation:
                             't_statistic': float(t_stat),
                             'p_value': float(p_value),
                             'effect_size': float(effect_size),
-                            'significant': p_value < 0.05,
+                            'significant': bool(p_value < 0.05),
                             'mean_diff': float(np.mean(s1) - np.mean(s2))
                         }
                         
