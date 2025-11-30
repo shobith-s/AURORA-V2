@@ -150,7 +150,17 @@ class NeuralOracle:
         
         if is_sklearn:
             # Sklearn model (VotingClassifier, etc.)
-            probs = self.model.predict_proba(X)[0]
+            # Get feature names from model if available to avoid warnings
+            if hasattr(self.model, 'feature_names_in_'):
+                feature_names = list(self.model.feature_names_in_)
+            else:
+                # Fallback to generic column names matching model training
+                feature_names = [f'Column_{i}' for i in range(X.shape[1])]
+            
+            # Convert to DataFrame with proper feature names to match training
+            import pandas as pd
+            X_df = pd.DataFrame(X, columns=feature_names)
+            probs = self.model.predict_proba(X_df)[0]
         else:
             # XGBoost model
             dmatrix = xgb.DMatrix(X, feature_names=self.feature_names)

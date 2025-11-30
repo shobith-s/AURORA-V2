@@ -2,7 +2,7 @@
   {
     "dataset": "titanic",
     "column": "Age",
-    "action": "fill_null_median",
+    "action": "standard_scale",
     "confidence": 0.92,
     "features": {
       "null_pct": 0.198,
@@ -11,7 +11,7 @@
       "skewness": 0.389,
       "kurtosis": 0.178
     },
-    "explanation": "Numeric column with 19.8% nulls, median imputation recommended"
+    "explanation": "Numeric column with moderate skewness, scaling recommended"
   },
   {
     "dataset": "titanic",
@@ -30,7 +30,7 @@
   {
     "dataset": "titanic",
     "column": "Name",
-    "action": "drop_column",
+    "action": "keep_as_is",
     "confidence": 0.88,
     "features": {
       "null_pct": 0.0,
@@ -39,12 +39,12 @@
       "skewness": 0.0,
       "kurtosis": 0.0
     },
-    "explanation": "High cardinality text column, not useful for ML"
+    "explanation": "High cardinality text column - model predicts keep for further analysis"
   },
   {
     "dataset": "titanic",
     "column": "Fare",
-    "action": "log1p_transform",
+    "action": "keep_as_is",
     "confidence": 0.85,
     "features": {
       "null_pct": 0.001,
@@ -53,12 +53,12 @@
       "skewness": 4.787,
       "kurtosis": 33.398
     },
-    "explanation": "Highly skewed positive numeric column"
+    "explanation": "Numeric column - model predicts keep for numeric data"
   },
   {
     "dataset": "titanic",
     "column": "Sex",
-    "action": "label_encode",
+    "action": "onehot_encode",
     "confidence": 0.94,
     "features": {
       "null_pct": 0.0,

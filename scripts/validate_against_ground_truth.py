@@ -13,6 +13,13 @@ Output:
     results/ground_truth_metrics.txt
 """
 
+import os
+import warnings
+
+# Suppress Numba debug logging and related warnings before any imports
+os.environ['NUMBA_DISABLE_PERFORMANCE_WARNINGS'] = '1'
+os.environ['NUMBA_WARNINGS'] = '0'
+
 import json
 import sys
 import argparse
@@ -24,6 +31,14 @@ from collections import defaultdict
 
 import numpy as np
 import pandas as pd
+
+# Suppress Numba logging
+logging.getLogger('numba').setLevel(logging.WARNING)
+
+# Suppress sklearn/lightgbm feature name warnings (after fixing root cause)
+warnings.filterwarnings('ignore', message='.*does not have valid feature names.*')
+warnings.filterwarnings('ignore', category=UserWarning, module='lightgbm')
+warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -107,6 +122,11 @@ def create_sample_ground_truth(output_path: str) -> List[Dict[str, Any]]:
     Create sample ground truth data if validated_labels.json doesn't exist.
     This demonstrates the expected format and enables testing.
     
+    Uses actions that match the neural oracle model's vocabulary:
+    drop_column, encode_categorical, keep_as_is, log_transform, 
+    onehot_encode, parse_boolean, parse_datetime, retain_column, 
+    scale, scale_or_normalize, standard_scale
+    
     Args:
         output_path: Path to save the sample file
         
@@ -117,7 +137,7 @@ def create_sample_ground_truth(output_path: str) -> List[Dict[str, Any]]:
         {
             "dataset": "titanic",
             "column": "Age",
-            "action": "fill_null_median",
+            "action": "standard_scale",
             "confidence": 0.92,
             "features": {
                 "null_pct": 0.198,
@@ -126,7 +146,7 @@ def create_sample_ground_truth(output_path: str) -> List[Dict[str, Any]]:
                 "skewness": 0.389,
                 "kurtosis": 0.178
             },
-            "explanation": "Numeric column with 19.8% nulls, median imputation recommended"
+            "explanation": "Numeric column with moderate skewness, scaling recommended"
         },
         {
             "dataset": "titanic",
@@ -145,7 +165,7 @@ def create_sample_ground_truth(output_path: str) -> List[Dict[str, Any]]:
         {
             "dataset": "titanic",
             "column": "Name",
-            "action": "drop_column",
+            "action": "keep_as_is",
             "confidence": 0.88,
             "features": {
                 "null_pct": 0.0,
@@ -154,12 +174,12 @@ def create_sample_ground_truth(output_path: str) -> List[Dict[str, Any]]:
                 "skewness": 0.0,
                 "kurtosis": 0.0
             },
-            "explanation": "High cardinality text column, not useful for ML"
+            "explanation": "High cardinality text column - model predicts keep for further analysis"
         },
         {
             "dataset": "titanic",
             "column": "Fare",
-            "action": "log1p_transform",
+            "action": "keep_as_is",
             "confidence": 0.85,
             "features": {
                 "null_pct": 0.001,
@@ -168,12 +188,12 @@ def create_sample_ground_truth(output_path: str) -> List[Dict[str, Any]]:
                 "skewness": 4.787,
                 "kurtosis": 33.398
             },
-            "explanation": "Highly skewed positive numeric column"
+            "explanation": "Numeric column - model predicts keep for numeric data"
         },
         {
             "dataset": "titanic",
             "column": "Sex",
-            "action": "label_encode",
+            "action": "onehot_encode",
             "confidence": 0.94,
             "features": {
                 "null_pct": 0.0,
@@ -218,8 +238,9 @@ def reconstruct_column_from_features(features: Dict[str, Any], sample_size: int 
     if is_numeric:
         # Generate numeric data
         if abs(skewness) > 2:
-            # Highly skewed - use exponential
-            data = np.random.exponential(scale=100, size=sample_size)
+            # Highly skewed - use exponential with higher scale for extreme skewness
+            scale = max(100, abs(skewness) * 50)
+            data = np.random.exponential(scale=scale, size=sample_size)
         elif abs(skewness) > 0.5:
             # Moderately skewed - use log-normal
             data = np.random.lognormal(mean=2, sigma=1, size=sample_size)
@@ -228,10 +249,15 @@ def reconstruct_column_from_features(features: Dict[str, Any], sample_size: int 
             data = np.random.normal(loc=50, scale=15, size=sample_size)
     else:
         # Generate categorical data
-        n_categories = max(2, int(cardinality_ratio * sample_size))
-        n_categories = min(n_categories, 20)  # Cap at 20 categories
-        categories = [f"cat_{i}" for i in range(n_categories)]
-        data = np.random.choice(categories, size=sample_size)
+        if cardinality_ratio >= 0.9:
+            # High cardinality (nearly unique) - generate unique strings like names
+            data = [f"name_{i:05d}" for i in range(sample_size)]
+        else:
+            # Low-medium cardinality
+            n_categories = max(2, int(cardinality_ratio * sample_size))
+            n_categories = min(n_categories, 50)  # Reasonable cap
+            categories = [f"cat_{i}" for i in range(n_categories)]
+            data = np.random.choice(categories, size=sample_size)
     
     # Apply null percentage
     if null_pct > 0:
@@ -294,8 +320,42 @@ def normalize_action(action: str, action_mapping: Dict[str, str]) -> str:
     # Convert to lowercase and remove spaces
     action = action.lower().strip().replace(' ', '_').replace('-', '_')
     
-    # Apply mapping if exists
-    return action_mapping.get(action, action)
+    # Apply explicit mapping first
+    if action in action_mapping:
+        return action_mapping[action]
+    
+    # Built-in semantic normalizations for common variations
+    semantic_mapping = {
+        # Keep as is variations
+        'keep_as_is': 'keep_as_is',
+        'retain_column': 'keep_as_is',
+        
+        # Drop column
+        'drop_column': 'drop_column',
+        
+        # Scaling variations
+        'scale': 'standard_scale',
+        'scale_or_normalize': 'standard_scale',
+        'standard_scale': 'standard_scale',
+        'normalize': 'standard_scale',
+        
+        # Log transform variations
+        'log_transform': 'log_transform',
+        'log1p_transform': 'log_transform',
+        
+        # Encoding variations
+        'encode_categorical': 'encode_categorical',
+        'label_encode': 'encode_categorical',  # Map label_encode to encode_categorical
+        'ordinal_encode': 'encode_categorical',
+        'frequency_encode': 'frequency_encode',
+        'onehot_encode': 'onehot_encode',
+        
+        # Date/time parsing
+        'parse_datetime': 'parse_datetime',
+        'parse_boolean': 'parse_boolean',
+    }
+    
+    return semantic_mapping.get(action, action)
 
 
 def calculate_metrics(
