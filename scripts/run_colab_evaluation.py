@@ -23,6 +23,13 @@ Output:
     └── checkpoints/
 """
 
+import os
+import warnings
+
+# Suppress Numba debug logging and related warnings before any imports
+os.environ['NUMBA_DISABLE_PERFORMANCE_WARNINGS'] = '1'
+os.environ['NUMBA_WARNINGS'] = '0'
+
 import gc
 import json
 import sys
@@ -41,6 +48,14 @@ from sklearn.datasets import fetch_openml
 from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+
+# Suppress Numba logging
+logging.getLogger('numba').setLevel(logging.WARNING)
+
+# Suppress sklearn/lightgbm feature name warnings
+warnings.filterwarnings('ignore', message='.*does not have valid feature names.*')
+warnings.filterwarnings('ignore', category=UserWarning, module='lightgbm')
+warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
