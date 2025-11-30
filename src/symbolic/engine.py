@@ -508,10 +508,16 @@ class SymbolicEngine:
             calibrated_confidence = max(calibrated_confidence, 0.92)
             
         # 3. Penalize DROP_COLUMN (risky action)
-        # REMOVED: KEEP_AS_IS penalty - we want conservative decisions
         if best_action == PreprocessingAction.DROP_COLUMN:
             # DROP is risky, reduce confidence slightly
             calibrated_confidence *= 0.95
+            
+        # 4. Penalize KEEP_AS_IS to allow Neural Oracle to participate
+        # The symbolic engine is often too conservative ("keep as is").
+        # We reduce confidence to let the Neural Oracle (which detects subtle patterns)
+        # have a say in these cases.
+        if best_action == PreprocessingAction.KEEP_AS_IS:
+            calibrated_confidence *= 0.75
 
         best_confidence = calibrated_confidence
 

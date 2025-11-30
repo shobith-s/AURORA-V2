@@ -44,6 +44,30 @@ class NeuralOracle:
             model_path: Path to pre-trained model file (optional)
         """
         if xgb is None:
+            raise ImportError(
+                "XGBoost is required for NeuralOracle. "
+                "Install with: pip install xgboost"
+            )
+
+        self.model = None
+        self.action_encoder = {}
+        self.action_decoder = {}
+        self.feature_names = [
+            'null_ratio', 'unique_ratio', 'numeric_ratio',
+            'mean_length', 'std_length', 'has_special_chars',
+            'has_mixed_types', 'cardinality', 'entropy',
+            'is_sequential', 'date_ratio', 'email_ratio',
+            'url_ratio', 'phone_ratio', 'outlier_ratio',
+            'skewness', 'kurtosis', 'cv', 'iqr_ratio', 'range_ratio'
+        ]
+
+        if model_path is not None:
+            self.load(model_path)
+
+    def train(
+        self,
+        features: List[MinimalFeatures],
+        labels: List[PreprocessingAction],
         validation_split: float = 0.2
     ) -> Dict[str, Any]:
         """
@@ -142,16 +166,65 @@ class NeuralOracle:
         if self.model is None:
             raise ValueError("Model not trained or loaded. Call train() or load() first.")
 
-        # Convert features to DMatrix
+        # Convert features to array
         X = features.to_array().reshape(1, -1)
-        dmatrix = xgb.DMatrix(X, feature_names=self.feature_names)
+        
+        # Check if model is sklearn or XGBoost
+        is_sklearn = hasattr(self.model, 'predict_proba')
+        
+        if is_sklearn:
+            # Sklearn model (VotingClassifier, etc.)
+            probs = self.model.predict_proba(X)[0]
+        else:
+            # XGBoost model
+            dmatrix = xgb.DMatrix(X, feature_names=self.feature_names)
+            probs = self.model.predict(dmatrix)[0]
 
-        # Predict probabilities
-        probs = self.model.predict(dmatrix)[0]
+        # Map v2 model actions to system actions
+        mapping = {
+            'drop': PreprocessingAction.DROP_COLUMN,
+            'fill_zero': PreprocessingAction.FILL_NULL_MODE,  # Best approximation
+            'fill_forward': PreprocessingAction.FILL_NULL_FORWARD,
+            'fill_backward': PreprocessingAction.FILL_NULL_BACKWARD,
+            'fill_mean': PreprocessingAction.FILL_NULL_MEAN,
+            'fill_median': PreprocessingAction.FILL_NULL_MEDIAN,
+            'fill_mode': PreprocessingAction.FILL_NULL_MODE,
+            'keep_as_is': PreprocessingAction.KEEP_AS_IS,
+            'standard_scale': PreprocessingAction.STANDARD_SCALE,
+            'minmax_scale': PreprocessingAction.MINMAX_SCALE,
+            'robust_scale': PreprocessingAction.ROBUST_SCALE,
+            'log_transform': PreprocessingAction.LOG_TRANSFORM,
+            'onehot_encode': PreprocessingAction.ONEHOT_ENCODE,
+            'label_encode': PreprocessingAction.LABEL_ENCODE,
+            'ordinal_encode': PreprocessingAction.ORDINAL_ENCODE,
+        }
 
         # Get top prediction
         top_idx = int(np.argmax(probs))
         top_action = self.action_encoder[top_idx]
+        
+        # Ensure action is an Enum (handle string actions from loaded models)
+        if isinstance(top_action, str):
+            # 1. Try direct mapping for known mismatches
+            
+            if top_action in mapping:
+                top_action = mapping[top_action]
+            else:
+                # 2. Try exact value match
+                found = False
+                for action_enum in PreprocessingAction:
+                    if action_enum.value == top_action:
+                        top_action = action_enum
+                        found = True
+                        break
+                
+                # 3. Fallback to KEEP_AS_IS if unknown
+                if not found:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Unknown action '{top_action}' from model. Defaulting to KEEP_AS_IS.")
+                    top_action = PreprocessingAction.KEEP_AS_IS
+
         confidence = float(probs[top_idx])
 
         # Get probabilities for all actions
@@ -159,11 +232,26 @@ class NeuralOracle:
         if return_probabilities:
             for idx, prob in enumerate(probs):
                 if idx in self.action_encoder:
-                    action_probs[self.action_encoder[idx]] = float(prob)
+                    action_name = self.action_encoder[idx]
+                    
+                    # Apply same mapping logic
+                    if isinstance(action_name, str):
+                        if action_name in mapping:
+                            action_enum = mapping[action_name]
+                            action_probs[action_enum] = float(prob)
+                        else:
+                            # Try exact match
+                            for ae in PreprocessingAction:
+                                if ae.value == action_name:
+                                    action_probs[ae] = float(prob)
+                                    break
+                    else:
+                        # Already an Enum (if model was saved correctly)
+                        action_probs[action_name] = float(prob)
 
-        # Get feature importance
+        # Get feature importance (only for XGBoost)
         feature_importance = None
-        if return_feature_importance:
+        if return_feature_importance and not is_sklearn:
             importance_dict = self.model.get_score(importance_type='gain')
             feature_importance = {
                 name: importance_dict.get(name, 0.0)

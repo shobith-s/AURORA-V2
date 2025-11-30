@@ -87,7 +87,8 @@ def create_data_quality_rules() -> List[Rule]:
             stats.get("unique_ratio", 0) > 0.995 and  # Increased from 0.99 to 0.995
             stats.get("row_count", 0) > 1000 and  # Increased from 100 to 1000
             not stats.get("is_numeric", False) and
-            stats.get("avg_length", 0) > 20  # Long strings (likely UUIDs/hashes)
+            stats.get("avg_length", 0) > 20 and # Long strings (likely UUIDs/hashes)
+            not stats.get("is_primary_key", False) # Don't drop if explicitly identified as PK
         ),
         confidence_fn=lambda stats: 0.65,  # Reduced from 0.85 to 0.65
         explanation_fn=lambda stats: f"Column has {stats.get('unique_ratio', 0):.1%} unique values (likely random ID/hash - no predictive value)",
@@ -129,7 +130,7 @@ def create_data_quality_rules() -> List[Rule]:
             stats.get("unique_count", 0) > 1 and  # Not constant
             stats.get("unique_ratio", 0) < 0.99  # Not all unique (unless it's a key)
         ),
-        confidence_fn=lambda stats: 0.70,  # Moderate confidence - will be beaten by high-confidence rules
+        confidence_fn=lambda stats: 0.50,  # Reduced from 0.70 to allow Neural Oracle participation
         explanation_fn=lambda stats: "Column has acceptable quality - keeping as-is (conservative approach)",
         priority=200  # HIGHEST PRIORITY - acts as default for uncertain cases
     ))
@@ -164,7 +165,7 @@ def create_data_quality_rules() -> List[Rule]:
             ) and
             stats.get("null_pct", 0) < 0.1  # Low nulls
         ),
-        confidence_fn=lambda stats: 0.95,
+        confidence_fn=lambda stats: 0.60,  # Reduced from 0.95 to allow Neural Oracle participation
         explanation_fn=lambda stats: f"Ordinal/year column with {stats.get('unique_count', 0)} unique values - keeping original values (meaningful as-is)",
         priority=140  # Higher than scaling rules
     ))
@@ -198,7 +199,7 @@ def create_data_quality_rules() -> List[Rule]:
             not stats.get("has_outliers", True) and
             stats.get("cv", 100) < 2.0  # Coefficient of variation
         ),
-        confidence_fn=lambda stats: 0.88,
+        confidence_fn=lambda stats: 0.60,  # Reduced from 0.88 to allow Neural Oracle participation
         explanation_fn=lambda stats: f"Good distribution: low skewness ({stats.get('skewness', 0):.2f}), no outliers",
         priority=92
     ))
@@ -230,7 +231,7 @@ def create_data_quality_rules() -> List[Rule]:
             stats.get("unique_ratio", 0) < 0.95 and
             not stats.get("has_outliers", True)
         ),
-        confidence_fn=lambda stats: 0.82,
+        confidence_fn=lambda stats: 0.55,  # Reduced from 0.82 to allow Neural Oracle participation
         explanation_fn=lambda stats: "No data quality issues: no nulls, good cardinality, no outliers",
         priority=88
     ))
@@ -634,7 +635,8 @@ def create_categorical_rules() -> List[Rule]:
         condition=lambda stats: (
             stats.get("is_categorical", False) and
             stats.get("cardinality", 100) < 10 and
-            not stats.get("is_ordinal", False)
+            not stats.get("is_ordinal", False) and
+            stats.get("null_pct", 0) < 0.8  # Don't encode if mostly null (should be dropped)
         ),
         confidence_fn=lambda stats: 0.95,
         explanation_fn=lambda stats: f"Low cardinality ({stats.get('cardinality', 0)} categories) suitable for one-hot",
@@ -647,7 +649,8 @@ def create_categorical_rules() -> List[Rule]:
         action=PreprocessingAction.ONEHOT_ENCODE,
         condition=lambda stats: (
             stats.get("is_categorical", False) and
-            stats.get("cardinality", 100) <= 5
+            stats.get("cardinality", 100) <= 5 and
+            stats.get("null_pct", 0) < 0.8  # Don't encode if mostly null
         ),
         confidence_fn=lambda stats: 0.98,
         explanation_fn=lambda stats: f"Very low cardinality ({stats.get('cardinality', 0)} categories): one-hot is standard",

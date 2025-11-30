@@ -253,6 +253,10 @@ class IntelligentPreprocessor:
                     else:
                         action = neural_shap_result['action']
                         confidence = neural_shap_result['confidence']
+                        
+                        # Validate action
+                        action = self._validate_neural_action(action, features, symbolic_result)
+                        
                         base_explanation = f"Neural oracle prediction (symbolic confidence too low: {symbolic_result.confidence:.2f})"
 
                     # Build enhanced explanation with SHAP insights
@@ -300,8 +304,8 @@ class IntelligentPreprocessor:
                     )
                     return self._add_confidence_warnings(result)
 
-                except ImportError:
-                    # SHAP not available, fall back to regular prediction
+                except Exception:
+                    # SHAP not available or model not supported, fall back to regular prediction
                     neural_pred = self.neural_oracle.predict(
                         features,
                         return_probabilities=True,
@@ -316,6 +320,10 @@ class IntelligentPreprocessor:
                     else:
                         action = neural_pred.action
                         confidence = neural_pred.confidence
+                        
+                        # Validate action
+                        action = self._validate_neural_action(action, features, symbolic_result)
+                        
                         explanation = f"Neural oracle prediction (symbolic confidence too low: {symbolic_result.confidence:.2f})"
 
                     self.stats['neural_decisions'] += 1
@@ -331,10 +339,6 @@ class IntelligentPreprocessor:
                         key=lambda x: x[1],
                         reverse=True
                     )[:3]
-
-                    # Update cache with neural decision
-                    if self.enable_cache and self.cache and symbolic_result.context:
-                        self.cache.set(symbolic_result.context, action, column_name)
 
                     result = PreprocessingResult(
                         action=action,
@@ -449,6 +453,60 @@ class IntelligentPreprocessor:
                 neural_confidence * 0.9,
                 f"Neural oracle ({neural_confidence:.2f}) vs symbolic ({symbolic_result.confidence:.2f})"
             )
+
+    def _validate_neural_action(
+        self,
+        action: PreprocessingAction,
+        features: Any,
+        symbolic_result: PreprocessingResult
+    ) -> PreprocessingAction:
+        """
+        Validate if the neural action is logically sound for the data type.
+        Returns the original action if valid, or a fallback action if invalid.
+        """
+        # 1. Check for numeric operations on non-numeric data
+        is_numeric = features.detected_dtype == 1.0  # 1.0 is numeric in MinimalFeatures
+        
+        numeric_only_actions = {
+            PreprocessingAction.FILL_NULL_MEAN,
+            PreprocessingAction.FILL_NULL_MEDIAN,
+            PreprocessingAction.STANDARD_SCALE,
+            PreprocessingAction.MINMAX_SCALE,
+            PreprocessingAction.ROBUST_SCALE,
+            PreprocessingAction.LOG_TRANSFORM,
+            PreprocessingAction.LOG1P_TRANSFORM,
+            PreprocessingAction.SQRT_TRANSFORM,
+            PreprocessingAction.BOX_COX,
+            PreprocessingAction.YEO_JOHNSON,
+            PreprocessingAction.CLIP_OUTLIERS,
+            PreprocessingAction.WINSORIZE
+        }
+        
+        if action in numeric_only_actions and not is_numeric:
+            # Fallback for categorical data
+            return PreprocessingAction.FILL_NULL_MODE if "fill" in action.value else PreprocessingAction.KEEP_AS_IS
+
+        # 2. Check for categorical operations on numeric data
+        categorical_only_actions = {
+            PreprocessingAction.ONEHOT_ENCODE,
+            PreprocessingAction.LABEL_ENCODE,
+            PreprocessingAction.ORDINAL_ENCODE,
+            PreprocessingAction.TARGET_ENCODE,
+            PreprocessingAction.FREQUENCY_ENCODE
+        }
+        
+        if action in categorical_only_actions and is_numeric:
+            # Fallback for numeric data
+            return PreprocessingAction.KEEP_AS_IS
+
+        # 3. Check for DROP on important columns (Year, ID)
+        # If symbolic says KEEP (high confidence) but Neural says DROP, be careful
+        if action == PreprocessingAction.DROP_COLUMN:
+             # If symbolic strongly wants to keep (e.g. ID or Year), trust symbolic
+            if symbolic_result.action == PreprocessingAction.KEEP_AS_IS and symbolic_result.confidence > 0.6:
+                 return PreprocessingAction.KEEP_AS_IS
+
+        return action
 
     def _apply_context_bias(
         self,
