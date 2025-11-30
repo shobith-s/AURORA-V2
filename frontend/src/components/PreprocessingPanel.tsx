@@ -283,7 +283,8 @@ export default function PreprocessingPanel() {
       learned: 0,
       symbolic: 0,
       neural: 0,
-      conservative_fallback: 0
+      conservative_fallback: 0,
+      user_override: 0
     };
 
     Object.values(batchResults.results).forEach((result: any) => {
