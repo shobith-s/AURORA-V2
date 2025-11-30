@@ -108,23 +108,48 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def is_numeric_column(series: pd.Series) -> bool:
+    """
+    Check if a column is numeric.
+    
+    Args:
+        series: Pandas Series to check
+    
+    Returns:
+        True if column is numeric (int or float), False otherwise
+    """
+    return series.dtype in ['int64', 'float64', 'int32', 'float32', 'int16', 'float16', 'int8']
+
+
 def safe_fillna_categorical(series: pd.Series, fill_value: str = 'missing') -> pd.Series:
     """
     Safely fill NA values in a Series, handling categorical dtypes properly.
     
+    For categorical columns, converts to string first to avoid category restrictions.
+    For numeric columns, uses median imputation.
+    
     Args:
         series: Pandas Series to fill
-        fill_value: Value to use for filling NAs
+        fill_value: Value to use for filling NAs in categorical/object columns
     
     Returns:
         Series with NAs filled (does not modify the original series)
     """
     result = series.copy()
     if result.dtype.name == 'category':
-        # Add fill_value to categories if not present
-        if fill_value not in result.cat.categories:
-            result = result.cat.add_categories([fill_value])
-    return result.fillna(fill_value)
+        # Convert categorical to string to avoid category restrictions
+        result = result.astype(str)
+        # Replace string 'nan' with fill_value
+        result = result.replace('nan', fill_value)
+        return result
+    elif result.dtype == 'object':
+        return result.fillna(fill_value)
+    else:
+        # Numeric - use median (handles NaN gracefully)
+        median_val = result.median()
+        if pd.isna(median_val):
+            median_val = 0  # Fallback if all values are NaN
+        return result.fillna(median_val)
 
 
 def is_colab() -> bool:
@@ -223,14 +248,14 @@ class RandomBaseline(AblationVariant):
     def preprocess(self, X: pd.DataFrame) -> pd.DataFrame:
         X_copy = X.copy()
         for col in X_copy.columns:
-            if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+            if is_numeric_column(X_copy[col]):
                 # Fill nulls with mean
                 X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                 # Standard scale
                 scaler = StandardScaler()
                 X_copy[col] = scaler.fit_transform(X_copy[[col]])
             else:
-                # Label encode categorical
+                # Label encode categorical (handles categorical dtype properly)
                 X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                 le = LabelEncoder()
                 X_copy[col] = le.fit_transform(X_copy[col].astype(str))
@@ -258,21 +283,35 @@ class SymbolicOnlyVariant(AblationVariant):
                 result = self.preprocessor.preprocess_column(X_copy[col], col)
                 action = result.action.value
                 
-                # Apply simple transformations
+                # Apply simple transformations based on action
                 if action == 'keep_as_is':
-                    # Handle nulls
-                    if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                    # Handle nulls based on column type
+                    if is_numeric_column(X_copy[col]):
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
                         X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                         le = LabelEncoder()
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action in ['fill_null_mean', 'fill_null_median']:
-                    X_copy[col] = X_copy[col].fillna(X_copy[col].median())
+                    # Only apply to numeric columns
+                    if is_numeric_column(X_copy[col]):
+                        X_copy[col] = X_copy[col].fillna(X_copy[col].median())
+                    else:
+                        # For non-numeric, fall back to categorical handling
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
+                        le = LabelEncoder()
+                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action == 'standard_scale':
-                    X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
-                    scaler = StandardScaler()
-                    X_copy[col] = scaler.fit_transform(X_copy[[col]])
+                    # Only apply to numeric columns
+                    if is_numeric_column(X_copy[col]):
+                        X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
+                        scaler = StandardScaler()
+                        X_copy[col] = scaler.fit_transform(X_copy[[col]])
+                    else:
+                        # For non-numeric, fall back to categorical handling
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
+                        le = LabelEncoder()
+                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action in ['label_encode', 'onehot_encode']:
                     X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                     le = LabelEncoder()
@@ -280,8 +319,8 @@ class SymbolicOnlyVariant(AblationVariant):
                 elif action == 'drop_column':
                     X_copy = X_copy.drop(columns=[col])
                 else:
-                    # Default handling
-                    if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                    # Default handling based on column type
+                    if is_numeric_column(X_copy[col]):
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
                         X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
@@ -289,8 +328,8 @@ class SymbolicOnlyVariant(AblationVariant):
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
             except Exception as e:
                 logger.warning(f"Error processing {col}: {e}")
-                # Safe fallback
-                if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                # Safe fallback using is_numeric_column
+                if is_numeric_column(X_copy[col]):
                     X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                 else:
                     X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
@@ -320,20 +359,32 @@ class NeuralOnlyVariant(AblationVariant):
                 result = self.preprocessor.preprocess_column(X_copy[col], col)
                 action = result.action.value
                 
-                # Apply based on action
+                # Apply based on action (with type checking)
                 if action == 'keep_as_is':
-                    if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                    if is_numeric_column(X_copy[col]):
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
                         X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                         le = LabelEncoder()
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action in ['fill_null_mean', 'fill_null_median']:
-                    X_copy[col] = X_copy[col].fillna(X_copy[col].median())
+                    # Only apply to numeric columns
+                    if is_numeric_column(X_copy[col]):
+                        X_copy[col] = X_copy[col].fillna(X_copy[col].median())
+                    else:
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
+                        le = LabelEncoder()
+                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action == 'standard_scale':
-                    X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
-                    scaler = StandardScaler()
-                    X_copy[col] = scaler.fit_transform(X_copy[[col]])
+                    # Only apply to numeric columns
+                    if is_numeric_column(X_copy[col]):
+                        X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
+                        scaler = StandardScaler()
+                        X_copy[col] = scaler.fit_transform(X_copy[[col]])
+                    else:
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
+                        le = LabelEncoder()
+                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action in ['label_encode', 'onehot_encode']:
                     X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                     le = LabelEncoder()
@@ -341,7 +392,7 @@ class NeuralOnlyVariant(AblationVariant):
                 elif action == 'drop_column':
                     X_copy = X_copy.drop(columns=[col])
                 else:
-                    if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                    if is_numeric_column(X_copy[col]):
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
                         X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
@@ -349,7 +400,7 @@ class NeuralOnlyVariant(AblationVariant):
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
             except Exception as e:
                 logger.warning(f"Error processing {col}: {e}")
-                if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                if is_numeric_column(X_copy[col]):
                     X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                 else:
                     X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
@@ -376,20 +427,32 @@ class AuroraHybridVariant(AblationVariant):
                 result = self.preprocessor.preprocess_column(X_copy[col], col)
                 action = result.action.value
                 
-                # Apply based on action
+                # Apply based on action (with type checking)
                 if action == 'keep_as_is':
-                    if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                    if is_numeric_column(X_copy[col]):
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
                         X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                         le = LabelEncoder()
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action in ['fill_null_mean', 'fill_null_median']:
-                    X_copy[col] = X_copy[col].fillna(X_copy[col].median())
+                    # Only apply to numeric columns
+                    if is_numeric_column(X_copy[col]):
+                        X_copy[col] = X_copy[col].fillna(X_copy[col].median())
+                    else:
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
+                        le = LabelEncoder()
+                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action == 'standard_scale':
-                    X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
-                    scaler = StandardScaler()
-                    X_copy[col] = scaler.fit_transform(X_copy[[col]])
+                    # Only apply to numeric columns
+                    if is_numeric_column(X_copy[col]):
+                        X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
+                        scaler = StandardScaler()
+                        X_copy[col] = scaler.fit_transform(X_copy[[col]])
+                    else:
+                        X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
+                        le = LabelEncoder()
+                        X_copy[col] = le.fit_transform(X_copy[col].astype(str))
                 elif action in ['label_encode', 'onehot_encode']:
                     X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
                     le = LabelEncoder()
@@ -397,7 +460,7 @@ class AuroraHybridVariant(AblationVariant):
                 elif action == 'drop_column':
                     X_copy = X_copy.drop(columns=[col])
                 else:
-                    if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                    if is_numeric_column(X_copy[col]):
                         X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                     else:
                         X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
@@ -405,7 +468,7 @@ class AuroraHybridVariant(AblationVariant):
                         X_copy[col] = le.fit_transform(X_copy[col].astype(str))
             except Exception as e:
                 logger.warning(f"Error processing {col}: {e}")
-                if X_copy[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                if is_numeric_column(X_copy[col]):
                     X_copy[col] = X_copy[col].fillna(X_copy[col].mean())
                 else:
                     X_copy[col] = safe_fillna_categorical(X_copy[col], 'missing')
@@ -612,10 +675,23 @@ class ColabEvaluation:
                     # Handle remaining NaN values with column-appropriate defaults
                     for col in X_processed.columns:
                         if X_processed[col].isna().any():
-                            if X_processed[col].dtype in ['int64', 'float64', 'int32', 'float32']:
-                                X_processed[col] = X_processed[col].fillna(X_processed[col].median())
+                            if is_numeric_column(X_processed[col]):
+                                median_val = X_processed[col].median()
+                                if pd.isna(median_val):
+                                    median_val = 0
+                                X_processed[col] = X_processed[col].fillna(median_val)
                             else:
-                                X_processed[col] = X_processed[col].fillna(0)
+                                # For non-numeric columns, use safe fill
+                                X_processed[col] = safe_fillna_categorical(X_processed[col], 'missing')
+                                # If still has NaN (shouldn't happen), convert to 0
+                                if X_processed[col].isna().any():
+                                    X_processed[col] = X_processed[col].fillna(0)
+                    
+                    # Ensure all columns are numeric for model training
+                    for col in X_processed.columns:
+                        if X_processed[col].dtype == 'object' or X_processed[col].dtype.name == 'category':
+                            le = LabelEncoder()
+                            X_processed[col] = le.fit_transform(X_processed[col].astype(str))
                     
                     # Select model
                     if task == 'classification':
