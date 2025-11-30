@@ -248,11 +248,21 @@ class AdaptiveLearningEngine:
             correct = 0
             total = len(validation_data)
 
+            # FIXED: Use similarity matching instead of exact hash matching
+            # Rules match on similarity during inference, so validation must too
             for item in validation_data:
-                pattern_hash = self._hash_fingerprint(
-                    create_privacy_preserving_pattern(item['column_stats'], privacy_level="medium")
+                # Import here to avoid circular dependency
+                from ..learning.rule_converter import compute_pattern_similarity
+
+                # Check if pattern matches using similarity threshold (consistent with inference)
+                similarity = compute_pattern_similarity(
+                    item['column_stats'],
+                    rule.pattern_template,
+                    self.similarity_threshold
                 )
-                if pattern_hash == rule.rule_name and item['expected_action'] == rule.recommended_action:
+
+                # Rule matches if similarity >= threshold AND action matches
+                if similarity >= self.similarity_threshold and item['expected_action'] == rule.recommended_action:
                     correct += 1
 
             accuracy = correct / total if total > 0 else 0.0

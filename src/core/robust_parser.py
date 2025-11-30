@@ -46,6 +46,11 @@ class RobustCSVParser:
     - Comprehensive error reporting
     """
 
+    # Security limits to prevent DOS attacks
+    MAX_FILE_SIZE_BYTES = 100_000_000  # 100MB
+    MAX_ROWS = 1_000_000              # 1 million rows
+    MAX_COLUMNS = 1_000               # 1000 columns
+
     def __init__(
         self,
         max_sample_size: int = 100000,  # Bytes to sample for encoding
@@ -74,6 +79,14 @@ class RobustCSVParser:
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
+        # SECURITY: Check file size limit to prevent DOS attacks
+        file_size = file_path.stat().st_size
+        if file_size > self.MAX_FILE_SIZE_BYTES:
+            raise ValueError(
+                f"File too large: {file_size:,} bytes. "
+                f"Maximum allowed: {self.MAX_FILE_SIZE_BYTES:,} bytes ({self.MAX_FILE_SIZE_BYTES / 1_000_000:.0f}MB)"
+            )
+
         # Step 1: Detect encoding
         encoding = self._detect_encoding(file_path)
         logger.info(f"Detected encoding: {encoding}")
@@ -91,6 +104,19 @@ class RobustCSVParser:
 
             # Step 4: Clean and validate
             df, warnings_list = self._clean_dataframe(df)
+
+            # SECURITY: Validate row and column counts
+            if len(df) > self.MAX_ROWS:
+                raise ValueError(
+                    f"Too many rows: {len(df):,} rows. "
+                    f"Maximum allowed: {self.MAX_ROWS:,} rows"
+                )
+
+            if len(df.columns) > self.MAX_COLUMNS:
+                raise ValueError(
+                    f"Too many columns: {len(df.columns):,} columns. "
+                    f"Maximum allowed: {self.MAX_COLUMNS:,} columns"
+                )
 
             return ParseResult(
                 dataframe=df,

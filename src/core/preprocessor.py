@@ -16,7 +16,8 @@ from ..features.minimal_extractor import MinimalFeatureExtractor, get_feature_ex
 from .actions import PreprocessingAction, PreprocessingResult
 from .actions import PreprocessingAction, PreprocessingResult
 from .explainer import get_explainer
-from ..analysis.dataset_analyzer import DatasetAnalyzer  # NEW: Inter-column analysis
+# DISABLED: DatasetAnalyzer not used (results ignored)
+# from ..analysis.dataset_analyzer import DatasetAnalyzer
 
 # Confidence thresholds for decision quality
 CONFIDENCE_HIGH = 0.9      # Auto-apply decision (highly confident)
@@ -63,7 +64,6 @@ class IntelligentPreprocessor:
             use_neural_oracle: Whether to use neural oracle for low-confidence cases
             enable_learning: Whether to enable pattern learning
             neural_model_path: Path to neural oracle model
-            enable_cache: Whether to enable intelligent caching
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -196,9 +196,10 @@ class IntelligentPreprocessor:
             try:
                 # Try to convert to numeric
                 numeric_column = pd.to_numeric(column, errors='coerce')
-                # If most values successfully converted (>50%), use numeric version
+                # FIXED: Increased threshold from 50% to 90% to avoid incorrect conversions
+                # (e.g., dates that partially convert to numbers)
                 conversion_rate = numeric_column.notna().sum() / len(column) if len(column) > 0 else 0
-                if conversion_rate > 0.5:
+                if conversion_rate > 0.9:
                     import logging
                     logger = logging.getLogger(__name__)
                     logger.info(f"Type inference: '{column_name}' converted from object to numeric (success rate: {conversion_rate:.2%})")
@@ -284,10 +285,6 @@ class IntelligentPreprocessor:
                         reverse=True
                     )[:3]
 
-                    # Update cache with neural decision
-                    if self.enable_cache and self.cache and symbolic_result.context:
-                        self.cache.set(symbolic_result.context, action, column_name)
-
                     # Build context with SHAP values
                     enhanced_context = symbolic_result.context.copy() if symbolic_result.context else {}
                     enhanced_context['shap_values'] = neural_shap_result['shap_values']
@@ -342,10 +339,6 @@ class IntelligentPreprocessor:
                         key=lambda x: x[1],
                         reverse=True
                     )[:3]
-
-                    # Update cache with neural decision
-                    if self.enable_cache and self.cache and symbolic_result.context:
-                        self.cache.set(symbolic_result.context, action, column_name)
 
                     result = PreprocessingResult(
                         action=action,
@@ -785,12 +778,12 @@ class IntelligentPreprocessor:
         Returns:
             Dictionary mapping column names to PreprocessingResults
         """
-        # NEW: Run inter-column analysis
-        analyzer = DatasetAnalyzer()
-        primary_keys = analyzer.detect_primary_keys(df)
-        correlations = analyzer.find_numeric_correlations(df)
-        foreign_keys = analyzer.analyze_foreign_key_candidates(df)
-        
+        # DISABLED: Inter-column analysis (unused - results ignored)
+        # analyzer = DatasetAnalyzer()
+        # primary_keys = analyzer.detect_primary_keys(df)
+        # correlations = analyzer.find_numeric_correlations(df)
+        # foreign_keys = analyzer.analyze_foreign_key_candidates(df)
+
         results = {}
 
         for column_name in df.columns:
@@ -798,21 +791,20 @@ class IntelligentPreprocessor:
                 continue  # Skip target column
 
             target_available = target_column is not None
-            
-            # NEW: Prepare context for this column
+
+            # Use default context values (DatasetAnalyzer disabled as results weren't used)
             col_context = {
-                "is_primary_key": column_name in primary_keys,
-                "is_foreign_key": column_name in foreign_keys,
+                "is_primary_key": False,
+                "is_foreign_key": False,
                 "correlation_with_target": 0.0
             }
-            
-            # Add target correlation if available
-            if target_available and column_name in correlations:
-                # correlations[column_name] is a list of (other_col, corr_value) tuples
-                for other_col, corr_value in correlations[column_name]:
-                    if other_col == target_column:
-                        col_context["correlation_with_target"] = corr_value
-                        break
+
+            # DISABLED: Correlation computation (DatasetAnalyzer removed)
+            # if target_available and column_name in correlations:
+            #     for other_col, corr_value in correlations[column_name]:
+            #         if other_col == target_column:
+            #             col_context["correlation_with_target"] = corr_value
+            #             break
 
             result = self.preprocess_column(
                 df[column_name],
