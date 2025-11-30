@@ -61,7 +61,12 @@ logs/
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb
+# Keep notebooks in notebooks/ directory, exclude others
+!notebooks/*.ipynb
+
+# Generated evaluation results (to be regenerated on each run)
+results/
+evaluation_results.zip
 
 # Frontend/Next.js
 frontend/.next/
@@ -91,3 +96,12 @@ cache/
 temp/
 tmp/
 aurora.db
+#datas/
+
+git fetch origin
+git checkout copilot/fix-preprocessing-system-errors
+git merge origin/main  # or rebase
+# Resolve conflicts in: README.md, aurora.db, requirements.txt, src/core/actions.py
+git add .
+git commit -m "Resolve merge conflicts"
+git push

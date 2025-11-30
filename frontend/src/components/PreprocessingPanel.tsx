@@ -4,6 +4,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import ResultCard from './ResultCard';
 import ExplanationModal from './ExplanationModal';
+import ActionLibraryModal from './ActionLibraryModal';
 
 interface ColumnHealthMetrics {
   column_name: string;
@@ -63,6 +64,12 @@ export default function PreprocessingPanel() {
   const [expandedHealthColumn, setExpandedHealthColumn] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [originalData, setOriginalData] = useState<Record<string, any[]> | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [preprocessedData, setPreprocessedData] = useState<Record<string, any[]> | null>(null);
+
+  // Action Library State
+  const [showActionLibrary, setShowActionLibrary] = useState(false);
+  const [libraryTargetColumn, setLibraryTargetColumn] = useState<string | null>(null);
 
   // New state for expandable panels
   const [expandedPanels, setExpandedPanels] = useState<Record<string, boolean>>({
@@ -70,6 +77,14 @@ export default function PreprocessingPanel() {
     dataHealth: true,
     recommendations: true,
   });
+
+  // DEBUG MARKER - REMOVE BEFORE PRODUCTION
+  const debugStyle = { border: '4px solid #ef4444', position: 'relative' as const };
+  const debugBadge = (
+    <div className="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold px-2 py-1 z-50">
+      DEBUG: V2 ACTIVE
+    </div>
+  );
 
   const togglePanel = (panel: string) => {
     setExpandedPanels(prev => ({ ...prev, [panel]: !prev[panel] }));
@@ -180,11 +195,18 @@ export default function PreprocessingPanel() {
       const columns = parseCSV(text);
       setOriginalData(columns);
 
-      const response = await axios.post('/api/batch', { columns });
+      const response = await axios.post('/api/batch', { columns }, {
+        timeout: 60000, // 60 second timeout
+      });
       setBatchResults(response.data);
       toast.success(`Analyzed ${Object.keys(columns).length} columns!`);
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Upload failed');
+      console.error('Upload error:', error);
+      if (error.code === 'ECONNABORTED') {
+        toast.error('Upload timed out. Try with a smaller file or fewer columns.');
+      } else {
+        toast.error(error.response?.data?.detail || error.message || 'Upload failed');
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -238,6 +260,8 @@ export default function PreprocessingPanel() {
     }
   };
 
+  const [validationReport, setValidationReport] = useState<any>(null);
+
   const handleExecutePipeline = async () => {
     if (!batchResults || !originalData) {
       toast.error('No data to process');
@@ -245,34 +269,42 @@ export default function PreprocessingPanel() {
     }
 
     setIsExecuting(true);
+    setValidationReport(null); // Reset report
     try {
+      // Collect all actions (including overrides)
       const actions: Record<string, string> = {};
       Object.entries(batchResults.results).forEach(([colName, result]) => {
         actions[colName] = result.action;
       });
 
+      // Execute preprocessing
       const response = await axios.post('/api/execute', {
         columns: originalData,
         actions
-      }, {
-        responseType: 'blob'
       });
 
-      const blob = new Blob([response.data], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'preprocessed_data.csv');
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      // Store session ID, preprocessed data, and validation report
+      setSessionId(response.data.session_id);
+      setPreprocessedData(response.data.processed_data);
+      setValidationReport(response.data.validation_report);
 
-      toast.success('✓ Pipeline executed! Downloading results...');
+      toast.success('✓ Preprocessing complete with Proof of Quality!');
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Pipeline execution failed');
     } finally {
       setIsExecuting(false);
     }
+  };
+
+  const handleDownload = (format: 'csv' | 'excel' | 'json') => {
+    if (!sessionId) {
+      toast.error('No preprocessed data available');
+      return;
+    }
+
+    // Download file
+    window.location.href = `/api/download/${sessionId}?format=${format}`;
+    toast.success(`📥 Downloading ${format.toUpperCase()} file...`);
   };
 
   // Calculate decision source breakdown from batch results
@@ -301,7 +333,8 @@ export default function PreprocessingPanel() {
   const sourceBreakdown = getDecisionSourceBreakdown();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={debugStyle}>
+      {debugBadge}
       {/* Mode Selector */}
       <div className="glass-card p-4">
         <div className="flex gap-4">
@@ -510,11 +543,11 @@ export default function PreprocessingPanel() {
             </div>
 
             {/* Execute Pipeline Button */}
-            <div className="flex justify-center">
+            <div className="flex flex-col items-center gap-4">
               <button
                 onClick={handleExecutePipeline}
-                disabled={isExecuting}
-                className="btn-primary flex items-center gap-3 px-8 py-4 text-lg"
+                disabled={isExecuting || !!sessionId}
+                className="btn-primary flex items-center gap-3 px-8 py-4 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isExecuting ? (
                   <>
@@ -523,17 +556,121 @@ export default function PreprocessingPanel() {
                       <span className="w-2 h-2 bg-white rounded-full"></span>
                       <span className="w-2 h-2 bg-white rounded-full"></span>
                     </div>
-                    Processing & Downloading...
+                    Executing Preprocessing...
+                  </>
+                ) : sessionId ? (
+                  <>
+                    <CheckCircle className="w-6 h-6" />
+                    Preprocessing Complete!
                   </>
                 ) : (
                   <>
-                    <Download className="w-6 h-6" />
-                    Execute Pipeline & Download Results
+                    <Play className="w-6 h-6" />
+                    Execute Preprocessing Pipeline
                   </>
                 )}
               </button>
+
             </div>
           </div>
+
+          {/* Validation & Execution Results */}
+          {sessionId && preprocessedData && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
+              {/* Download Panel */}
+              <div className="glass-card p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                    <CheckCircle className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">Ready to Download</h3>
+                    <p className="text-sm text-slate-600">
+                      {Object.keys(preprocessedData).length} columns processed
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-slate-700">Choose format:</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <button
+                      onClick={() => handleDownload('csv')}
+                      className="group relative overflow-hidden bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl p-3 transition-all hover:scale-105"
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <FileSpreadsheet className="w-6 h-6 text-blue-600" />
+                        <span className="text-xs font-bold text-blue-800">CSV</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => handleDownload('excel')}
+                      className="group relative overflow-hidden bg-green-50 hover:bg-green-100 border border-green-200 rounded-xl p-3 transition-all hover:scale-105"
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <FileSpreadsheet className="w-6 h-6 text-green-600" />
+                        <span className="text-xs font-bold text-green-800">Excel</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => handleDownload('json')}
+                      className="group relative overflow-hidden bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl p-3 transition-all hover:scale-105"
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <FileSpreadsheet className="w-6 h-6 text-purple-600" />
+                        <span className="text-xs font-bold text-purple-800">JSON</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Validation Summary (Proof of Quality) */}
+              <div className="glass-card p-6 border-l-4 border-l-blue-500">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                      <Shield className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-800">Proof of Quality</h3>
+                      <p className="text-sm text-slate-600">Statistical Validation</p>
+                    </div>
+                  </div>
+                  {validationReport && (
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {validationReport.summary.passed_validation}/{validationReport.summary.validated_columns}
+                      </div>
+                      <div className="text-xs text-slate-500">Passed Checks</div>
+                    </div>
+                  )}
+                </div>
+
+                {validationReport ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-sm p-2 bg-slate-50 rounded-lg">
+                      <span className="text-slate-600">Statistical Tests</span>
+                      <span className="font-medium text-green-600">Active ✅</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm p-2 bg-slate-50 rounded-lg">
+                      <span className="text-slate-600">Consistency Checks</span>
+                      <span className="font-medium text-green-600">Active ✅</span>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-slate-100">
+                      <p className="text-xs text-slate-500 italic">
+                        "Every decision is statistically validated to ensure data integrity."
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-24 text-slate-400 text-sm">
+                    Waiting for execution...
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Intelligent 2-Panel Layout: Health + Recommendations */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
@@ -737,27 +874,26 @@ export default function PreprocessingPanel() {
                                 </div>
                               </div>
                               <div className="flex gap-2">
-                                <select
-                                  value={correctActions[columnName] || ''}
-                                  onChange={(e) => setCorrectActions(prev => ({ ...prev, [columnName]: e.target.value }))}
-                                  className="flex-1 px-2 py-1.5 rounded-lg border border-blue-300 text-xs bg-white"
+                                <button
+                                  onClick={() => {
+                                    // Open Action Library Modal
+                                    // We need a new state to track which column is opening the library
+                                    // But for now, let's reuse showCorrectionFor as the target
+                                    // and add a new state 'isLibraryOpen'
+                                    setShowActionLibrary(true);
+                                    setLibraryTargetColumn(columnName);
+                                  }}
+                                  className="flex-1 px-3 py-1.5 bg-white border border-blue-300 rounded-lg text-left text-xs text-slate-700 hover:border-blue-500 hover:ring-2 hover:ring-blue-100 transition-all flex items-center justify-between group"
                                 >
-                                  <option value="">-- Select Action --</option>
-                                  <option value="keep_as_is">Keep (No preprocessing)</option>
-                                  <option value="standard_scale">Standard Scale</option>
-                                  <option value="minmax_scale">Min-Max Scale</option>
-                                  <option value="robust_scale">Robust Scale</option>
-                                  <option value="log_transform">Log Transform</option>
-                                  <option value="box_cox">Box-Cox Transform</option>
-                                  <option value="yeo_johnson">Yeo-Johnson Transform</option>
-                                  <option value="onehot_encode">One-Hot Encode</option>
-                                  <option value="label_encode">Label Encode</option>
-                                  <option value="target_encode">Target Encode</option>
-                                  <option value="fill_null_mean">Fill Nulls (Mean)</option>
-                                  <option value="fill_null_median">Fill Nulls (Median)</option>
-                                  <option value="fill_null_mode">Fill Nulls (Mode)</option>
-                                  <option value="drop_column">Drop Column</option>
-                                </select>
+                                  <span className={correctActions[columnName] ? 'text-blue-700 font-medium' : 'text-slate-500'}>
+                                    {correctActions[columnName]
+                                      ? correctActions[columnName].replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+                                      : 'Select Action...'}
+                                  </span>
+                                  <div className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-medium group-hover:bg-blue-100 transition-colors">
+                                    Browse Library
+                                  </div>
+                                </button>
                                 <button
                                   onClick={() => handleBatchCorrection(columnName, columnResult.action, columnResult.confidence)}
                                   disabled={isSubmittingCorrection[columnName] || !correctActions[columnName]}
@@ -823,6 +959,18 @@ export default function PreprocessingPanel() {
           columnName={explanationColumnName}
         />
       )}
+      {/* Smart Action Library Modal */}
+      <ActionLibraryModal
+        isOpen={showActionLibrary}
+        onClose={() => setShowActionLibrary(false)}
+        onSelectAction={(action) => {
+          if (libraryTargetColumn) {
+            setCorrectActions(prev => ({ ...prev, [libraryTargetColumn]: action }));
+          }
+          setShowActionLibrary(false);
+        }}
+        currentAction={libraryTargetColumn ? correctActions[libraryTargetColumn] : undefined}
+      />
     </div>
   );
 }

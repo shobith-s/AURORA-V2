@@ -1072,8 +1072,12 @@ def _is_epoch_timestamp(stats: Dict[str, Any]) -> bool:
     """Check if numeric column is Unix epoch timestamp."""
     # Unix timestamp: seconds since 1970-01-01
     # Reasonable range: 1970 to 2050 = 0 to ~2.5 billion
-    min_val = stats.get("min_value", 0)
-    max_val = stats.get("max_value", 0)
+    min_val = stats.get("min_value")
+    max_val = stats.get("max_value")
+    
+    if min_val is None or max_val is None:
+        return False
+        
     return (1_000_000_000 < min_val < 2_000_000_000 and  # ~2001 to ~2033
             1_000_000_000 < max_val < 2_000_000_000)
 
@@ -1129,8 +1133,12 @@ def _check_credit_card_pattern(stats: Dict[str, Any]) -> bool:
 
     # If numeric, check if values are in CC range (13-19 digits = 1e12 to 1e19)
     if stats.get("is_numeric", False):
-        min_val = stats.get("min_value", 0)
-        max_val = stats.get("max_value", 0)
+        min_val = stats.get("min_value")
+        max_val = stats.get("max_value")
+        
+        if min_val is None or max_val is None:
+            return False
+            
         in_cc_range = (1_000_000_000_000 <= min_val and max_val < 10_000_000_000_000_000_000)
         return has_cc_name or in_cc_range
 

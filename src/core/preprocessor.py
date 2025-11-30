@@ -16,7 +16,8 @@ from ..features.minimal_extractor import MinimalFeatureExtractor, get_feature_ex
 from .actions import PreprocessingAction, PreprocessingResult
 from .actions import PreprocessingAction, PreprocessingResult
 from .explainer import get_explainer
-from ..analysis.dataset_analyzer import DatasetAnalyzer  # NEW: Inter-column analysis
+# DISABLED: DatasetAnalyzer not used (results ignored)
+# from ..analysis.dataset_analyzer import DatasetAnalyzer
 
 # Confidence thresholds for decision quality
 CONFIDENCE_HIGH = 0.9      # Auto-apply decision (highly confident)
@@ -49,7 +50,7 @@ class IntelligentPreprocessor:
 
     def __init__(
         self,
-        confidence_threshold: float = 0.75,  # CHANGED: 0.9 → 0.75 for more neural participation
+        confidence_threshold: float = 0.65,  # LOWERED: 0.75 → 0.65 for more neural participation
         use_neural_oracle: bool = True,
         enable_learning: bool = True,
         neural_model_path: Optional[Path] = None,
@@ -63,7 +64,6 @@ class IntelligentPreprocessor:
             use_neural_oracle: Whether to use neural oracle for low-confidence cases
             enable_learning: Whether to enable pattern learning
             neural_model_path: Path to neural oracle model
-            enable_cache: Whether to enable intelligent caching
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -98,8 +98,20 @@ class IntelligentPreprocessor:
                 active_rules = self.learning_engine.get_active_rules()
                 if active_rules:
                     logger.info(f"Loaded {len(active_rules)} validated production rules")
-                    # TODO: Convert LearnedRule database objects to Rule objects and inject
-                    
+
+                    # Convert LearnedRule database objects to Rule objects and inject
+                    from ..learning.rule_converter import convert_learned_rules_batch
+                    converted_rules = convert_learned_rules_batch(
+                        active_rules,
+                        similarity_threshold=0.85
+                    )
+
+                    # Inject converted rules into symbolic engine
+                    for rule in converted_rules:
+                        self.symbolic_engine.add_rule(rule)
+
+                    logger.info(f"Successfully injected {len(converted_rules)} learned rules into symbolic engine")
+
             except Exception as e:
                 logger.warning(f"Learning engine initialization failed, continuing without it: {e}")
                 self.learning_engine = None
@@ -155,7 +167,8 @@ class IntelligentPreprocessor:
         column_name: str = "",
         target_available: bool = False,
         metadata: Optional[Dict[str, Any]] = None,
-        context: str = "general"
+        context: str = "general",
+        apply_action: bool = False  # NEW: For future validation integration
     ) -> PreprocessingResult:
         """
         Preprocess a single column using the three-layer architecture.
@@ -184,9 +197,10 @@ class IntelligentPreprocessor:
             try:
                 # Try to convert to numeric
                 numeric_column = pd.to_numeric(column, errors='coerce')
-                # If most values successfully converted (>50%), use numeric version
+                # FIXED: Increased threshold from 50% to 90% to avoid incorrect conversions
+                # (e.g., dates that partially convert to numbers)
                 conversion_rate = numeric_column.notna().sum() / len(column) if len(column) > 0 else 0
-                if conversion_rate > 0.5:
+                if conversion_rate > 0.9:
                     import logging
                     logger = logging.getLogger(__name__)
                     logger.info(f"Type inference: '{column_name}' converted from object to numeric (success rate: {conversion_rate:.2%})")
@@ -252,6 +266,10 @@ class IntelligentPreprocessor:
                     else:
                         action = neural_shap_result['action']
                         confidence = neural_shap_result['confidence']
+                        
+                        # Validate action
+                        action = self._validate_neural_action(action, features, symbolic_result)
+                        
                         base_explanation = f"Neural oracle prediction (symbolic confidence too low: {symbolic_result.confidence:.2f})"
 
                     # Build enhanced explanation with SHAP insights
@@ -271,10 +289,6 @@ class IntelligentPreprocessor:
                         key=lambda x: x[1],
                         reverse=True
                     )[:3]
-
-                    # Update cache with neural decision
-                    if self.enable_cache and self.cache and symbolic_result.context:
-                        self.cache.set(symbolic_result.context, action, column_name)
 
                     # Build context with SHAP values
                     enhanced_context = symbolic_result.context.copy() if symbolic_result.context else {}
@@ -299,8 +313,8 @@ class IntelligentPreprocessor:
                     )
                     return self._add_confidence_warnings(result)
 
-                except ImportError:
-                    # SHAP not available, fall back to regular prediction
+                except Exception:
+                    # SHAP not available or model not supported, fall back to regular prediction
                     neural_pred = self.neural_oracle.predict(
                         features,
                         return_probabilities=True,
@@ -315,6 +329,10 @@ class IntelligentPreprocessor:
                     else:
                         action = neural_pred.action
                         confidence = neural_pred.confidence
+                        
+                        # Validate action
+                        action = self._validate_neural_action(action, features, symbolic_result)
+                        
                         explanation = f"Neural oracle prediction (symbolic confidence too low: {symbolic_result.confidence:.2f})"
 
                     self.stats['neural_decisions'] += 1
@@ -330,10 +348,6 @@ class IntelligentPreprocessor:
                         key=lambda x: x[1],
                         reverse=True
                     )[:3]
-
-                    # Update cache with neural decision
-                    if self.enable_cache and self.cache and symbolic_result.context:
-                        self.cache.set(symbolic_result.context, action, column_name)
 
                     result = PreprocessingResult(
                         action=action,
@@ -448,6 +462,60 @@ class IntelligentPreprocessor:
                 neural_confidence * 0.9,
                 f"Neural oracle ({neural_confidence:.2f}) vs symbolic ({symbolic_result.confidence:.2f})"
             )
+
+    def _validate_neural_action(
+        self,
+        action: PreprocessingAction,
+        features: Any,
+        symbolic_result: PreprocessingResult
+    ) -> PreprocessingAction:
+        """
+        Validate if the neural action is logically sound for the data type.
+        Returns the original action if valid, or a fallback action if invalid.
+        """
+        # 1. Check for numeric operations on non-numeric data
+        is_numeric = features.detected_dtype == 1.0  # 1.0 is numeric in MinimalFeatures
+        
+        numeric_only_actions = {
+            PreprocessingAction.FILL_NULL_MEAN,
+            PreprocessingAction.FILL_NULL_MEDIAN,
+            PreprocessingAction.STANDARD_SCALE,
+            PreprocessingAction.MINMAX_SCALE,
+            PreprocessingAction.ROBUST_SCALE,
+            PreprocessingAction.LOG_TRANSFORM,
+            PreprocessingAction.LOG1P_TRANSFORM,
+            PreprocessingAction.SQRT_TRANSFORM,
+            PreprocessingAction.BOX_COX,
+            PreprocessingAction.YEO_JOHNSON,
+            PreprocessingAction.CLIP_OUTLIERS,
+            PreprocessingAction.WINSORIZE
+        }
+        
+        if action in numeric_only_actions and not is_numeric:
+            # Fallback for categorical data
+            return PreprocessingAction.FILL_NULL_MODE if "fill" in action.value else PreprocessingAction.KEEP_AS_IS
+
+        # 2. Check for categorical operations on numeric data
+        categorical_only_actions = {
+            PreprocessingAction.ONEHOT_ENCODE,
+            PreprocessingAction.LABEL_ENCODE,
+            PreprocessingAction.ORDINAL_ENCODE,
+            PreprocessingAction.TARGET_ENCODE,
+            PreprocessingAction.FREQUENCY_ENCODE
+        }
+        
+        if action in categorical_only_actions and is_numeric:
+            # Fallback for numeric data
+            return PreprocessingAction.KEEP_AS_IS
+
+        # 3. Check for DROP on important columns (Year, ID)
+        # If symbolic says KEEP (high confidence) but Neural says DROP, be careful
+        if action == PreprocessingAction.DROP_COLUMN:
+             # If symbolic strongly wants to keep (e.g. ID or Year), trust symbolic
+            if symbolic_result.action == PreprocessingAction.KEEP_AS_IS and symbolic_result.confidence > 0.6:
+                 return PreprocessingAction.KEEP_AS_IS
+
+        return action
 
     def _apply_context_bias(
         self,
@@ -773,12 +841,12 @@ class IntelligentPreprocessor:
         Returns:
             Dictionary mapping column names to PreprocessingResults
         """
-        # NEW: Run inter-column analysis
-        analyzer = DatasetAnalyzer()
-        primary_keys = analyzer.detect_primary_keys(df)
-        correlations = analyzer.find_numeric_correlations(df)
-        foreign_keys = analyzer.analyze_foreign_key_candidates(df)
-        
+        # DISABLED: Inter-column analysis (unused - results ignored)
+        # analyzer = DatasetAnalyzer()
+        # primary_keys = analyzer.detect_primary_keys(df)
+        # correlations = analyzer.find_numeric_correlations(df)
+        # foreign_keys = analyzer.analyze_foreign_key_candidates(df)
+
         results = {}
 
         for column_name in df.columns:
@@ -786,21 +854,20 @@ class IntelligentPreprocessor:
                 continue  # Skip target column
 
             target_available = target_column is not None
-            
-            # NEW: Prepare context for this column
+
+            # Use default context values (DatasetAnalyzer disabled as results weren't used)
             col_context = {
-                "is_primary_key": column_name in primary_keys,
-                "is_foreign_key": column_name in foreign_keys,
+                "is_primary_key": False,
+                "is_foreign_key": False,
                 "correlation_with_target": 0.0
             }
-            
-            # Add target correlation if available
-            if target_available and column_name in correlations:
-                # correlations[column_name] is a list of (other_col, corr_value) tuples
-                for other_col, corr_value in correlations[column_name]:
-                    if other_col == target_column:
-                        col_context["correlation_with_target"] = corr_value
-                        break
+
+            # DISABLED: Correlation computation (DatasetAnalyzer removed)
+            # if target_available and column_name in correlations:
+            #     for other_col, corr_value in correlations[column_name]:
+            #         if other_col == target_column:
+            #             col_context["correlation_with_target"] = corr_value
+            #             break
 
             result = self.preprocess_column(
                 df[column_name],
@@ -828,8 +895,12 @@ class IntelligentPreprocessor:
         }
 
         # Add adaptive learning statistics if available
-        if self.adaptive_rules:
-            stats['adaptive_learning'] = self.adaptive_rules.get_statistics()
+        if self.learning_engine:
+            stats['learning'] = {
+                'total_corrections': 0,  # Would need to query DB
+                'learned_rules': 0,  # Would need to query DB
+                'pattern_clusters': 0  # Would need to query DB
+            }
 
         return stats
 
