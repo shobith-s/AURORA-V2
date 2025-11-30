@@ -73,7 +73,7 @@ class TestCricketDataset:
     def test_age_numeric_handling(self, engine, cricket_data):
         """Age column should get appropriate numeric handling."""
         result = engine.evaluate(cricket_data['age'], 'age')
-        valid_actions = ['standard_scale', 'minmax_scale', 'robust_scale', 'keep_as_is']
+        valid_actions = ['standard_scale', 'minmax_scale', 'robust_scale', 'keep_as_is', 'log1p_transform']
         assert result.action.value in valid_actions, \
             f"age got {result.action.value}, expected one of {valid_actions}"
     

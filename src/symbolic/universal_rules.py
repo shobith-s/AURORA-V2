@@ -214,7 +214,8 @@ def _needs_safe_log(stats: Dict[str, Any]) -> bool:
         return False
     
     # High positive skewness AND non-negative values
-    if skewness > 1.5:
+    # Threshold of 1.0 to catch moderately skewed data
+    if skewness > 1.0:
         # If min is >= 0 (non-negative), log1p is safe
         if min_value is not None and min_value >= 0:
             return True
