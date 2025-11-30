@@ -497,7 +497,7 @@ class PreprocessingExecutor:
             return result.map(lambda x: 1 if x in true_vals else (0 if x in false_vals else np.nan))
         
         elif action == PreprocessingAction.PARSE_DATETIME:
-            return pd.to_datetime(column, errors='coerce', infer_datetime_format=True)
+            return pd.to_datetime(column, errors='coerce')
         
         elif action == PreprocessingAction.PARSE_CATEGORICAL:
             # Convert to pandas categorical type
