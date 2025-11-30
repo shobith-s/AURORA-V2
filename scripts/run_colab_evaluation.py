@@ -117,13 +117,14 @@ def safe_fillna_categorical(series: pd.Series, fill_value: str = 'missing') -> p
         fill_value: Value to use for filling NAs
     
     Returns:
-        Series with NAs filled
+        Series with NAs filled (does not modify the original series)
     """
-    if series.dtype.name == 'category':
+    result = series.copy()
+    if result.dtype.name == 'category':
         # Add fill_value to categories if not present
-        if fill_value not in series.cat.categories:
-            series = series.cat.add_categories([fill_value])
-    return series.fillna(fill_value)
+        if fill_value not in result.cat.categories:
+            result = result.cat.add_categories([fill_value])
+    return result.fillna(fill_value)
 
 
 def is_colab() -> bool:
