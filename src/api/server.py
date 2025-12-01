@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 import pandas as pd
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 import logging
 import os
 
@@ -27,8 +27,7 @@ from .schemas import (
     BatchPreprocessResponse,
     ExecutePipelineRequest,
     ExecutePipelineResponse,
-    AlternativeAction,
-    CacheStatsResponse
+    AlternativeAction
 )
 from ..core.preprocessor import IntelligentPreprocessor, get_preprocessor
 from ..utils.monitor import get_monitor

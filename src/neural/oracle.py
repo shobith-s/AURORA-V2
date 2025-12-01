@@ -25,14 +25,13 @@ from dataclasses import dataclass
 
 try:
     import xgboost as xgb
-    from lightgbm import LGBMClassifier
     from sklearn.ensemble import VotingClassifier
     ENSEMBLE_AVAILABLE = True
 except ImportError:
     xgb = None
     ENSEMBLE_AVAILABLE = False
 
-from ..core.actions import PreprocessingAction, PreprocessingResult
+from ..core.actions import PreprocessingAction
 from ..features.minimal_extractor import MinimalFeatures
 
 

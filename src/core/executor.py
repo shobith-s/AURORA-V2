@@ -13,10 +13,9 @@ from typing import Any, Dict, Optional, Union, Tuple
 from scipy import stats
 from sklearn.preprocessing import (
     StandardScaler, MinMaxScaler, RobustScaler, MaxAbsScaler,
-    QuantileTransformer, PowerTransformer, LabelEncoder, OrdinalEncoder,
-    OneHotEncoder
+    QuantileTransformer, PowerTransformer, LabelEncoder, OrdinalEncoder
 )
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 import hashlib
 

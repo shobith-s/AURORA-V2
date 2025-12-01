@@ -11,7 +11,7 @@ from numbers import Number
 from typing import Any, Dict, Optional, List
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+
 
 from ..database.connection import SessionLocal, init_db
 from ..database.models import CorrectionRecord, LearnedRule

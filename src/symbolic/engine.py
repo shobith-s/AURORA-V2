@@ -3,7 +3,7 @@ Symbolic Engine - Core rule-based preprocessing decision engine.
 Handles 80% of preprocessing decisions with deterministic rules.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
@@ -11,7 +11,7 @@ import re
 from datetime import datetime
 import json
 
-from .rules import get_all_rules, Rule, RuleCategory
+from .rules import get_all_rules, Rule
 from ..core.actions import PreprocessingAction, PreprocessingResult
 
 # Enhancement Constants
