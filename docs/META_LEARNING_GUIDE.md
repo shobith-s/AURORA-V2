@@ -384,8 +384,8 @@ logging.basicConfig(level=logging.DEBUG)
 ### Running Benchmarks
 
 ```bash
-# Full benchmark
-python benchmark_aurora.py
+# Full comprehensive benchmark
+python benchmark_comprehensive.py
 
 # Quick validation
 python scripts/validate_against_ground_truth.py

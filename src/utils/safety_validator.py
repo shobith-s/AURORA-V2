@@ -6,7 +6,7 @@ preventing crashes from operations like scaling text or parsing numeric years as
 """
 
 import pandas as pd
-import numpy as np
+
 from typing import Tuple
 
 
