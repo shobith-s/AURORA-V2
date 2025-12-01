@@ -23,6 +23,7 @@ class PreprocessingAction(Enum):
     """All available preprocessing actions."""
 
     # Data Quality Actions
+    KEEP_AS_IS = "keep_as_is"
     DROP_COLUMN = "drop_column"
     DROP_IF_MOSTLY_NULL = "drop_if_mostly_null"
     DROP_IF_CONSTANT = "drop_if_constant"
@@ -91,9 +92,14 @@ class PreprocessingAction(Enum):
     TEXT_LOWERCASE = "text_lowercase"
     TEXT_UPPERCASE = "text_uppercase"
     TEXT_CLEAN = "text_clean"
+    TEXT_VECTORIZE_TFIDF = "text_vectorize_tfidf"
+    
+    # Geospatial Actions
+    GEO_CLUSTER_KMEANS = "geo_cluster_kmeans"
+    
+    # Time Series Actions
+    CYCLIC_TIME_ENCODE = "cyclic_time_encode"
 
-    # No Action
-    KEEP_AS_IS = "keep_as_is"
 
 
 @dataclass
@@ -235,6 +241,38 @@ ACTION_REGISTRY: Dict[PreprocessingAction, ActionMetadata] = {
         reversible=False,
         preserves_nulls=True
     ),
+
+    PreprocessingAction.CYCLIC_TIME_ENCODE: ActionMetadata(
+        action=PreprocessingAction.CYCLIC_TIME_ENCODE,
+        category=ActionCategory.FEATURE_ENGINEERING,
+        description="Encode cyclic time features (hour, day, month) using sin/cos transformations",
+        requirements=["temporal"],
+        parameters={},
+        reversible=True,
+        preserves_nulls=True
+    ),
+
+    # Text Actions
+    PreprocessingAction.TEXT_VECTORIZE_TFIDF: ActionMetadata(
+        action=PreprocessingAction.TEXT_VECTORIZE_TFIDF,
+        category=ActionCategory.FEATURE_ENGINEERING,
+        description="Convert text to TF-IDF vectors",
+        requirements=["text"],
+        parameters={"max_features": 100},
+        reversible=False,
+        preserves_nulls=False
+    ),
+
+    # Geospatial Actions
+    PreprocessingAction.GEO_CLUSTER_KMEANS: ActionMetadata(
+        action=PreprocessingAction.GEO_CLUSTER_KMEANS,
+        category=ActionCategory.FEATURE_ENGINEERING,
+        description="Cluster geospatial coordinates into regions",
+        requirements=["numeric", "coordinate"],
+        parameters={"n_clusters": 10},
+        reversible=False,
+        preserves_nulls=True
+    ),
 }
 
 
@@ -251,10 +289,15 @@ class PreprocessingResult:
     decision_id: Optional[str] = None
     warning: Optional[str] = None  # Warning message for low confidence
     require_manual_review: bool = False  # Whether manual review is strongly recommended
+    
+    # Validation fields (NEW)
+    validation_score: Optional[float] = None  # Overall validation score (0.0-1.0)
+    validation_passed: Optional[bool] = None  # Whether validation passed
+    validation_details: Optional[Dict[str, Any]] = None  # Detailed validation metrics
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert result to dictionary."""
-        return {
+        result_dict = {
             "action": self.action.value,
             "confidence": self.confidence,
             "source": self.source,
@@ -265,6 +308,16 @@ class PreprocessingResult:
             "warning": self.warning,
             "require_manual_review": self.require_manual_review
         }
+        
+        # Add validation fields if present
+        if self.validation_score is not None:
+            result_dict["validation_score"] = self.validation_score
+        if self.validation_passed is not None:
+            result_dict["validation_passed"] = self.validation_passed
+        if self.validation_details is not None:
+            result_dict["validation_details"] = self.validation_details
+        
+        return result_dict
 
 
 def get_action_metadata(action: PreprocessingAction) -> ActionMetadata:

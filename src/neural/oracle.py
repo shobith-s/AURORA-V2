@@ -1,19 +1,36 @@
 """
-NeuralOracle - Lightweight ML model for ambiguous preprocessing decisions.
-Only used when symbolic engine confidence < 0.9.
-XGBoost with 50 trees, <5MB model size, <5ms inference.
+NeuralOracle - Pre-trained ensemble for ambiguous preprocessing decisions.
+
+INFERENCE ONLY - This module loads and uses a pre-trained ensemble model.
+NO training occurs during runtime.
+
+Model Details:
+- Architecture: XGBoost + LightGBM ensemble (VotingClassifier, soft voting)
+- Accuracy: 89.4% on test data
+- Trained: November 2025 on 40 diverse OpenML datasets
+- Model File: models/neural_oracle_v2_improved_20251129_150244.pkl
+- Use Case: Handles cases where symbolic engine confidence < 0.75
+
+Training:
+- To retrain the model, use: validator/scripts/train_neural_oracle_v2.py
+- Training should be done offline, not in production
 """
 
 from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
+import pandas as pd
 import pickle
 from pathlib import Path
 from dataclasses import dataclass
 
 try:
     import xgboost as xgb
+    from lightgbm import LGBMClassifier
+    from sklearn.ensemble import VotingClassifier
+    ENSEMBLE_AVAILABLE = True
 except ImportError:
     xgb = None
+    ENSEMBLE_AVAILABLE = False
 
 from ..core.actions import PreprocessingAction, PreprocessingResult
 from ..features.minimal_extractor import MinimalFeatures
@@ -30,35 +47,54 @@ class OraclePrediction:
 
 class NeuralOracle:
     """
-    Lightweight neural preprocessing oracle for edge cases.
+    Pre-trained ensemble oracle for ambiguous preprocessing decisions.
 
-    Uses XGBoost with 50 trees, trained only on ambiguous cases.
-    Designed for <5ms inference time and <5MB model size.
+    INFERENCE ONLY - Uses pre-trained XGBoost + LightGBM ensemble (89.4% accuracy).
+    No training occurs during runtime.
+    Designed for <5ms inference time.
     """
 
     def __init__(self, model_path: Optional[Path] = None):
         """
         Initialize the NeuralOracle.
+        
+        INFERENCE ONLY - Loads pre-trained model (single XGBoost or ensemble).
+        NO training happens during runtime.
 
         Args:
-            model_path: Path to pre-trained model file (optional)
+            model_path: Path to pre-trained model file
         """
         if xgb is None:
             raise ImportError(
                 "XGBoost is required for NeuralOracle. "
-                "Install with: pip install xgboost"
+                "Install with: pip install xgboost lightgbm"
             )
 
-        self.model: Optional[xgb.Booster] = None
-        self.action_encoder: Dict[int, PreprocessingAction] = {}
-        self.action_decoder: Dict[PreprocessingAction, int] = {}
+        self.model = None  # Will be sklearn VotingClassifier or xgb.Booster
+        self.action_encoder = {}
+        self.action_decoder = {}
         self.feature_names = [
-            'null_percentage', 'unique_ratio', 'skewness', 'outlier_percentage',
-            'entropy', 'pattern_complexity', 'multimodality_score',
-            'cardinality_bucket', 'detected_dtype', 'column_name_signal'
+            'null_ratio', 'unique_ratio', 'numeric_ratio',
+            'mean_length', 'std_length', 'has_special_chars',
+            'has_mixed_types', 'cardinality', 'entropy',
+            'is_sequential', 'date_ratio', 'email_ratio',
+            'url_ratio', 'phone_ratio', 'outlier_ratio',
+            'skewness', 'kurtosis', 'cv', 'iqr_ratio', 'range_ratio'
         ]
 
-        if model_path and model_path.exists():
+        # Try to load pre-trained ensemble model by default
+        if model_path is None:
+            # First try the new ensemble model
+            ensemble_path = Path(__file__).parent.parent.parent / "models" / "neural_oracle_v2_improved_20251129_150244.pkl"
+            if ensemble_path.exists():
+                model_path = ensemble_path
+            else:
+                # Fallback to old model if ensemble not found
+                default_path = Path(__file__).parent.parent.parent / "models" / "neural_oracle_v1.pkl"
+                if default_path.exists():
+                    model_path = default_path
+        
+        if model_path is not None and Path(model_path).exists():
             self.load(model_path)
 
     def train(
@@ -68,80 +104,18 @@ class NeuralOracle:
         validation_split: float = 0.2
     ) -> Dict[str, Any]:
         """
-        Train the NeuralOracle on edge cases.
+        ⚠️ DEPRECATED: Training should be done offline using validator scripts.
 
-        Args:
-            features: List of minimal features
-            labels: List of correct preprocessing actions
-            validation_split: Fraction of data for validation
+        This method is kept for backwards compatibility but should NOT be used
+        in production. Use validator/scripts/train_neural_oracle_v2.py instead.
 
-        Returns:
-            Training metrics
+        Raises:
+            RuntimeError: Always raises to prevent accidental training
         """
-        # Convert features to numpy array
-        X = np.vstack([f.to_array() for f in features])
-
-        # Encode labels
-        unique_actions = sorted(set(labels), key=lambda a: a.value)
-        self.action_encoder = {i: action for i, action in enumerate(unique_actions)}
-        self.action_decoder = {action: i for i, action in enumerate(unique_actions)}
-        y = np.array([self.action_decoder[label] for label in labels])
-
-        # Split data
-        n_samples = len(X)
-        n_val = int(n_samples * validation_split)
-        indices = np.random.permutation(n_samples)
-
-        X_train, X_val = X[indices[n_val:]], X[indices[:n_val]]
-        y_train, y_val = y[indices[n_val:]], y[indices[:n_val]]
-
-        # Create DMatrix for XGBoost
-        dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=self.feature_names)
-        dval = xgb.DMatrix(X_val, label=y_val, feature_names=self.feature_names)
-
-        # Training parameters (optimized for speed and size)
-        params = {
-            'objective': 'multi:softprob',
-            'num_class': len(unique_actions),
-            'max_depth': 6,
-            'eta': 0.1,
-            'subsample': 0.8,
-            'colsample_bytree': 0.8,
-            'min_child_weight': 1,
-            'tree_method': 'hist',  # Faster training
-            'eval_metric': 'mlogloss',
-            'seed': 42
-        }
-
-        # Train with early stopping
-        evals = [(dtrain, 'train'), (dval, 'val')]
-        evals_result = {}
-
-        self.model = xgb.train(
-            params,
-            dtrain,
-            num_boost_round=50,  # Lightweight: only 50 trees
-            evals=evals,
-            early_stopping_rounds=10,
-            verbose_eval=False,
-            evals_result=evals_result
+        raise RuntimeError(
+            "On-the-fly training is disabled. Use pre-trained ensemble model.\n"
+            "To retrain, use: python validator/scripts/train_neural_oracle_v2.py"
         )
-
-        # Compute metrics
-        train_pred = self.model.predict(dtrain)
-        val_pred = self.model.predict(dval)
-
-        train_acc = np.mean(np.argmax(train_pred, axis=1) == y_train)
-        val_acc = np.mean(np.argmax(val_pred, axis=1) == y_val)
-
-        return {
-            'train_accuracy': float(train_acc),
-            'val_accuracy': float(val_acc),
-            'num_samples': n_samples,
-            'num_features': X.shape[1],
-            'num_classes': len(unique_actions),
-            'num_trees': self.model.num_boosted_rounds()
-        }
 
     def predict(
         self,
@@ -150,7 +124,13 @@ class NeuralOracle:
         return_feature_importance: bool = False
     ) -> OraclePrediction:
         """
-        Predict preprocessing action for edge case.
+        Predict using PRE-TRAINED model (inference only).
+
+        Works with both:
+        - Pre-trained ensemble (VotingClassifier with XGBoost + LightGBM)
+        - Pre-trained single XGBoost (backwards compatibility)
+
+        NO TRAINING occurs in this method.
 
         Args:
             features: Minimal features extracted from column
@@ -161,18 +141,89 @@ class NeuralOracle:
             OraclePrediction with action and confidence
         """
         if self.model is None:
-            raise ValueError("Model not trained or loaded. Call train() or load() first.")
+            raise ValueError("No pre-trained model loaded. Cannot make predictions.")
 
-        # Convert features to DMatrix
+        # Convert features to array
         X = features.to_array().reshape(1, -1)
-        dmatrix = xgb.DMatrix(X, feature_names=self.feature_names)
+        
+        # Check if model is sklearn or XGBoost
+        is_sklearn = hasattr(self.model, 'predict_proba')
+        
+        if is_sklearn:
+            # Sklearn model (VotingClassifier, etc.)
+            # Get feature names from model if available to avoid warnings
+            if hasattr(self.model, 'feature_names_in_'):
+                feature_names = list(self.model.feature_names_in_)
+            else:
+                # Fallback to generic column names matching model training
+                feature_names = [f'Column_{i}' for i in range(X.shape[1])]
+            
+            # Convert to DataFrame with proper feature names to match training
+            X_df = pd.DataFrame(X, columns=feature_names)
+            probs = self.model.predict_proba(X_df)[0]
+        else:
+            # XGBoost model
+            dmatrix = xgb.DMatrix(X, feature_names=self.feature_names)
+            probs = self.model.predict(dmatrix)[0]
 
-        # Predict probabilities
-        probs = self.model.predict(dmatrix)[0]
+        # Map v2 model actions to system PreprocessingAction enums.
+        # These mappings cover:
+        # 1. V2 model class labels (from the trained ensemble)
+        # 2. Semantic aliases (e.g., 'retain_column' -> KEEP_AS_IS)
+        # 3. Legacy model class labels for backwards compatibility
+        mapping = {
+            # V2 model class labels (from model.classes_)
+            'drop_column': PreprocessingAction.DROP_COLUMN,
+            'encode_categorical': PreprocessingAction.LABEL_ENCODE,
+            'keep_as_is': PreprocessingAction.KEEP_AS_IS,
+            'log_transform': PreprocessingAction.LOG_TRANSFORM,
+            'onehot_encode': PreprocessingAction.ONEHOT_ENCODE,
+            'parse_boolean': PreprocessingAction.PARSE_BOOLEAN,
+            'parse_datetime': PreprocessingAction.PARSE_DATETIME,
+            'retain_column': PreprocessingAction.KEEP_AS_IS,
+            'scale': PreprocessingAction.STANDARD_SCALE,
+            'scale_or_normalize': PreprocessingAction.STANDARD_SCALE,
+            'standard_scale': PreprocessingAction.STANDARD_SCALE,
+            # Legacy mappings for backwards compatibility
+            'drop': PreprocessingAction.DROP_COLUMN,
+            'fill_zero': PreprocessingAction.FILL_NULL_MODE,
+            'fill_forward': PreprocessingAction.FILL_NULL_FORWARD,
+            'fill_backward': PreprocessingAction.FILL_NULL_BACKWARD,
+            'fill_mean': PreprocessingAction.FILL_NULL_MEAN,
+            'fill_median': PreprocessingAction.FILL_NULL_MEDIAN,
+            'fill_mode': PreprocessingAction.FILL_NULL_MODE,
+            'minmax_scale': PreprocessingAction.MINMAX_SCALE,
+            'robust_scale': PreprocessingAction.ROBUST_SCALE,
+            'label_encode': PreprocessingAction.LABEL_ENCODE,
+            'ordinal_encode': PreprocessingAction.ORDINAL_ENCODE,
+        }
 
         # Get top prediction
         top_idx = int(np.argmax(probs))
         top_action = self.action_encoder[top_idx]
+        
+        # Ensure action is an Enum (handle string actions from loaded models)
+        if isinstance(top_action, str):
+            # 1. Try direct mapping for known mismatches
+            
+            if top_action in mapping:
+                top_action = mapping[top_action]
+            else:
+                # 2. Try exact value match
+                found = False
+                for action_enum in PreprocessingAction:
+                    if action_enum.value == top_action:
+                        top_action = action_enum
+                        found = True
+                        break
+                
+                # 3. Fallback to KEEP_AS_IS if unknown
+                if not found:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Unknown action '{top_action}' from model. Defaulting to KEEP_AS_IS.")
+                    top_action = PreprocessingAction.KEEP_AS_IS
+
         confidence = float(probs[top_idx])
 
         # Get probabilities for all actions
@@ -180,11 +231,26 @@ class NeuralOracle:
         if return_probabilities:
             for idx, prob in enumerate(probs):
                 if idx in self.action_encoder:
-                    action_probs[self.action_encoder[idx]] = float(prob)
+                    action_name = self.action_encoder[idx]
+                    
+                    # Apply same mapping logic
+                    if isinstance(action_name, str):
+                        if action_name in mapping:
+                            action_enum = mapping[action_name]
+                            action_probs[action_enum] = float(prob)
+                        else:
+                            # Try exact match
+                            for ae in PreprocessingAction:
+                                if ae.value == action_name:
+                                    action_probs[ae] = float(prob)
+                                    break
+                    else:
+                        # Already an Enum (if model was saved correctly)
+                        action_probs[action_name] = float(prob)
 
-        # Get feature importance
+        # Get feature importance (only for XGBoost)
         feature_importance = None
-        if return_feature_importance:
+        if return_feature_importance and not is_sklearn:
             importance_dict = self.model.get_score(importance_type='gain')
             feature_importance = {
                 name: importance_dict.get(name, 0.0)
@@ -357,7 +423,11 @@ class NeuralOracle:
 
     def load(self, path: Path):
         """
-        Load model from disk.
+        Load pre-trained model from disk.
+        
+        Supports both:
+        - Ensemble models (VotingClassifier saved directly)
+        - Legacy models (dictionary with model, encoders, feature_names)
 
         Args:
             path: Path to the saved model
@@ -367,12 +437,23 @@ class NeuralOracle:
             raise FileNotFoundError(f"Model file not found: {path}")
 
         with open(path, 'rb') as f:
-            save_dict = pickle.load(f)
+            loaded = pickle.load(f)
 
-        self.model = save_dict['model']
-        self.action_encoder = save_dict['action_encoder']
-        self.action_decoder = save_dict['action_decoder']
-        self.feature_names = save_dict['feature_names']
+        # Check if it's a direct sklearn model (ensemble) or a dictionary (legacy)
+        if isinstance(loaded, dict):
+            # Legacy format: dictionary with model and encoders
+            self.model = loaded['model']
+            self.action_encoder = loaded['action_encoder']
+            self.action_decoder = loaded['action_decoder']
+            self.feature_names = loaded.get('feature_names', self.feature_names)
+        else:
+            # Ensemble format: direct VotingClassifier or sklearn model
+            self.model = loaded
+            # Build action encoder/decoder from model's classes
+            if hasattr(loaded, 'classes_'):
+                classes = loaded.classes_
+                self.action_encoder = {i: cls for i, cls in enumerate(classes)}
+                self.action_decoder = {cls: i for i, cls in enumerate(classes)}
 
     def get_model_size(self) -> int:
         """
@@ -515,11 +596,28 @@ _oracle_instance: Optional[NeuralOracle] = None
 
 
 def get_neural_oracle(model_path: Optional[Path] = None) -> NeuralOracle:
-    """Get the global NeuralOracle instance."""
+    """
+    Get the global NeuralOracle instance with pre-trained model.
+
+    INFERENCE ONLY - Loads pre-trained ensemble (89.4% accuracy).
+    NO training occurs at runtime.
+
+    Priority:
+    1. Ensemble model (neural_oracle_v2_improved_20251129_150244.pkl) - 89.4% accuracy
+    2. Fallback to neural_oracle_v1.pkl if ensemble not found
+    """
     global _oracle_instance
     if _oracle_instance is None:
-        default_path = Path(__file__).parent.parent.parent / "models" / "neural_oracle_v1.pkl"
-        if model_path is None and default_path.exists():
-            model_path = default_path
+        if model_path is None:
+            # Try ensemble first
+            ensemble_path = Path(__file__).parent.parent.parent / "models" / "neural_oracle_v2_improved_20251129_150244.pkl"
+            if ensemble_path.exists():
+                model_path = ensemble_path
+            else:
+                # Fallback to old model
+                fallback_path = Path(__file__).parent.parent.parent / "models" / "neural_oracle_v1.pkl"
+                if fallback_path.exists():
+                    model_path = fallback_path
+
         _oracle_instance = NeuralOracle(model_path)
     return _oracle_instance

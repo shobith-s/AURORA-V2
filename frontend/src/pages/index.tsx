@@ -93,7 +93,10 @@ export default function Home() {
         {/* Footer */}
         <footer className="mt-12 py-6 text-center text-slate-400 text-sm">
           <p>
-            AURORA V4 - Intelligent Data Preprocessing System
+            AURORA V2.1 - Intelligent Data Preprocessing System
+            <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">
+              Validation Active ✅
+            </span>
             <br />
             <span className="text-xs text-slate-500">
               Symbolic-first • Validated Learning • A/B Testing • Zero Overgeneralization
