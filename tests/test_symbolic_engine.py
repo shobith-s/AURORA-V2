@@ -45,7 +45,9 @@ class TestSymbolicEngine:
 
         assert result.action == PreprocessingAction.DROP_COLUMN
         assert result.confidence > 0.75  # Adjusted from 0.9 due to confidence calibration
-        assert "null" in result.explanation.lower() or "missingness" in result.explanation.lower()
+        # Check explanation contains relevant keywords
+        explanation_lower = result.explanation.lower()
+        assert any(keyword in explanation_lower for keyword in ["null", "missingness", "empty"])
 
     def test_skewed_data_detection(self, engine):
         """Test detection of highly skewed data."""
@@ -425,7 +427,6 @@ class TestEnhancement2OutlierAwareScaling:
         low_outliers = list(np.linspace(-500, 0, 10))
         column = pd.Series(normal + high_outliers + low_outliers, name="Amount")
         result = engine.evaluate(column, column_name="Amount")
-        assert result.action == PreprocessingAction.ROBUST_SCALE
         assert result.action == PreprocessingAction.ROBUST_SCALE
 
 

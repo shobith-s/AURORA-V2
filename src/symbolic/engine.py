@@ -14,6 +14,13 @@ import json
 from .rules import get_all_rules, Rule, RuleCategory
 from ..core.actions import PreprocessingAction, PreprocessingResult
 
+# Enhancement Constants
+LOW_CARDINALITY_THRESHOLD = 3  # Max unique values for binary/ternary categorical
+MULTI_VALUE_DELIMITERS = r'[,;|/\t]'  # Delimiters indicating multi-value categories
+OUTLIER_IQR_MULTIPLIER = 3  # IQR multiplier for outlier detection
+OUTLIER_MIN_PERCENTAGE = 0.01  # Minimum outlier percentage to trigger robust scaling (1%)
+HIGH_SKEWNESS_THRESHOLD = 1.5  # Skewness threshold for highly skewed data
+
 
 @dataclass
 class ColumnStatistics:
@@ -450,21 +457,37 @@ class SymbolicEngine:
         column: pd.Series,
         column_name: str = "",
         target_available: bool = False,
-        context: Optional[Dict[str, Any]] = None,  # NEW: Context argument
-        target_column: str = ""  # NEW: Target column name for protection
+        context: Optional[Dict[str, Any]] = None,
+        target_column: str = ""
     ) -> PreprocessingResult:
         """
         Evaluate column and return preprocessing recommendation.
 
+        This method applies three priority enhancements before standard rule evaluation:
+        1. Target Variable Protection: If column matches target_column, returns KEEP_AS_IS
+        2. Binary/Low-Cardinality Categorical: Detects clean 2-3 value categories for LABEL_ENCODE
+        3. Outlier-Aware Scaling: Uses ROBUST_SCALE when outliers are detected in non-skewed data
+
         Args:
-            column: The column data
-            column_name: Name of the column
-            target_available: Whether target variable is available
-            context: Optional context from DatasetAnalyzer
-            target_column: Name of the target variable (if specified)
+            column: The column data (pandas Series)
+            column_name: Name of the column for pattern matching
+            target_available: Whether target variable is available for supervised learning
+            context: Optional context from DatasetAnalyzer (e.g., correlations)
+            target_column: Name of the target variable. If specified and matches
+                          column_name, the column is protected from preprocessing.
 
         Returns:
             PreprocessingResult with action, confidence, and explanation
+
+        Examples:
+            >>> engine = SymbolicEngine()
+            >>> # Protect target variable
+            >>> result = engine.evaluate(df['price'], column_name='price', target_column='price')
+            >>> result.action  # KEEP_AS_IS with 0.99 confidence
+            
+            >>> # Binary categorical detection
+            >>> result = engine.evaluate(pd.Series(['Yes', 'No'] * 50))
+            >>> result.action  # LABEL_ENCODE with 0.95 confidence
         """
         # PRIORITY CHECK: Never preprocess target variable (Enhancement #3)
         if target_column and column_name:
@@ -485,12 +508,12 @@ class SymbolicEngine:
         stats_dict = stats.to_dict()
         
         # Enhancement #1: Binary/Low-Cardinality Categorical Detection
-        # Rule: If unique_count <= 3 AND dtype is object AND no delimiters found
+        # Rule: If unique_count <= LOW_CARDINALITY_THRESHOLD AND dtype is object AND no delimiters found
         #       THEN label_encode with high confidence
-        if stats.unique_count <= 3 and not stats.is_numeric and stats.dtype in ['object', 'string']:
-            # Check for clean categorical (no delimiters like ',', ';', '|', '/')
+        if stats.unique_count <= LOW_CARDINALITY_THRESHOLD and not stats.is_numeric and stats.dtype in ['object', 'string']:
+            # Check for clean categorical (no multi-value delimiters)
             sample_values = column.dropna().astype(str).head(100)
-            has_delimiters = sample_values.str.contains(r'[,;|/]', regex=True).any()
+            has_delimiters = sample_values.str.contains(MULTI_VALUE_DELIMITERS, regex=True).any()
             
             if not has_delimiters and stats.unique_count >= 2:
                 return PreprocessingResult(
@@ -504,33 +527,33 @@ class SymbolicEngine:
                 )
         
         # Enhancement #2: Outlier-Aware Numeric Scaling
-        # Rule: If numeric AND not highly skewed BUT has outliers (>3 IQR)
+        # Rule: If numeric AND not highly skewed BUT has outliers (beyond OUTLIER_IQR_MULTIPLIER * IQR)
         #       THEN robust_scale instead of standard_scale
         if stats.is_numeric and stats.skewness is not None and stats.iqr is not None:
-            is_highly_skewed = abs(stats.skewness) > 1.5
+            is_highly_skewed = abs(stats.skewness) > HIGH_SKEWNESS_THRESHOLD
             
             if not is_highly_skewed and stats.iqr > 0:
-                # Detect outliers using 3 IQR method (industry standard)
+                # Detect outliers using IQR method (industry standard)
                 q1 = column.dropna().quantile(0.25)
                 q3 = column.dropna().quantile(0.75)
                 iqr = q3 - q1
                 
                 if iqr > 0:
-                    # Define outlier bounds (values beyond 3 IQR are outliers)
-                    lower_bound = q1 - 3 * iqr
-                    upper_bound = q3 + 3 * iqr
+                    # Define outlier bounds (values beyond OUTLIER_IQR_MULTIPLIER * IQR)
+                    lower_bound = q1 - OUTLIER_IQR_MULTIPLIER * iqr
+                    upper_bound = q3 + OUTLIER_IQR_MULTIPLIER * iqr
                     
                     non_null = column.dropna()
                     outlier_count = ((non_null < lower_bound) | (non_null > upper_bound)).sum()
                     outlier_pct = outlier_count / len(non_null) if len(non_null) > 0 else 0
                     
-                    # If outliers exist and affect >1% of data, use robust scaling
-                    if outlier_pct > 0.01:
+                    # If outliers affect more than OUTLIER_MIN_PERCENTAGE, use robust scaling
+                    if outlier_pct > OUTLIER_MIN_PERCENTAGE:
                         return PreprocessingResult(
                             action=PreprocessingAction.ROBUST_SCALE,
                             confidence=0.90,
                             source="symbolic",
-                            explanation=f"Outliers detected ({outlier_pct:.1%} of data beyond 3 IQR), using robust scaling",
+                            explanation=f"Outliers detected ({outlier_pct:.1%} of data beyond {OUTLIER_IQR_MULTIPLIER} IQR), using robust scaling",
                             alternatives=[],
                             parameters={},
                             context=stats_dict
