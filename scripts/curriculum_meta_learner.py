@@ -54,8 +54,13 @@ from sklearn.metrics import accuracy_score
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# Suppress warnings for cleaner output
-warnings.filterwarnings('ignore')
+# Suppress specific warnings for cleaner training output
+# - ConvergenceWarning: LogisticRegression may not converge on small datasets (expected)
+# - FutureWarning: Pandas/sklearn deprecation warnings (not actionable during training)
+# - UserWarning: sklearn feature name warnings (expected with numeric arrays)
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', message='.*ConvergenceWarning.*')
+warnings.filterwarnings('ignore', message='.*X does not have valid feature names.*')
 
 # Configure logging
 logging.basicConfig(

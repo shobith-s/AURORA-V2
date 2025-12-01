@@ -49,6 +49,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# Module-level constant for action mappings (performance optimization)
+ACTION_MAPPINGS = {
+    'scale': 'standard_scale',
+    'scale_or_normalize': 'standard_scale',
+    'encode_categorical': 'label_encode',
+    'retain_column': 'keep_as_is',
+}
+
+
 def validate_model_compatibility(
     model: Any,
     feature_names: Optional[List[str]] = None,
@@ -104,14 +113,8 @@ def validate_model_compatibility(
         invalid_classes = []
         for cls in model_classes:
             if cls not in valid_actions:
-                # Check common mappings
-                mappings = {
-                    'scale': 'standard_scale',
-                    'scale_or_normalize': 'standard_scale',
-                    'encode_categorical': 'label_encode',
-                    'retain_column': 'keep_as_is',
-                }
-                if cls not in mappings and cls not in valid_actions:
+                # Use module-level constant for common mappings
+                if cls not in ACTION_MAPPINGS and cls not in valid_actions:
                     invalid_classes.append(cls)
         
         if not invalid_classes:
@@ -380,11 +383,24 @@ def compare_with_current(
         'is_better': False,
     }
     
-    # Default current model path
+    # Default current model path - find latest model in models directory
     if current_model_path is None:
-        current_model_path = str(
-            project_root / 'models' / 'neural_oracle_v2_improved_20251129_150244.pkl'
-        )
+        models_dir = project_root / 'models'
+        if models_dir.exists():
+            # Find the latest neural_oracle model file
+            model_files = sorted(
+                models_dir.glob('neural_oracle*.pkl'),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True
+            )
+            if model_files:
+                current_model_path = str(model_files[0])
+            else:
+                comparison['current_model']['error'] = 'No model files found in models/'
+                return comparison
+        else:
+            comparison['current_model']['error'] = 'Models directory not found'
+            return comparison
     
     # Create test data if not provided
     if test_df is None:
