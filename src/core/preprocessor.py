@@ -13,6 +13,7 @@ import time
 from ..symbolic.engine import SymbolicEngine
 from ..neural.oracle import NeuralOracle, get_neural_oracle
 from ..features.minimal_extractor import MinimalFeatureExtractor, get_feature_extractor
+from ..utils.safety_validator import SafetyValidator
 from .actions import PreprocessingAction, PreprocessingResult
 from .explainer import get_explainer
 # DISABLED: DatasetAnalyzer not used (results ignored)
