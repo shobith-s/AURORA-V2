@@ -206,7 +206,8 @@ class HybridPreprocessingOracle:
             Tuple of (action, confidence, reason) or (None, 0.0, "") if no rule applies
         """
         # Rule 1: Constant columns → drop_column
-        if features.unique_ratio < 0.001 and features.has_variance == 0.0:
+        # If has no variance and very low unique ratio, it's constant
+        if features.has_variance == 0.0 and features.std == 0.0:
             return PreprocessingAction.DROP_COLUMN, 0.95, "Constant column with no variance"
         
         # Rule 2: ID-like columns → drop_column
