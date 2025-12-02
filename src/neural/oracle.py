@@ -69,7 +69,7 @@ class NeuralOracle:
                 "Install with: pip install xgboost lightgbm"
             )
 
-        self.model = None  # Will be sklearn VotingClassifier or xgb.Booster
+        self.model = None  # Will be sklearn VotingClassifier or xgb.Booster or HybridPreprocessingOracle
         self.action_encoder = {}
         self.action_decoder = {}
         self.feature_names = [
@@ -80,16 +80,41 @@ class NeuralOracle:
             'url_ratio', 'phone_ratio', 'outlier_ratio',
             'skewness', 'kurtosis', 'cv', 'iqr_ratio', 'range_ratio'
         ]
+        
+        # Hybrid model attributes
+        self.is_hybrid = False
+        self.xgb_model = None
+        self.lgb_model = None
+        self.label_encoder = None
+        self.feature_extractor = None
+        self.config = {}
+        self.metadata = {}
+        self.removed_classes = []
 
-        # Try to load pre-trained ensemble model by default
+        # Try to load pre-trained model by default
         if model_path is None:
-            # First try the new ensemble model
-            ensemble_path = Path(__file__).parent.parent.parent / "models" / "neural_oracle_v2_improved_20251129_150244.pkl"
-            if ensemble_path.exists():
-                model_path = ensemble_path
-            else:
-                # Fallback to old model if ensemble not found
-                default_path = Path(__file__).parent.parent.parent / "models" / "neural_oracle_v1.pkl"
+            models_dir = Path(__file__).parent.parent.parent / "models"
+            
+            # Priority order:
+            # 1. New hybrid model (aurora_preprocessing_oracle_*.pkl)
+            # 2. Ensemble model (neural_oracle_v2_improved_*.pkl)
+            # 3. Old model (neural_oracle_v1.pkl)
+            
+            # Look for hybrid model
+            if models_dir.exists():
+                hybrid_models = sorted(models_dir.glob("aurora_preprocessing_oracle_*.pkl"), reverse=True)
+                if hybrid_models:
+                    model_path = hybrid_models[0]  # Use most recent
+            
+            # Fallback to ensemble model
+            if model_path is None:
+                ensemble_path = models_dir / "neural_oracle_v2_improved_20251129_150244.pkl"
+                if ensemble_path.exists():
+                    model_path = ensemble_path
+            
+            # Fallback to old model
+            if model_path is None:
+                default_path = models_dir / "neural_oracle_v1.pkl"
                 if default_path.exists():
                     model_path = default_path
         
@@ -125,7 +150,8 @@ class NeuralOracle:
         """
         Predict using PRE-TRAINED model (inference only).
 
-        Works with both:
+        Works with:
+        - Hybrid model (new format with ML + rules)
         - Pre-trained ensemble (VotingClassifier with XGBoost + LightGBM)
         - Pre-trained single XGBoost (backwards compatibility)
 
@@ -139,8 +165,12 @@ class NeuralOracle:
         Returns:
             OraclePrediction with action and confidence
         """
-        if self.model is None:
+        if self.model is None and not self.is_hybrid:
             raise ValueError("No pre-trained model loaded. Cannot make predictions.")
+        
+        # Handle hybrid model prediction
+        if self.is_hybrid:
+            return self._predict_hybrid(features, return_probabilities)
 
         # Convert features to array
         X = features.to_array().reshape(1, -1)
@@ -262,6 +292,125 @@ class NeuralOracle:
             action_probabilities=action_probs,
             feature_importance=feature_importance
         )
+    
+    def _predict_hybrid(
+        self,
+        features: MinimalFeatures,
+        return_probabilities: bool = True
+    ) -> OraclePrediction:
+        """
+        Predict using hybrid model (ML + rules).
+        
+        This method uses the HybridPreprocessingOracle for prediction.
+        Note: MinimalFeatures (20 features) needs to be converted/expanded
+        to work with hybrid model's 40 features if using MetaFeatureExtractor.
+        
+        For now, we use the hybrid_model directly if it's a HybridPreprocessingOracle,
+        or fall back to using xgb_model and lgb_model directly.
+        
+        Args:
+            features: Minimal features (20-feature format)
+            return_probabilities: Return probabilities for all actions
+            
+        Returns:
+            OraclePrediction with action and confidence
+        """
+        from ..features.meta_extractor import MetaFeatures
+        
+        # If we have a hybrid_model object, use it directly
+        if self.model is not None:
+            # The hybrid model is stored in self.model
+            # For now, we'll use xgb_model and lgb_model directly
+            # since we don't have column data to extract full 40 features
+            pass
+        
+        # Use xgb_model and lgb_model directly with MinimalFeatures
+        # Convert MinimalFeatures to array (20 features)
+        X = features.to_array().reshape(1, -1)
+        
+        # Get predictions from both models if available
+        if self.xgb_model is not None and self.lgb_model is not None:
+            xgb_probs = self.xgb_model.predict_proba(X)[0]
+            lgb_probs = self.lgb_model.predict_proba(X)[0]
+            
+            # Average ensemble
+            ensemble_probs = (xgb_probs + lgb_probs) / 2.0
+        elif self.xgb_model is not None:
+            ensemble_probs = self.xgb_model.predict_proba(X)[0]
+        elif self.lgb_model is not None:
+            ensemble_probs = self.lgb_model.predict_proba(X)[0]
+        else:
+            # No models available
+            raise ValueError("Hybrid model loaded but no XGBoost/LightGBM models found")
+        
+        # Get top prediction
+        top_idx = int(np.argmax(ensemble_probs))
+        confidence = float(ensemble_probs[top_idx])
+        
+        # Get action name from label encoder
+        if self.label_encoder is not None:
+            action_name = self.label_encoder.inverse_transform([top_idx])[0]
+        else:
+            action_name = self.action_encoder.get(top_idx, 'keep_as_is')
+        
+        # Map to PreprocessingAction enum
+        action = self._map_hybrid_action(action_name)
+        
+        # Build probabilities dictionary
+        action_probs = {}
+        if return_probabilities:
+            for idx, prob in enumerate(ensemble_probs):
+                if self.label_encoder is not None:
+                    action_name = self.label_encoder.inverse_transform([idx])[0]
+                else:
+                    action_name = self.action_encoder.get(idx, 'keep_as_is')
+                mapped_action = self._map_hybrid_action(action_name)
+                action_probs[mapped_action] = float(prob)
+        
+        return OraclePrediction(
+            action=action,
+            confidence=confidence,
+            action_probabilities=action_probs,
+            feature_importance=None
+        )
+    
+    def _map_hybrid_action(self, action_name: str) -> PreprocessingAction:
+        """
+        Map hybrid model action name to PreprocessingAction enum.
+        
+        Args:
+            action_name: Action name from hybrid model
+            
+        Returns:
+            PreprocessingAction enum
+        """
+        # Mapping for hybrid model actions
+        mapping = {
+            'clip_outliers': PreprocessingAction.CLIP_OUTLIERS,
+            'drop_column': PreprocessingAction.DROP_COLUMN,
+            'frequency_encode': PreprocessingAction.FREQUENCY_ENCODE,
+            'keep_as_is': PreprocessingAction.KEEP_AS_IS,
+            'log1p_transform': PreprocessingAction.LOG1P_TRANSFORM,
+            'log_transform': PreprocessingAction.LOG_TRANSFORM,
+            'minmax_scale': PreprocessingAction.MINMAX_SCALE,
+            'robust_scale': PreprocessingAction.ROBUST_SCALE,
+            'sqrt_transform': PreprocessingAction.SQRT_TRANSFORM,
+            'standard_scale': PreprocessingAction.STANDARD_SCALE,
+        }
+        
+        if action_name in mapping:
+            return mapping[action_name]
+        
+        # Try to match by enum value
+        for action in PreprocessingAction:
+            if action.value == action_name:
+                return action
+        
+        # Default fallback
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Unknown hybrid action '{action_name}', defaulting to KEEP_AS_IS")
+        return PreprocessingAction.KEEP_AS_IS
 
     def predict_with_shap(
         self,
@@ -424,7 +573,8 @@ class NeuralOracle:
         """
         Load pre-trained model from disk.
         
-        Supports both:
+        Supports:
+        - Hybrid models (new format with hybrid_model, xgb_model, lgb_model)
         - Ensemble models (VotingClassifier saved directly)
         - Legacy models (dictionary with model, encoders, feature_names)
 
@@ -438,13 +588,36 @@ class NeuralOracle:
         with open(path, 'rb') as f:
             loaded = pickle.load(f)
 
-        # Check if it's a direct sklearn model (ensemble) or a dictionary (legacy)
+        # Check if it's a direct sklearn model (ensemble) or a dictionary (legacy/hybrid)
         if isinstance(loaded, dict):
-            # Legacy format: dictionary with model and encoders
-            self.model = loaded['model']
-            self.action_encoder = loaded['action_encoder']
-            self.action_decoder = loaded['action_decoder']
-            self.feature_names = loaded.get('feature_names', self.feature_names)
+            # Check if it's the new hybrid model format
+            if 'hybrid_model' in loaded:
+                # New hybrid format: Store the hybrid model object
+                # We'll handle this in a hybrid-aware way
+                self.model = loaded.get('hybrid_model')
+                self.xgb_model = loaded.get('xgb_model')
+                self.lgb_model = loaded.get('lgb_model')
+                self.label_encoder = loaded.get('label_encoder')
+                self.feature_extractor = loaded.get('feature_extractor')
+                self.config = loaded.get('config', {})
+                self.metadata = loaded.get('metadata', {})
+                self.removed_classes = loaded.get('removed_classes', [])
+                
+                # Build action encoder/decoder from label encoder
+                if self.label_encoder is not None and hasattr(self.label_encoder, 'classes_'):
+                    classes = self.label_encoder.classes_
+                    self.action_encoder = {i: cls for i, cls in enumerate(classes)}
+                    self.action_decoder = {cls: i for i, cls in enumerate(classes)}
+                
+                # Mark as hybrid model
+                self.is_hybrid = True
+            else:
+                # Legacy format: dictionary with model and encoders
+                self.model = loaded['model']
+                self.action_encoder = loaded['action_encoder']
+                self.action_decoder = loaded['action_decoder']
+                self.feature_names = loaded.get('feature_names', self.feature_names)
+                self.is_hybrid = False
         else:
             # Ensemble format: direct VotingClassifier or sklearn model
             self.model = loaded
@@ -453,6 +626,7 @@ class NeuralOracle:
                 classes = loaded.classes_
                 self.action_encoder = {i: cls for i, cls in enumerate(classes)}
                 self.action_decoder = {cls: i for i, cls in enumerate(classes)}
+            self.is_hybrid = False
 
     def get_model_size(self) -> int:
         """
@@ -598,23 +772,34 @@ def get_neural_oracle(model_path: Optional[Path] = None) -> NeuralOracle:
     """
     Get the global NeuralOracle instance with pre-trained model.
 
-    INFERENCE ONLY - Loads pre-trained ensemble (89.4% accuracy).
+    INFERENCE ONLY - Loads pre-trained model (hybrid, ensemble, or legacy).
     NO training occurs at runtime.
 
     Priority:
-    1. Ensemble model (neural_oracle_v2_improved_20251129_150244.pkl) - 89.4% accuracy
-    2. Fallback to neural_oracle_v1.pkl if ensemble not found
+    1. Hybrid model (aurora_preprocessing_oracle_*.pkl) - 74.7% ML + rules
+    2. Ensemble model (neural_oracle_v2_improved_20251129_150244.pkl) - 89.4% accuracy
+    3. Fallback to neural_oracle_v1.pkl if others not found
     """
     global _oracle_instance
     if _oracle_instance is None:
         if model_path is None:
-            # Try ensemble first
-            ensemble_path = Path(__file__).parent.parent.parent / "models" / "neural_oracle_v2_improved_20251129_150244.pkl"
-            if ensemble_path.exists():
-                model_path = ensemble_path
-            else:
-                # Fallback to old model
-                fallback_path = Path(__file__).parent.parent.parent / "models" / "neural_oracle_v1.pkl"
+            models_dir = Path(__file__).parent.parent.parent / "models"
+            
+            # Try hybrid model first
+            if models_dir.exists():
+                hybrid_models = sorted(models_dir.glob("aurora_preprocessing_oracle_*.pkl"), reverse=True)
+                if hybrid_models:
+                    model_path = hybrid_models[0]
+            
+            # Try ensemble model
+            if model_path is None:
+                ensemble_path = models_dir / "neural_oracle_v2_improved_20251129_150244.pkl"
+                if ensemble_path.exists():
+                    model_path = ensemble_path
+            
+            # Fallback to old model
+            if model_path is None:
+                fallback_path = models_dir / "neural_oracle_v1.pkl"
                 if fallback_path.exists():
                     model_path = fallback_path
 

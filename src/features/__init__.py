@@ -5,6 +5,7 @@ Available extractors:
 - MinimalFeatureExtractor: 20 basic features (for neural oracle v2)
 - EnhancedFeatureExtractor: 30 features (for enhanced neural oracle)
 - MetaLearningFeatureExtractor: 62 features (for meta-learning training)
+- MetaFeatureExtractor: 40 features (for hybrid preprocessing oracle)
 """
 
 from .minimal_extractor import (
@@ -22,6 +23,12 @@ from .enhanced_extractor import (
     get_meta_learning_extractor,
 )
 
+from .meta_extractor import (
+    MetaFeatures,
+    MetaFeatureExtractor,
+    get_meta_feature_extractor,
+)
+
 __all__ = [
     # Minimal extractor
     'MinimalFeatures',
@@ -35,4 +42,8 @@ __all__ = [
     'MetaLearningFeatures',
     'MetaLearningFeatureExtractor',
     'get_meta_learning_extractor',
+    # Meta extractor (hybrid oracle)
+    'MetaFeatures',
+    'MetaFeatureExtractor',
+    'get_meta_feature_extractor',
 ]
