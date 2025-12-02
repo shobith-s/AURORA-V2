@@ -63,9 +63,10 @@ class TestMetaFeatureExtractor:
         
         features = extractor.extract(column, 'missing_col')
         
-        # Check missing ratio
+        # Check missing ratio (calculate dynamically from test data)
+        expected_ratio = column.isnull().sum() / len(column)
         assert features.missing_ratio > 0.0
-        assert features.missing_ratio == pytest.approx(2/6, rel=0.01)
+        assert features.missing_ratio == pytest.approx(expected_ratio, rel=0.01)
         assert features.is_complete == 0.0
     
     def test_extract_constant_column(self):

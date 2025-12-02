@@ -69,7 +69,7 @@ class NeuralOracle:
                 "Install with: pip install xgboost lightgbm"
             )
 
-        self.model = None  # Will be sklearn VotingClassifier or xgb.Booster or HybridPreprocessingOracle
+        self.model = None  # Will be sklearn VotingClassifier, xgb.Booster, or None for hybrid models
         self.action_encoder = {}
         self.action_decoder = {}
         self.feature_names = [
@@ -317,14 +317,9 @@ class NeuralOracle:
         """
         from ..features.meta_extractor import MetaFeatures
         
-        # If we have a hybrid_model object, use it directly
-        if self.model is not None:
-            # The hybrid model is stored in self.model
-            # For now, we'll use xgb_model and lgb_model directly
-            # since we don't have column data to extract full 40 features
-            pass
-        
-        # Use xgb_model and lgb_model directly with MinimalFeatures
+        # For hybrid models, use xgb_model and lgb_model directly with MinimalFeatures
+        # Note: The hybrid model components are stored separately (xgb_model, lgb_model)
+        # rather than in self.model
         # Convert MinimalFeatures to array (20 features)
         X = features.to_array().reshape(1, -1)
         

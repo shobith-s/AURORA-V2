@@ -215,14 +215,14 @@ class HybridPreprocessingOracle:
             return PreprocessingAction.DROP_COLUMN, 0.90, "ID-like column with high cardinality"
         
         # Rule 3: High cardinality categorical → drop_column or frequency_encode
-        if features.is_categorical and features.unique_ratio > 0.7:
+        if features.is_categorical > 0.5 and features.unique_ratio > 0.7:
             if features.unique_ratio > 0.95:
                 return PreprocessingAction.DROP_COLUMN, 0.85, "High cardinality categorical (>95% unique)"
             else:
                 return PreprocessingAction.FREQUENCY_ENCODE, 0.80, "High cardinality categorical (70-95% unique)"
         
         # Rule 4: Highly skewed positive data → log_transform or log1p_transform
-        if features.is_numeric and features.can_log > 0.5:
+        if features.is_numeric > 0.5 and features.can_log > 0.5:
             if abs(features.skewness) > 2.0:
                 if features.zero_ratio > 0.1:
                     return PreprocessingAction.LOG1P_TRANSFORM, 0.87, "Highly skewed with zeros, use log1p"
@@ -230,16 +230,16 @@ class HybridPreprocessingOracle:
                     return PreprocessingAction.LOG_TRANSFORM, 0.88, "Highly skewed positive data"
         
         # Rule 5: Data with many outliers → clip_outliers
-        if features.is_numeric and features.outlier_ratio > 0.15:
+        if features.is_numeric > 0.5 and features.outlier_ratio > 0.15:
             return PreprocessingAction.CLIP_OUTLIERS, 0.83, f"High outlier ratio ({features.outlier_ratio:.2%})"
         
         # Rule 6: Large range numeric data → standard_scale
-        if features.is_numeric and features.has_range > 0.5:
+        if features.is_numeric > 0.5 and features.has_range > 0.5:
             if features.std > 100 or (features.max - features.min) > 1000:
                 return PreprocessingAction.STANDARD_SCALE, 0.82, "Large range numeric data"
         
         # Rule 7: Boolean-like data
-        if features.is_bool or (features.unique_ratio < 0.05 and features.cardinality_low > 0.5):
+        if features.is_bool > 0.5 or (features.unique_ratio < 0.05 and features.cardinality_low > 0.5):
             return PreprocessingAction.KEEP_AS_IS, 0.75, "Boolean or binary data"
         
         # Rule 8: Missing-heavy columns
