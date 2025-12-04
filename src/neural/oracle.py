@@ -188,6 +188,10 @@ class NeuralOracle:
     Designed for <5ms inference time.
     """
 
+    # Feature count constants for different model types
+    META_FEATURE_COUNT = 40  # MetaFeatureExtractor (hybrid models)
+    MINIMAL_FEATURE_COUNT = 20  # MinimalFeatureExtractor (standard models)
+
     # Consolidated action mapping (covers all model formats: v2, hybrid, legacy)
     ACTION_MAPPING = {
         # V2 model class labels
@@ -483,8 +487,9 @@ class NeuralOracle:
         # Convert MinimalFeatures to array (20 features)
         X = features.to_array().reshape(1, -1)
 
-        # Expected number of features for hybrid models trained with MetaFeatureExtractor
-        expected_features = 40
+        # Hybrid models are trained with MetaFeatureExtractor (40 features)
+        # but runtime uses MinimalFeatureExtractor (20 features)
+        expected_features = self.META_FEATURE_COUNT
 
         # Check feature dimension and pad if necessary
         if X.shape[1] != expected_features:

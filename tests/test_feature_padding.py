@@ -186,10 +186,11 @@ class TestFeaturePadding:
         mock_label_encoder.inverse_transform = lambda x: ["standard_scale"]
         oracle.label_encoder = mock_label_encoder
 
-        # Create a mock features object with 50 features
+        # Create a mock features object with 50 features (fixed values for reproducibility)
         class MockFeatures:
             def to_array(self):
-                return np.random.randn(50)
+                # Use fixed values instead of random for deterministic tests
+                return np.arange(50, dtype=np.float32)
 
         mock_features = MockFeatures()
 
@@ -239,7 +240,13 @@ class TestFeaturePadding:
         mock_label_encoder = Mock()
 
         def mock_inverse_transform(indices):
-            actions = ["drop_column", "standard_scale", "log_transform", "clip_outliers", "keep_as_is"]
+            actions = [
+                "drop_column",
+                "standard_scale",
+                "log_transform",
+                "clip_outliers",
+                "keep_as_is",
+            ]
             return [actions[i] for i in indices]
 
         mock_label_encoder.inverse_transform = mock_inverse_transform
