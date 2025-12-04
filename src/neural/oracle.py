@@ -66,7 +66,7 @@ class ModelUnpickler(pickle.Unpickler):
                 return getattr(mod, name)
             except (ImportError, AttributeError) as e:
                 # Fall back to default behavior if redirect fails
-                pass
+                logger.debug(f"Failed to redirect {name} to {redirect_module}: {e}")
         
         # Also handle __main__ module redirects
         if module == '__main__' and name in self.CLASS_REDIRECTS:
@@ -74,8 +74,8 @@ class ModelUnpickler(pickle.Unpickler):
             try:
                 mod = __import__(redirect_module, fromlist=[name])
                 return getattr(mod, name)
-            except (ImportError, AttributeError):
-                pass
+            except (ImportError, AttributeError) as e:
+                logger.debug(f"Failed to redirect __main__.{name} to {redirect_module}: {e}")
         
         # Default behavior
         return super().find_class(module, name)

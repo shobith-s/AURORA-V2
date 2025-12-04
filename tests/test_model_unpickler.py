@@ -5,7 +5,6 @@ Tests for ModelUnpickler to handle pickle deserialization with __main__ referenc
 import pytest
 import pickle
 from pathlib import Path
-import tempfile
 from src.neural.oracle import ModelUnpickler, NeuralOracle
 
 
@@ -34,21 +33,18 @@ class TestModelUnpickler:
         assert redirects['MetaFeatureExtractor'] == 'src.features.meta_extractor'
         assert redirects['MinimalFeatures'] == 'src.features.minimal_extractor'
     
-    def test_simple_pickle_load(self):
+    def test_simple_pickle_load(self, tmp_path):
         """Test loading a simple pickle with ModelUnpickler."""
         test_data = {'key': 'value', 'number': 42}
         
-        with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.pkl') as f:
+        temp_file = tmp_path / "test.pkl"
+        with open(temp_file, 'wb') as f:
             pickle.dump(test_data, f)
-            temp_path = f.name
         
-        try:
-            with open(temp_path, 'rb') as f:
-                loaded = ModelUnpickler(f).load()
-            
-            assert loaded == test_data
-        finally:
-            Path(temp_path).unlink()
+        with open(temp_file, 'rb') as f:
+            loaded = ModelUnpickler(f).load()
+        
+        assert loaded == test_data
     
     def test_redirect_from_main(self):
         """Test that __main__ references are redirected correctly."""
