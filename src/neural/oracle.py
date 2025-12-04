@@ -56,6 +56,39 @@ class NeuralOracle:
     No training occurs during runtime.
     Designed for <5ms inference time.
     """
+    
+    # Consolidated action mapping (covers all model formats: v2, hybrid, legacy)
+    ACTION_MAPPING = {
+        # V2 model class labels
+        'drop_column': PreprocessingAction.DROP_COLUMN,
+        'encode_categorical': PreprocessingAction.LABEL_ENCODE,
+        'keep_as_is': PreprocessingAction.KEEP_AS_IS,
+        'log_transform': PreprocessingAction.LOG_TRANSFORM,
+        'onehot_encode': PreprocessingAction.ONEHOT_ENCODE,
+        'parse_boolean': PreprocessingAction.PARSE_BOOLEAN,
+        'parse_datetime': PreprocessingAction.PARSE_DATETIME,
+        'retain_column': PreprocessingAction.KEEP_AS_IS,
+        'scale': PreprocessingAction.STANDARD_SCALE,
+        'scale_or_normalize': PreprocessingAction.STANDARD_SCALE,
+        'standard_scale': PreprocessingAction.STANDARD_SCALE,
+        # Hybrid model actions
+        'clip_outliers': PreprocessingAction.CLIP_OUTLIERS,
+        'frequency_encode': PreprocessingAction.FREQUENCY_ENCODE,
+        'log1p_transform': PreprocessingAction.LOG1P_TRANSFORM,
+        'sqrt_transform': PreprocessingAction.SQRT_TRANSFORM,
+        'minmax_scale': PreprocessingAction.MINMAX_SCALE,
+        'robust_scale': PreprocessingAction.ROBUST_SCALE,
+        # Legacy mappings
+        'drop': PreprocessingAction.DROP_COLUMN,
+        'fill_zero': PreprocessingAction.FILL_NULL_MODE,
+        'fill_forward': PreprocessingAction.FILL_NULL_FORWARD,
+        'fill_backward': PreprocessingAction.FILL_NULL_BACKWARD,
+        'fill_mean': PreprocessingAction.FILL_NULL_MEAN,
+        'fill_median': PreprocessingAction.FILL_NULL_MEDIAN,
+        'fill_mode': PreprocessingAction.FILL_NULL_MODE,
+        'label_encode': PreprocessingAction.LABEL_ENCODE,
+        'ordinal_encode': PreprocessingAction.ORDINAL_ENCODE,
+    }
 
     def __init__(self, model_path: Optional[Path] = None):
         """
@@ -160,7 +193,7 @@ class NeuralOracle:
         features: MinimalFeatures,
         return_probabilities: bool = True,
         return_feature_importance: bool = False
-    ) -> OraclePrediction:
+    ) -> Optional[OraclePrediction]:
         """
         Predict using PRE-TRAINED model (inference only).
 
@@ -177,10 +210,11 @@ class NeuralOracle:
             return_feature_importance: Return feature importance (slower)
 
         Returns:
-            OraclePrediction with action and confidence
+            OraclePrediction with action and confidence, or None if no model loaded
         """
         if self.model is None and not self.is_hybrid:
-            raise ValueError("No pre-trained model loaded. Cannot make predictions.")
+            logger.warning("No pre-trained model loaded. Returning None to allow symbolic fallback.")
+            return None
         
         # Handle hybrid model prediction
         if self.is_hybrid:
@@ -209,48 +243,15 @@ class NeuralOracle:
             dmatrix = xgb.DMatrix(X, feature_names=self.feature_names)
             probs = self.model.predict(dmatrix)[0]
 
-        # Map v2 model actions to system PreprocessingAction enums.
-        # These mappings cover:
-        # 1. V2 model class labels (from the trained ensemble)
-        # 2. Semantic aliases (e.g., 'retain_column' -> KEEP_AS_IS)
-        # 3. Legacy model class labels for backwards compatibility
-        mapping = {
-            # V2 model class labels (from model.classes_)
-            'drop_column': PreprocessingAction.DROP_COLUMN,
-            'encode_categorical': PreprocessingAction.LABEL_ENCODE,
-            'keep_as_is': PreprocessingAction.KEEP_AS_IS,
-            'log_transform': PreprocessingAction.LOG_TRANSFORM,
-            'onehot_encode': PreprocessingAction.ONEHOT_ENCODE,
-            'parse_boolean': PreprocessingAction.PARSE_BOOLEAN,
-            'parse_datetime': PreprocessingAction.PARSE_DATETIME,
-            'retain_column': PreprocessingAction.KEEP_AS_IS,
-            'scale': PreprocessingAction.STANDARD_SCALE,
-            'scale_or_normalize': PreprocessingAction.STANDARD_SCALE,
-            'standard_scale': PreprocessingAction.STANDARD_SCALE,
-            # Legacy mappings for backwards compatibility
-            'drop': PreprocessingAction.DROP_COLUMN,
-            'fill_zero': PreprocessingAction.FILL_NULL_MODE,
-            'fill_forward': PreprocessingAction.FILL_NULL_FORWARD,
-            'fill_backward': PreprocessingAction.FILL_NULL_BACKWARD,
-            'fill_mean': PreprocessingAction.FILL_NULL_MEAN,
-            'fill_median': PreprocessingAction.FILL_NULL_MEDIAN,
-            'fill_mode': PreprocessingAction.FILL_NULL_MODE,
-            'minmax_scale': PreprocessingAction.MINMAX_SCALE,
-            'robust_scale': PreprocessingAction.ROBUST_SCALE,
-            'label_encode': PreprocessingAction.LABEL_ENCODE,
-            'ordinal_encode': PreprocessingAction.ORDINAL_ENCODE,
-        }
-
         # Get top prediction
         top_idx = int(np.argmax(probs))
         top_action = self.action_encoder[top_idx]
         
         # Ensure action is an Enum (handle string actions from loaded models)
         if isinstance(top_action, str):
-            # 1. Try direct mapping for known mismatches
-            
-            if top_action in mapping:
-                top_action = mapping[top_action]
+            # Try direct mapping using consolidated ACTION_MAPPING
+            if top_action in self.ACTION_MAPPING:
+                top_action = self.ACTION_MAPPING[top_action]
             else:
                 # 2. Try exact value match
                 found = False
@@ -276,10 +277,10 @@ class NeuralOracle:
                 if idx in self.action_encoder:
                     action_name = self.action_encoder[idx]
                     
-                    # Apply same mapping logic
+                    # Apply same mapping logic using consolidated ACTION_MAPPING
                     if isinstance(action_name, str):
-                        if action_name in mapping:
-                            action_enum = mapping[action_name]
+                        if action_name in self.ACTION_MAPPING:
+                            action_enum = self.ACTION_MAPPING[action_name]
                             action_probs[action_enum] = float(prob)
                         else:
                             # Try exact match
@@ -385,7 +386,7 @@ class NeuralOracle:
     
     def _map_hybrid_action(self, action_name: str) -> PreprocessingAction:
         """
-        Map hybrid model action name to PreprocessingAction enum.
+        Map hybrid model action name to PreprocessingAction enum using consolidated mapping.
         
         Args:
             action_name: Action name from hybrid model
@@ -393,22 +394,9 @@ class NeuralOracle:
         Returns:
             PreprocessingAction enum
         """
-        # Mapping for hybrid model actions
-        mapping = {
-            'clip_outliers': PreprocessingAction.CLIP_OUTLIERS,
-            'drop_column': PreprocessingAction.DROP_COLUMN,
-            'frequency_encode': PreprocessingAction.FREQUENCY_ENCODE,
-            'keep_as_is': PreprocessingAction.KEEP_AS_IS,
-            'log1p_transform': PreprocessingAction.LOG1P_TRANSFORM,
-            'log_transform': PreprocessingAction.LOG_TRANSFORM,
-            'minmax_scale': PreprocessingAction.MINMAX_SCALE,
-            'robust_scale': PreprocessingAction.ROBUST_SCALE,
-            'sqrt_transform': PreprocessingAction.SQRT_TRANSFORM,
-            'standard_scale': PreprocessingAction.STANDARD_SCALE,
-        }
-        
-        if action_name in mapping:
-            return mapping[action_name]
+        # Use consolidated ACTION_MAPPING
+        if action_name in self.ACTION_MAPPING:
+            return self.ACTION_MAPPING[action_name]
         
         # Try to match by enum value
         for action in PreprocessingAction:
@@ -416,8 +404,6 @@ class NeuralOracle:
                 return action
         
         # Default fallback
-        import logging
-        logger = logging.getLogger(__name__)
         logger.warning(f"Unknown hybrid action '{action_name}', defaulting to KEEP_AS_IS")
         return PreprocessingAction.KEEP_AS_IS
 
@@ -425,7 +411,7 @@ class NeuralOracle:
         self,
         features: MinimalFeatures,
         top_k: int = 3
-    ) -> Dict[str, Any]:
+    ) -> Optional[Dict[str, Any]]:
         """
         Predict with SHAP explanation.
 
@@ -437,24 +423,17 @@ class NeuralOracle:
             top_k: Number of top contributing features to return
 
         Returns:
-            Dictionary with:
-            - action: Predicted preprocessing action
-            - confidence: Prediction confidence (0-1)
-            - explanation: Human-readable explanation
-            - shap_values: Feature contributions
-            - top_features: Top K contributing features
-            - action_probabilities: Probabilities for all actions
+            Dictionary with prediction and explanations, or None if no model loaded
         """
         try:
             import shap
         except ImportError:
-            raise ImportError(
-                "SHAP is required for explainable predictions. "
-                "Install with: pip install shap"
-            )
+            logger.warning("SHAP not available. Falling back to regular prediction.")
+            return None
 
         if self.model is None:
-            raise ValueError("Model not trained or loaded.")
+            logger.warning("No model loaded. Cannot generate SHAP explanation.")
+            return None
 
         # Get base prediction
         prediction = self.predict(features, return_probabilities=True)
@@ -513,7 +492,7 @@ class NeuralOracle:
     def predict_batch(
         self,
         features_list: List[MinimalFeatures]
-    ) -> List[OraclePrediction]:
+    ) -> Optional[List[OraclePrediction]]:
         """
         Predict for a batch of feature sets (faster than individual predictions).
 
@@ -521,10 +500,11 @@ class NeuralOracle:
             features_list: List of minimal features
 
         Returns:
-            List of predictions
+            List of predictions, or None if no model loaded
         """
         if self.model is None:
-            raise ValueError("Model not trained or loaded. Call train() or load() first.")
+            logger.warning("No model loaded. Cannot perform batch prediction.")
+            return None
 
         # Convert to numpy array
         X = np.vstack([f.to_array() for f in features_list])
