@@ -92,6 +92,9 @@ class NeuralOracle:
         self.removed_classes = []
 
         # Try to load pre-trained model by default
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if model_path is None:
             models_dir = Path(__file__).parent.parent.parent / "models"
             
@@ -105,21 +108,31 @@ class NeuralOracle:
                 hybrid_models = sorted(models_dir.glob("aurora_preprocessing_oracle_*.pkl"), reverse=True)
                 if hybrid_models:
                     model_path = hybrid_models[0]  # Use most recent
+                    logger.info(f"Found hybrid model: {model_path.name}")
             
             # Fallback to ensemble model
             if model_path is None:
                 ensemble_path = models_dir / "neural_oracle_v2_improved_20251129_150244.pkl"
                 if ensemble_path.exists():
                     model_path = ensemble_path
+                    logger.info(f"Found ensemble model: {model_path.name}")
             
             # Fallback to old model
             if model_path is None:
                 default_path = models_dir / "neural_oracle_v1.pkl"
                 if default_path.exists():
                     model_path = default_path
+                    logger.info(f"Found legacy model: {model_path.name}")
         
         if model_path is not None and Path(model_path).exists():
-            self.load(model_path)
+            try:
+                self.load(model_path)
+            except Exception as e:
+                logger.warning(f"Failed to load model from {model_path}: {e}")
+                logger.warning("Neural Oracle will not be available. System will rely on symbolic rules only.")
+        else:
+            logger.warning("No pre-trained neural oracle model found. System will rely on symbolic rules only.")
+            logger.info("To train a model, run: python validator/scripts/train_neural_oracle_v2.py")
 
     def train(
         self,
@@ -576,17 +589,27 @@ class NeuralOracle:
         Args:
             path: Path to the saved model
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         path = Path(path)
         if not path.exists():
+            logger.error(f"Model file not found: {path}")
             raise FileNotFoundError(f"Model file not found: {path}")
 
-        with open(path, 'rb') as f:
-            loaded = pickle.load(f)
+        try:
+            logger.info(f"Loading neural oracle model from: {path}")
+            with open(path, 'rb') as f:
+                loaded = pickle.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load model from {path}: {e}")
+            raise RuntimeError(f"Failed to load model: {e}") from e
 
         # Check if it's a direct sklearn model (ensemble) or a dictionary (legacy/hybrid)
         if isinstance(loaded, dict):
             # Check if it's the new hybrid model format
             if 'hybrid_model' in loaded:
+                logger.info("Loaded hybrid model format")
                 # New hybrid format: Store the hybrid model object
                 # We'll handle this in a hybrid-aware way
                 self.model = loaded.get('hybrid_model')
@@ -606,15 +629,19 @@ class NeuralOracle:
                 
                 # Mark as hybrid model
                 self.is_hybrid = True
+                logger.info(f"Hybrid model loaded successfully: {self.metadata.get('model_version', 'unknown')}")
             else:
                 # Legacy format: dictionary with model and encoders
+                logger.info("Loaded legacy model format")
                 self.model = loaded['model']
                 self.action_encoder = loaded['action_encoder']
                 self.action_decoder = loaded['action_decoder']
                 self.feature_names = loaded.get('feature_names', self.feature_names)
                 self.is_hybrid = False
+                logger.info("Legacy model loaded successfully")
         else:
             # Ensemble format: direct VotingClassifier or sklearn model
+            logger.info("Loaded ensemble model format")
             self.model = loaded
             # Build action encoder/decoder from model's classes
             if hasattr(loaded, 'classes_'):
@@ -622,6 +649,7 @@ class NeuralOracle:
                 self.action_encoder = {i: cls for i, cls in enumerate(classes)}
                 self.action_decoder = {cls: i for i, cls in enumerate(classes)}
             self.is_hybrid = False
+            logger.info(f"Ensemble model loaded successfully with {len(classes)} classes")
 
     def get_model_size(self) -> int:
         """
