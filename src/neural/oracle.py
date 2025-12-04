@@ -263,8 +263,6 @@ class NeuralOracle:
                 
                 # 3. Fallback to KEEP_AS_IS if unknown
                 if not found:
-                    import logging
-                    logger = logging.getLogger(__name__)
                     logger.warning(f"Unknown action '{top_action}' from model. Defaulting to KEEP_AS_IS.")
                     top_action = PreprocessingAction.KEEP_AS_IS
 
