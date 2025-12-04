@@ -9,7 +9,7 @@
 AURORA V2 is an intelligent data preprocessing system that combines:
 
 - **Symbolic Engine**: 185+ expert-crafted rules for common preprocessing patterns
-- **Neural Oracle**: Pre-trained ensemble (XGBoost + LightGBM) with 89.4% accuracy for edge cases
+- **Neural Oracle**: Pre-trained ensemble (XGBoost + LightGBM) with ~76% validation accuracy for edge cases
 - **Adaptive Learning**: Learns from user corrections to improve over time
 - **LLM Validation**: Uses AI to validate and improve preprocessing decisions
 
@@ -25,7 +25,7 @@ AURORA V2 is an intelligent data preprocessing system that combines:
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
 │  │   Symbolic   │───▶│    Neural    │───▶│   Adaptive   │ │
 │  │    Engine    │    │    Oracle    │    │   Learning   │ │
-│  │  (185 rules) │    │  (89.4% acc) │    │   (User      │ │
+│  │  (185 rules) │    │  (~76% acc)  │    │   (User      │ │
 │  │              │    │   Ensemble   │    │  Corrections)│ │
 │  └──────────────┘    └──────────────┘    └──────────────┘ │
 │         │                    │                    │        │
@@ -54,11 +54,11 @@ AURORA V2 is an intelligent data preprocessing system that combines:
 **Layer 2: Neural Oracle (Ensemble - Edge Cases)**
 
 - **Architecture:** XGBoost + LightGBM ensemble with soft voting
-- **Accuracy:** 89.4% on test data (400+ validated examples)
+- **Validation Accuracy:** ~76% on real-world test data
 - **Inference Only:** Uses pre-trained model, no runtime training
 - **Model File:** `models/neural_oracle_v2_improved_20251129_150244.pkl`
-- **Trained:** November 2025 on 40 diverse OpenML datasets with LLM validation
-- **Handles:** Ambiguous preprocessing decisions (when symbolic confidence < 0.75)
+- **Trained:** November 2025 on diverse OpenML datasets with LLM validation
+- **Handles:** Ambiguous preprocessing decisions (when symbolic confidence < 0.65)
 
 **Layer 3: Adaptive Learning (Continuous Improvement)**
 
@@ -151,14 +151,14 @@ print(f"Explanation: {result.explanation}")
 
 **Neural Oracle (Ensemble):**
 
-- Validation accuracy: 89.4%
+- Validation accuracy: ~76%
 - Architecture: XGBoost + LightGBM ensemble
 - Inference only: <5ms per column
-- Pre-trained on 400+ LLM-validated examples
+- Pre-trained on LLM-validated examples
 
 **Hybrid System:**
 
-- Overall accuracy: ~92%
+- Overall accuracy: ~85-90% (symbolic + neural combined)
 - Handles both common and edge cases
 - Continuous improvement via learning
 
