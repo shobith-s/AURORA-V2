@@ -6,6 +6,7 @@ Symbolic Engine (with adaptive learning) -> NeuralOracle -> Conservative Fallbac
 from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 import numpy as np
+import logging
 from pathlib import Path
 import uuid
 import time
@@ -18,6 +19,9 @@ from .actions import PreprocessingAction, PreprocessingResult
 from .explainer import get_explainer
 # DISABLED: DatasetAnalyzer not used (results ignored)
 # from ..analysis.dataset_analyzer import DatasetAnalyzer
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 # Confidence thresholds for decision quality
 CONFIDENCE_HIGH = 0.9      # Auto-apply decision (highly confident)
@@ -63,9 +67,6 @@ class IntelligentPreprocessor:
             enable_learning: Whether to enable pattern learning
             neural_model_path: Path to neural oracle model
         """
-        import logging
-        logger = logging.getLogger(__name__)
-
         self.confidence_threshold = confidence_threshold
         self.use_neural_oracle = use_neural_oracle
         self.enable_learning = enable_learning
@@ -141,9 +142,6 @@ class IntelligentPreprocessor:
     @property
     def neural_oracle(self) -> Optional[NeuralOracle]:
         """Lazy load neural oracle with graceful degradation."""
-        import logging
-        logger = logging.getLogger(__name__)
-
         if self.use_neural_oracle and self._neural_oracle is None:
             try:
                 self._neural_oracle = get_neural_oracle(self.neural_model_path)
@@ -180,9 +178,6 @@ class IntelligentPreprocessor:
         Returns:
             PreprocessingResult with action, confidence, and explanation
         """
-        import logging
-        logger = logging.getLogger(__name__)
-        
         start_time = time.time()
 
         # Convert to pandas Series if needed
@@ -202,8 +197,6 @@ class IntelligentPreprocessor:
                 # (e.g., dates that partially convert to numbers)
                 conversion_rate = numeric_column.notna().sum() / len(column) if len(column) > 0 else 0
                 if conversion_rate > 0.9:
-                    import logging
-                    logger = logging.getLogger(__name__)
                     logger.info(f"Type inference: '{column_name}' converted from object to numeric (success rate: {conversion_rate:.2%})")
                     column = numeric_column
                     # Update the series name to maintain consistency
@@ -246,7 +239,8 @@ class IntelligentPreprocessor:
                 logger.warning(f"Safety check failed for '{column_name}': {error_msg}")
 
         # LAYER 2: Use NeuralOracle for ambiguous cases (<5ms)
-        if self.use_neural_oracle and self.neural_oracle:
+        # Check if neural oracle is available AND has a model loaded
+        if self.use_neural_oracle and self.neural_oracle and (self.neural_oracle.model is not None or self.neural_oracle.is_hybrid):
             # Extract minimal features
             try:
                 features = self.feature_extractor.extract(column, column_name)
@@ -260,6 +254,11 @@ class IntelligentPreprocessor:
                 try:
                     # Try SHAP-enabled prediction first
                     neural_shap_result = self.neural_oracle.predict_with_shap(features, top_k=3)
+                    
+                    # Check if SHAP prediction succeeded
+                    if neural_shap_result is None:
+                        # Fall back to regular prediction
+                        raise Exception("SHAP prediction not available")
 
                     # Blend symbolic and neural if both have medium confidence
                     if symbolic_result.confidence > 0.5:
@@ -323,50 +322,53 @@ class IntelligentPreprocessor:
                         return_probabilities=True,
                         return_feature_importance=False
                     )
-
-                    # Blend symbolic and neural if both have medium confidence
-                    if symbolic_result.confidence > 0.5:
-                        action, confidence, explanation = self._blend_decisions(
-                            symbolic_result, neural_pred
-                        )
+                    
+                    # Check if prediction succeeded (could return None if no model)
+                    if neural_pred is None:
+                        logger.info(f"Neural oracle not available for '{column_name}', using symbolic result")
+                        # Fall through to use symbolic result or conservative fallback
                     else:
-                        action = neural_pred.action
-                        confidence = neural_pred.confidence
-                        
-                        # Validate action
-                        action = self._validate_neural_action(action, features, symbolic_result)
-                        
-                        explanation = f"Neural oracle prediction (symbolic confidence too low: {symbolic_result.confidence:.2f})"
+                        # Blend symbolic and neural if both have medium confidence
+                        if symbolic_result.confidence > 0.5:
+                            action, confidence, explanation = self._blend_decisions(
+                                symbolic_result, neural_pred
+                            )
+                        else:
+                            action = neural_pred.action
+                            confidence = neural_pred.confidence
+                            
+                            # Validate action
+                            action = self._validate_neural_action(action, features, symbolic_result)
+                            
+                            explanation = f"Neural oracle prediction (symbolic confidence too low: {symbolic_result.confidence:.2f})"
 
-                    self.stats['neural_decisions'] += 1
-                    if confidence >= self.confidence_threshold:
-                        self.stats['high_confidence_decisions'] += 1
+                        self.stats['neural_decisions'] += 1
+                        if confidence >= self.confidence_threshold:
+                            self.stats['high_confidence_decisions'] += 1
 
-                    elapsed_ms = (time.time() - start_time) * 1000
-                    self.stats['total_time_ms'] += elapsed_ms
+                        elapsed_ms = (time.time() - start_time) * 1000
+                        self.stats['total_time_ms'] += elapsed_ms
 
-                    # Get alternatives from neural probabilities
-                    alternatives = sorted(
-                        [(a, p) for a, p in neural_pred.action_probabilities.items() if a != action],
-                        key=lambda x: x[1],
-                        reverse=True
-                    )[:3]
+                        # Get alternatives from neural probabilities
+                        alternatives = sorted(
+                            [(a, p) for a, p in neural_pred.action_probabilities.items() if a != action],
+                            key=lambda x: x[1],
+                            reverse=True
+                        )[:3]
 
-                    result = PreprocessingResult(
-                        action=action,
-                        confidence=confidence,
-                        source='neural',
-                        explanation=explanation,
-                        alternatives=alternatives,
-                        parameters={},
-                        context=symbolic_result.context,
-                        decision_id=decision_id
-                    )
-                    return self._add_confidence_warnings(result)
+                        result = PreprocessingResult(
+                            action=action,
+                            confidence=confidence,
+                            source='neural',
+                            explanation=explanation,
+                            alternatives=alternatives,
+                            parameters={},
+                            context=symbolic_result.context,
+                            decision_id=decision_id
+                        )
+                        return self._add_confidence_warnings(result)
 
                 except Exception as e:
-                    import logging
-                    logger = logging.getLogger(__name__)
                     logger.warning(f"Neural oracle prediction failed for '{column_name}': {e}")
                     # Fall back to symbolic result or conservative fallback
                     pass
@@ -591,8 +593,6 @@ class IntelligentPreprocessor:
             result.explanation = enhanced_explanation
         except Exception as e:
             # If explanation enhancement fails, keep original but ensure it's not empty
-            import logging
-            logger = logging.getLogger(__name__)
             logger.warning(f"Failed to enhance explanation: {e}")
             
             # Fallback explanation if original is missing or empty

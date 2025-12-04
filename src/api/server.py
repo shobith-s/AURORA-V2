@@ -85,7 +85,7 @@ MAX_STORED_DATASETS = 100
 def convert_to_json_serializable(obj: Any) -> Any:
     """
     Convert numpy types and other non-JSON-serializable types to native Python types.
-    NumPy 2.0 compatible.
+    NumPy 2.0 compatible. Handles pandas NA values.
 
     Args:
         obj: Object to convert
@@ -93,6 +93,13 @@ def convert_to_json_serializable(obj: Any) -> Any:
     Returns:
         JSON-serializable version of the object
     """
+    # Check for pandas NA/NaN first
+    try:
+        if pd.isna(obj):
+            return None
+    except (TypeError, ValueError):
+        pass
+    
     if isinstance(obj, dict):
         return {k: convert_to_json_serializable(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
@@ -385,27 +392,7 @@ async def preprocess_column(request: PreprocessRequest):
         )
 
 
-def convert_numpy_types(obj):
-    """Convert numpy types to native Python types for JSON serialization."""
-    import numpy as np
-    
-    if isinstance(obj, (np.bool_, np.generic)) and hasattr(obj, 'item'):
-        # Handle numpy scalars including bool_
-        return obj.item()
-    elif isinstance(obj, np.integer):
-        return int(obj)
-    elif isinstance(obj, np.floating):
-        return float(obj)
-    elif isinstance(obj, np.ndarray):
-        return obj.tolist()
-    elif isinstance(obj, dict):
-        return {key: convert_numpy_types(value) for key, value in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_numpy_types(item) for item in obj]
-    elif isinstance(obj, tuple):
-        return tuple(convert_numpy_types(item) for item in obj)
-    else:
-        return obj
+# Removed duplicate - using convert_to_json_serializable instead
 
 
 @app.post("/explain/enhanced")
@@ -444,7 +431,7 @@ async def explain_enhanced(request: PreprocessRequest):
         metadata = result.context if result.context else {}
         
         # Convert numpy types in metadata to native Python types
-        metadata = convert_numpy_types(metadata)
+        metadata = convert_to_json_serializable(metadata)
         
         # Add metadata insights if available
         if metadata:
@@ -499,7 +486,7 @@ async def explain_enhanced(request: PreprocessRequest):
         }
         
         # Final safety conversion
-        return convert_numpy_types(response)
+        return convert_to_json_serializable(response)
         
     except Exception as e:
         import traceback
@@ -1042,26 +1029,7 @@ async def submit_correction(request: CorrectionRequest):
             stats_dict = stats.to_dict()
 
             # Convert numpy types to native Python types for JSON serialization
-            def convert_numpy_types(obj):
-                """Recursively convert numpy types to native Python types."""
-                if isinstance(obj, dict):
-                    return {k: convert_numpy_types(v) for k, v in obj.items()}
-                elif isinstance(obj, list):
-                    return [convert_numpy_types(item) for item in obj]
-                elif isinstance(obj, (np.bool_, bool)):
-                    return bool(obj)
-                elif isinstance(obj, (np.integer, np.int64, np.int32)):
-                    return int(obj)
-                elif isinstance(obj, (np.floating, np.float64, np.float32)):
-                    return float(obj)
-                elif isinstance(obj, np.ndarray):
-                    return convert_numpy_types(obj.tolist())
-                elif pd.isna(obj):
-                    return None
-                else:
-                    return obj
-
-            stats_dict = convert_numpy_types(stats_dict)
+            stats_dict = convert_to_json_serializable(stats_dict)
 
             # Record correction persistently (with privacy preservation)
             user_id = "default_user"  # TODO: Get from JWT when auth is enabled
@@ -1089,26 +1057,7 @@ async def submit_correction(request: CorrectionRequest):
                 logger.info(f"✨ New rule created: {learning_result.get('rule_name')}")
 
         # Convert all numpy types in result to native Python types
-        def convert_numpy_types_in_result(obj):
-            """Recursively convert numpy types to native Python types."""
-            if isinstance(obj, dict):
-                return {k: convert_numpy_types_in_result(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [convert_numpy_types_in_result(item) for item in obj]
-            elif isinstance(obj, (np.bool_, bool)):
-                return bool(obj)
-            elif isinstance(obj, (np.integer, np.int64, np.int32)):
-                return int(obj)
-            elif isinstance(obj, (np.floating, np.float64, np.float32)):
-                return float(obj)
-            elif isinstance(obj, np.ndarray):
-                return convert_numpy_types_in_result(obj.tolist())
-            elif pd.isna(obj):
-                return None
-            else:
-                return obj
-
-        result = convert_numpy_types_in_result(result)
+        result = convert_to_json_serializable(result)
 
         # Map preprocessor result to CorrectionResponse schema
         response_data = {
