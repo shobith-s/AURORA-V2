@@ -130,28 +130,37 @@ class ModelUnpickler(pickle.Unpickler):
         'TrainingSample': 'src.neural.oracle',
     }
     
+    def _try_redirect(self, name: str) -> Optional[Any]:
+        """
+        Helper method to attempt class redirection.
+        
+        Args:
+            name: Class name to redirect
+            
+        Returns:
+            Redirected class or None if redirect fails
+        """
+        if name not in self.CLASS_REDIRECTS:
+            return None
+            
+        redirect_module = self.CLASS_REDIRECTS[name]
+        try:
+            mod = __import__(redirect_module, fromlist=[name])
+            return getattr(mod, name)
+        except (ImportError, AttributeError) as e:
+            logger.debug(f"Failed to redirect {name} to {redirect_module}: {e}")
+            return None
+    
     def find_class(self, module, name):
         """Override to redirect class lookups."""
-        # Check if this class needs to be redirected
-        if name in self.CLASS_REDIRECTS:
-            redirect_module = self.CLASS_REDIRECTS[name]
-            try:
-                mod = __import__(redirect_module, fromlist=[name])
-                return getattr(mod, name)
-            except (ImportError, AttributeError) as e:
-                # Fall back to default behavior if redirect fails
-                logger.debug(f"Failed to redirect {name} to {redirect_module}: {e}")
+        # Try to redirect the class if it's in our mapping
+        # This handles both direct references and __main__ module references
+        if name in self.CLASS_REDIRECTS or (module == '__main__' and name in self.CLASS_REDIRECTS):
+            redirected = self._try_redirect(name)
+            if redirected is not None:
+                return redirected
         
-        # Also handle __main__ module redirects
-        if module == '__main__' and name in self.CLASS_REDIRECTS:
-            redirect_module = self.CLASS_REDIRECTS[name]
-            try:
-                mod = __import__(redirect_module, fromlist=[name])
-                return getattr(mod, name)
-            except (ImportError, AttributeError) as e:
-                logger.debug(f"Failed to redirect __main__.{name} to {redirect_module}: {e}")
-        
-        # Default behavior
+        # Default behavior for classes not in our redirect mapping
         return super().find_class(module, name)
 
 

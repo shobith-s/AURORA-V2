@@ -148,7 +148,7 @@ class TestHybridModelLoading:
             'metadata': {
                 'version': '2.0',
                 'sample_count': len(samples),
-                'config_hash': hash(str(config))
+                'config_str': str(config)  # Use string representation instead of hash for deterministic testing
             }
         }
         
