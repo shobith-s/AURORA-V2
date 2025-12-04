@@ -8,7 +8,7 @@ Model Details:
 - Architecture: XGBoost + LightGBM ensemble (VotingClassifier, soft voting)
 - Validation Accuracy: ~76% on real-world test data
 - Trained: November 2025 on diverse OpenML datasets with LLM validation
-- Model File: models/neural_oracle_v2_improved_20251129_150244.pkl
+- Model File: Dynamically discovered from models/ directory (any .pkl file)
 - Use Case: Handles cases where symbolic engine confidence < 0.65
 
 Training:
@@ -133,9 +133,8 @@ class NeuralOracle:
             models_dir = Path(__file__).parent.parent.parent / "models"
             
             # Priority order:
-            # 1. New hybrid model (aurora_preprocessing_oracle_*.pkl)
-            # 2. Ensemble model (neural_oracle_v2_improved_*.pkl)
-            # 3. Old model (neural_oracle_v1.pkl)
+            # 1. Hybrid model (aurora_preprocessing_oracle_*.pkl)
+            # 2. Any .pkl file (sorted by modification time, newest first)
             
             # Look for hybrid model
             if models_dir.exists():
@@ -143,20 +142,16 @@ class NeuralOracle:
                 if hybrid_models:
                     model_path = hybrid_models[0]  # Use most recent
                     logger.info(f"Found hybrid model: {model_path.name}")
-            
-            # Fallback to ensemble model
-            if model_path is None:
-                ensemble_path = models_dir / "neural_oracle_v2_improved_20251129_150244.pkl"
-                if ensemble_path.exists():
-                    model_path = ensemble_path
-                    logger.info(f"Found ensemble model: {model_path.name}")
-            
-            # Fallback to old model
-            if model_path is None:
-                default_path = models_dir / "neural_oracle_v1.pkl"
-                if default_path.exists():
-                    model_path = default_path
-                    logger.info(f"Found legacy model: {model_path.name}")
+                else:
+                    # Priority 2: Any .pkl file (sorted by modification time, newest first)
+                    all_pkl_files = sorted(
+                        models_dir.glob("*.pkl"),
+                        key=lambda p: p.stat().st_mtime,
+                        reverse=True
+                    )
+                    if all_pkl_files:
+                        model_path = all_pkl_files[0]
+                        logger.info(f"Found model: {model_path.name}")
         
         if model_path is not None and Path(model_path).exists():
             try:
@@ -776,13 +771,12 @@ def get_neural_oracle(model_path: Optional[Path] = None) -> NeuralOracle:
     """
     Get the global NeuralOracle instance with pre-trained model.
 
-    INFERENCE ONLY - Loads pre-trained model (hybrid, ensemble, or legacy).
+    INFERENCE ONLY - Loads pre-trained model dynamically.
     NO training occurs at runtime.
 
     Priority:
-    1. Hybrid model (aurora_preprocessing_oracle_*.pkl) - 74.7% ML + rules
-    2. Ensemble model (neural_oracle_v2_improved_20251129_150244.pkl) - 89.4% accuracy
-    3. Fallback to neural_oracle_v1.pkl if others not found
+    1. Hybrid model (aurora_preprocessing_oracle_*.pkl)
+    2. Any .pkl file in models/ directory (sorted by modification time, newest first)
     """
     global _oracle_instance
     if _oracle_instance is None:
@@ -794,18 +788,15 @@ def get_neural_oracle(model_path: Optional[Path] = None) -> NeuralOracle:
                 hybrid_models = sorted(models_dir.glob("aurora_preprocessing_oracle_*.pkl"), reverse=True)
                 if hybrid_models:
                     model_path = hybrid_models[0]
-            
-            # Try ensemble model
-            if model_path is None:
-                ensemble_path = models_dir / "neural_oracle_v2_improved_20251129_150244.pkl"
-                if ensemble_path.exists():
-                    model_path = ensemble_path
-            
-            # Fallback to old model
-            if model_path is None:
-                fallback_path = models_dir / "neural_oracle_v1.pkl"
-                if fallback_path.exists():
-                    model_path = fallback_path
+                else:
+                    # Priority 2: Any .pkl file (sorted by modification time, newest first)
+                    all_pkl_files = sorted(
+                        models_dir.glob("*.pkl"),
+                        key=lambda p: p.stat().st_mtime,
+                        reverse=True
+                    )
+                    if all_pkl_files:
+                        model_path = all_pkl_files[0]
 
         _oracle_instance = NeuralOracle(model_path)
     return _oracle_instance
