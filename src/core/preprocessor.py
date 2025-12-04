@@ -6,6 +6,7 @@ Symbolic Engine (with adaptive learning) -> NeuralOracle -> Conservative Fallbac
 from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 import numpy as np
+import logging
 from pathlib import Path
 import uuid
 import time
@@ -18,6 +19,9 @@ from .actions import PreprocessingAction, PreprocessingResult
 from .explainer import get_explainer
 # DISABLED: DatasetAnalyzer not used (results ignored)
 # from ..analysis.dataset_analyzer import DatasetAnalyzer
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 # Confidence thresholds for decision quality
 CONFIDENCE_HIGH = 0.9      # Auto-apply decision (highly confident)
@@ -63,9 +67,6 @@ class IntelligentPreprocessor:
             enable_learning: Whether to enable pattern learning
             neural_model_path: Path to neural oracle model
         """
-        import logging
-        logger = logging.getLogger(__name__)
-
         self.confidence_threshold = confidence_threshold
         self.use_neural_oracle = use_neural_oracle
         self.enable_learning = enable_learning
@@ -141,9 +142,6 @@ class IntelligentPreprocessor:
     @property
     def neural_oracle(self) -> Optional[NeuralOracle]:
         """Lazy load neural oracle with graceful degradation."""
-        import logging
-        logger = logging.getLogger(__name__)
-
         if self.use_neural_oracle and self._neural_oracle is None:
             try:
                 self._neural_oracle = get_neural_oracle(self.neural_model_path)
@@ -180,9 +178,6 @@ class IntelligentPreprocessor:
         Returns:
             PreprocessingResult with action, confidence, and explanation
         """
-        import logging
-        logger = logging.getLogger(__name__)
-        
         start_time = time.time()
 
         # Convert to pandas Series if needed
@@ -202,8 +197,6 @@ class IntelligentPreprocessor:
                 # (e.g., dates that partially convert to numbers)
                 conversion_rate = numeric_column.notna().sum() / len(column) if len(column) > 0 else 0
                 if conversion_rate > 0.9:
-                    import logging
-                    logger = logging.getLogger(__name__)
                     logger.info(f"Type inference: '{column_name}' converted from object to numeric (success rate: {conversion_rate:.2%})")
                     column = numeric_column
                     # Update the series name to maintain consistency
@@ -600,8 +593,6 @@ class IntelligentPreprocessor:
             result.explanation = enhanced_explanation
         except Exception as e:
             # If explanation enhancement fails, keep original but ensure it's not empty
-            import logging
-            logger = logging.getLogger(__name__)
             logger.warning(f"Failed to enhance explanation: {e}")
             
             # Fallback explanation if original is missing or empty

@@ -426,7 +426,7 @@ class NeuralOracle:
         try:
             import shap
         except ImportError:
-            logger.warning("SHAP not available. Falling back to regular prediction.")
+            logger.warning("SHAP not available.")
             return None
 
         if self.model is None:
@@ -435,6 +435,11 @@ class NeuralOracle:
 
         # Get base prediction
         prediction = self.predict(features, return_probabilities=True)
+        
+        # Check if prediction succeeded (returns None if no model)
+        if prediction is None:
+            logger.warning("Prediction failed. Cannot generate SHAP explanation.")
+            return None
 
         # Calculate SHAP values
         X = features.to_array().reshape(1, -1)
