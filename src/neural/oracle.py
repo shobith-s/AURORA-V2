@@ -39,6 +39,48 @@ from ..features.minimal_extractor import MinimalFeatures
 logger = logging.getLogger(__name__)
 
 
+class ModelUnpickler(pickle.Unpickler):
+    """
+    Custom unpickler to handle class references from different modules.
+    
+    This fixes the issue where models trained in Colab/notebooks have classes
+    saved with __main__ module path, but need to be loaded from src.neural.*
+    """
+    
+    # Map of class names to their actual module locations
+    CLASS_REDIRECTS = {
+        'HybridPreprocessingOracle': 'src.neural.hybrid_oracle',
+        'MetaFeatureExtractor': 'src.features.meta_extractor',
+        'MinimalFeatureExtractor': 'src.features.minimal_extractor',
+        'MinimalFeatures': 'src.features.minimal_extractor',
+        'MetaFeatures': 'src.features.meta_extractor',
+    }
+    
+    def find_class(self, module, name):
+        """Override to redirect class lookups."""
+        # Check if this class needs to be redirected
+        if name in self.CLASS_REDIRECTS:
+            redirect_module = self.CLASS_REDIRECTS[name]
+            try:
+                mod = __import__(redirect_module, fromlist=[name])
+                return getattr(mod, name)
+            except (ImportError, AttributeError) as e:
+                # Fall back to default behavior if redirect fails
+                logger.debug(f"Failed to redirect {name} to {redirect_module}: {e}")
+        
+        # Also handle __main__ module redirects
+        if module == '__main__' and name in self.CLASS_REDIRECTS:
+            redirect_module = self.CLASS_REDIRECTS[name]
+            try:
+                mod = __import__(redirect_module, fromlist=[name])
+                return getattr(mod, name)
+            except (ImportError, AttributeError) as e:
+                logger.debug(f"Failed to redirect __main__.{name} to {redirect_module}: {e}")
+        
+        # Default behavior
+        return super().find_class(module, name)
+
+
 @dataclass
 class OraclePrediction:
     """Prediction from the NeuralOracle."""
@@ -132,18 +174,18 @@ class NeuralOracle:
         if model_path is None:
             models_dir = Path(__file__).parent.parent.parent / "models"
             
-            # Priority order:
-            # 1. Hybrid model (aurora_preprocessing_oracle_*.pkl)
-            # 2. Any .pkl file (sorted by modification time, newest first)
-            
-            # Look for hybrid model
             if models_dir.exists():
-                hybrid_models = sorted(models_dir.glob("aurora_preprocessing_oracle_*.pkl"), reverse=True)
+                # Priority 1: Hybrid models (newest first)
+                hybrid_models = sorted(
+                    models_dir.glob("aurora_preprocessing_oracle_*.pkl"),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True
+                )
                 if hybrid_models:
-                    model_path = hybrid_models[0]  # Use most recent
+                    model_path = hybrid_models[0]
                     logger.info(f"Found hybrid model: {model_path.name}")
                 else:
-                    # Priority 2: Any .pkl file (sorted by modification time, newest first)
+                    # Priority 2: Any .pkl file (newest first by modification time)
                     all_pkl_files = sorted(
                         models_dir.glob("*.pkl"),
                         key=lambda p: p.stat().st_mtime,
@@ -576,7 +618,8 @@ class NeuralOracle:
         try:
             logger.info(f"Loading neural oracle model from: {path}")
             with open(path, 'rb') as f:
-                loaded = pickle.load(f)
+                # Use custom unpickler to handle class redirects
+                loaded = ModelUnpickler(f).load()
         except Exception as e:
             logger.error(f"Failed to load model from {path}: {e}")
             raise RuntimeError(f"Failed to load model: {e}") from e
@@ -783,13 +826,18 @@ def get_neural_oracle(model_path: Optional[Path] = None) -> NeuralOracle:
         if model_path is None:
             models_dir = Path(__file__).parent.parent.parent / "models"
             
-            # Try hybrid model first
             if models_dir.exists():
-                hybrid_models = sorted(models_dir.glob("aurora_preprocessing_oracle_*.pkl"), reverse=True)
+                # Priority 1: Hybrid models (newest first)
+                hybrid_models = sorted(
+                    models_dir.glob("aurora_preprocessing_oracle_*.pkl"),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True
+                )
                 if hybrid_models:
                     model_path = hybrid_models[0]
+                    logger.info(f"Found hybrid model: {model_path.name}")
                 else:
-                    # Priority 2: Any .pkl file (sorted by modification time, newest first)
+                    # Priority 2: Any .pkl file (newest first by modification time)
                     all_pkl_files = sorted(
                         models_dir.glob("*.pkl"),
                         key=lambda p: p.stat().st_mtime,
@@ -797,6 +845,7 @@ def get_neural_oracle(model_path: Optional[Path] = None) -> NeuralOracle:
                     )
                     if all_pkl_files:
                         model_path = all_pkl_files[0]
+                        logger.info(f"Found model: {model_path.name}")
 
         _oracle_instance = NeuralOracle(model_path)
     return _oracle_instance
