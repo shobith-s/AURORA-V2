@@ -6,10 +6,10 @@ NO training occurs during runtime.
 
 Model Details:
 - Architecture: XGBoost + LightGBM ensemble (VotingClassifier, soft voting)
-- Accuracy: 89.4% on test data
-- Trained: November 2025 on 40 diverse OpenML datasets
+- Validation Accuracy: ~76% on real-world test data
+- Trained: November 2025 on diverse OpenML datasets with LLM validation
 - Model File: models/neural_oracle_v2_improved_20251129_150244.pkl
-- Use Case: Handles cases where symbolic engine confidence < 0.75
+- Use Case: Handles cases where symbolic engine confidence < 0.65
 
 Training:
 - To retrain the model, use: validator/scripts/train_neural_oracle_v2.py
@@ -48,7 +48,7 @@ class NeuralOracle:
     """
     Pre-trained ensemble oracle for ambiguous preprocessing decisions.
 
-    INFERENCE ONLY - Uses pre-trained XGBoost + LightGBM ensemble (89.4% accuracy).
+    INFERENCE ONLY - Uses pre-trained XGBoost + LightGBM ensemble (~76% validation accuracy).
     No training occurs during runtime.
     Designed for <5ms inference time.
     """
