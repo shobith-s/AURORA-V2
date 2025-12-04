@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 try:
     import xgboost as xgb
     from sklearn.ensemble import VotingClassifier
+
     ENSEMBLE_AVAILABLE = True
 except ImportError:
     xgb = None
@@ -47,27 +48,29 @@ logger = logging.getLogger(__name__)
 # The actual values are NOT used at inference time.
 # ============================================================================
 
+
 @dataclass
 class TrainingConfig:
     """Stub class for loading models trained with TrainingConfig.
-    
+
     This class exists only to allow pickle to deserialize models that
     included TrainingConfig during training. The actual config values
     are not used at inference time.
     """
+
     # Dataset collection
     n_datasets: int = 40
     max_samples_per_dataset: int = 5000
     min_samples_for_cv: int = 50
-    
+
     # Cross-validation
     cv_folds: int = 3
-    
+
     # Training
     test_size: float = 0.2
     random_state: int = 42
     min_confidence: float = 0.5
-    
+
     # Actions to try for each column type
     numeric_actions: List[str] = field(default_factory=list)
     categorical_actions: List[str] = field(default_factory=list)
@@ -77,11 +80,12 @@ class TrainingConfig:
 @dataclass
 class CurriculumConfig:
     """Stub class for loading models trained with CurriculumConfig.
-    
+
     This class exists only to allow pickle to deserialize models that
     included CurriculumConfig during training. The actual config values
     are not used at inference time.
     """
+
     n_datasets: int = 40
     cv_folds: int = 3
     max_samples_per_dataset: int = 5000
@@ -91,11 +95,12 @@ class CurriculumConfig:
 @dataclass
 class TrainingSample:
     """Stub class for loading models trained with TrainingSample.
-    
+
     This class exists only to allow pickle to deserialize models that
     included TrainingSample during training. The actual sample values
     are not used at inference time.
     """
+
     features: Any = None
     label: str = ""
     confidence: float = 0.0
@@ -108,41 +113,39 @@ class TrainingSample:
 class ModelUnpickler(pickle.Unpickler):
     """
     Custom unpickler to handle class references from different modules.
-    
+
     This fixes the issue where models trained in Colab/notebooks have classes
     saved with __main__ module path, but need to be loaded from src.neural.*
     """
-    
+
     # Map of class names to their actual module locations
     CLASS_REDIRECTS = {
         # Core model classes
-        'HybridPreprocessingOracle': 'src.neural.hybrid_oracle',
-        
+        "HybridPreprocessingOracle": "src.neural.hybrid_oracle",
         # Feature extractors
-        'MetaFeatureExtractor': 'src.features.meta_extractor',
-        'MinimalFeatureExtractor': 'src.features.minimal_extractor',
-        'MinimalFeatures': 'src.features.minimal_extractor',
-        'MetaFeatures': 'src.features.meta_extractor',
-        
+        "MetaFeatureExtractor": "src.features.meta_extractor",
+        "MinimalFeatureExtractor": "src.features.minimal_extractor",
+        "MinimalFeatures": "src.features.minimal_extractor",
+        "MetaFeatures": "src.features.meta_extractor",
         # Training-only classes (use stubs defined in oracle.py)
-        'TrainingConfig': 'src.neural.oracle',
-        'CurriculumConfig': 'src.neural.oracle',
-        'TrainingSample': 'src.neural.oracle',
+        "TrainingConfig": "src.neural.oracle",
+        "CurriculumConfig": "src.neural.oracle",
+        "TrainingSample": "src.neural.oracle",
     }
-    
+
     def _try_redirect(self, name: str) -> Optional[Any]:
         """
         Helper method to attempt class redirection.
-        
+
         Args:
             name: Class name to redirect
-            
+
         Returns:
             Redirected class or None if redirect fails
         """
         if name not in self.CLASS_REDIRECTS:
             return None
-            
+
         redirect_module = self.CLASS_REDIRECTS[name]
         try:
             mod = __import__(redirect_module, fromlist=[name])
@@ -150,16 +153,18 @@ class ModelUnpickler(pickle.Unpickler):
         except (ImportError, AttributeError) as e:
             logger.debug(f"Failed to redirect {name} to {redirect_module}: {e}")
             return None
-    
+
     def find_class(self, module, name):
         """Override to redirect class lookups."""
         # Try to redirect the class if it's in our mapping
         # This handles both direct references and __main__ module references
-        if name in self.CLASS_REDIRECTS or (module == '__main__' and name in self.CLASS_REDIRECTS):
+        if name in self.CLASS_REDIRECTS or (
+            module == "__main__" and name in self.CLASS_REDIRECTS
+        ):
             redirected = self._try_redirect(name)
             if redirected is not None:
                 return redirected
-        
+
         # Default behavior for classes not in our redirect mapping
         return super().find_class(module, name)
 
@@ -167,6 +172,7 @@ class ModelUnpickler(pickle.Unpickler):
 @dataclass
 class OraclePrediction:
     """Prediction from the NeuralOracle."""
+
     action: PreprocessingAction
     confidence: float
     action_probabilities: Dict[PreprocessingAction, float]
@@ -181,44 +187,48 @@ class NeuralOracle:
     No training occurs during runtime.
     Designed for <5ms inference time.
     """
-    
+
+    # Feature count constants for different model types
+    META_FEATURE_COUNT = 40  # MetaFeatureExtractor (hybrid models)
+    MINIMAL_FEATURE_COUNT = 20  # MinimalFeatureExtractor (standard models)
+
     # Consolidated action mapping (covers all model formats: v2, hybrid, legacy)
     ACTION_MAPPING = {
         # V2 model class labels
-        'drop_column': PreprocessingAction.DROP_COLUMN,
-        'encode_categorical': PreprocessingAction.LABEL_ENCODE,
-        'keep_as_is': PreprocessingAction.KEEP_AS_IS,
-        'log_transform': PreprocessingAction.LOG_TRANSFORM,
-        'onehot_encode': PreprocessingAction.ONEHOT_ENCODE,
-        'parse_boolean': PreprocessingAction.PARSE_BOOLEAN,
-        'parse_datetime': PreprocessingAction.PARSE_DATETIME,
-        'retain_column': PreprocessingAction.KEEP_AS_IS,
-        'scale': PreprocessingAction.STANDARD_SCALE,
-        'scale_or_normalize': PreprocessingAction.STANDARD_SCALE,
-        'standard_scale': PreprocessingAction.STANDARD_SCALE,
+        "drop_column": PreprocessingAction.DROP_COLUMN,
+        "encode_categorical": PreprocessingAction.LABEL_ENCODE,
+        "keep_as_is": PreprocessingAction.KEEP_AS_IS,
+        "log_transform": PreprocessingAction.LOG_TRANSFORM,
+        "onehot_encode": PreprocessingAction.ONEHOT_ENCODE,
+        "parse_boolean": PreprocessingAction.PARSE_BOOLEAN,
+        "parse_datetime": PreprocessingAction.PARSE_DATETIME,
+        "retain_column": PreprocessingAction.KEEP_AS_IS,
+        "scale": PreprocessingAction.STANDARD_SCALE,
+        "scale_or_normalize": PreprocessingAction.STANDARD_SCALE,
+        "standard_scale": PreprocessingAction.STANDARD_SCALE,
         # Hybrid model actions
-        'clip_outliers': PreprocessingAction.CLIP_OUTLIERS,
-        'frequency_encode': PreprocessingAction.FREQUENCY_ENCODE,
-        'log1p_transform': PreprocessingAction.LOG1P_TRANSFORM,
-        'sqrt_transform': PreprocessingAction.SQRT_TRANSFORM,
-        'minmax_scale': PreprocessingAction.MINMAX_SCALE,
-        'robust_scale': PreprocessingAction.ROBUST_SCALE,
+        "clip_outliers": PreprocessingAction.CLIP_OUTLIERS,
+        "frequency_encode": PreprocessingAction.FREQUENCY_ENCODE,
+        "log1p_transform": PreprocessingAction.LOG1P_TRANSFORM,
+        "sqrt_transform": PreprocessingAction.SQRT_TRANSFORM,
+        "minmax_scale": PreprocessingAction.MINMAX_SCALE,
+        "robust_scale": PreprocessingAction.ROBUST_SCALE,
         # Legacy mappings
-        'drop': PreprocessingAction.DROP_COLUMN,
-        'fill_zero': PreprocessingAction.FILL_NULL_MODE,
-        'fill_forward': PreprocessingAction.FILL_NULL_FORWARD,
-        'fill_backward': PreprocessingAction.FILL_NULL_BACKWARD,
-        'fill_mean': PreprocessingAction.FILL_NULL_MEAN,
-        'fill_median': PreprocessingAction.FILL_NULL_MEDIAN,
-        'fill_mode': PreprocessingAction.FILL_NULL_MODE,
-        'label_encode': PreprocessingAction.LABEL_ENCODE,
-        'ordinal_encode': PreprocessingAction.ORDINAL_ENCODE,
+        "drop": PreprocessingAction.DROP_COLUMN,
+        "fill_zero": PreprocessingAction.FILL_NULL_MODE,
+        "fill_forward": PreprocessingAction.FILL_NULL_FORWARD,
+        "fill_backward": PreprocessingAction.FILL_NULL_BACKWARD,
+        "fill_mean": PreprocessingAction.FILL_NULL_MEAN,
+        "fill_median": PreprocessingAction.FILL_NULL_MEDIAN,
+        "fill_mode": PreprocessingAction.FILL_NULL_MODE,
+        "label_encode": PreprocessingAction.LABEL_ENCODE,
+        "ordinal_encode": PreprocessingAction.ORDINAL_ENCODE,
     }
 
     def __init__(self, model_path: Optional[Path] = None):
         """
         Initialize the NeuralOracle.
-        
+
         INFERENCE ONLY - Loads pre-trained model (single XGBoost or ensemble).
         NO training happens during runtime.
 
@@ -235,14 +245,28 @@ class NeuralOracle:
         self.action_encoder = {}
         self.action_decoder = {}
         self.feature_names = [
-            'null_ratio', 'unique_ratio', 'numeric_ratio',
-            'mean_length', 'std_length', 'has_special_chars',
-            'has_mixed_types', 'cardinality', 'entropy',
-            'is_sequential', 'date_ratio', 'email_ratio',
-            'url_ratio', 'phone_ratio', 'outlier_ratio',
-            'skewness', 'kurtosis', 'cv', 'iqr_ratio', 'range_ratio'
+            "null_ratio",
+            "unique_ratio",
+            "numeric_ratio",
+            "mean_length",
+            "std_length",
+            "has_special_chars",
+            "has_mixed_types",
+            "cardinality",
+            "entropy",
+            "is_sequential",
+            "date_ratio",
+            "email_ratio",
+            "url_ratio",
+            "phone_ratio",
+            "outlier_ratio",
+            "skewness",
+            "kurtosis",
+            "cv",
+            "iqr_ratio",
+            "range_ratio",
         ]
-        
+
         # Hybrid model attributes
         self.is_hybrid = False
         self.xgb_model = None
@@ -256,13 +280,13 @@ class NeuralOracle:
         # Try to load pre-trained model by default
         if model_path is None:
             models_dir = Path(__file__).parent.parent.parent / "models"
-            
+
             if models_dir.exists():
                 # Priority 1: Hybrid models (newest first)
                 hybrid_models = sorted(
                     models_dir.glob("aurora_preprocessing_oracle_*.pkl"),
                     key=lambda p: p.stat().st_mtime,
-                    reverse=True
+                    reverse=True,
                 )
                 if hybrid_models:
                     model_path = hybrid_models[0]
@@ -272,27 +296,33 @@ class NeuralOracle:
                     all_pkl_files = sorted(
                         models_dir.glob("*.pkl"),
                         key=lambda p: p.stat().st_mtime,
-                        reverse=True
+                        reverse=True,
                     )
                     if all_pkl_files:
                         model_path = all_pkl_files[0]
                         logger.info(f"Found model: {model_path.name}")
-        
+
         if model_path is not None and Path(model_path).exists():
             try:
                 self.load(model_path)
             except Exception as e:
                 logger.warning(f"Failed to load model from {model_path}: {e}")
-                logger.warning("Neural Oracle will not be available. System will rely on symbolic rules only.")
+                logger.warning(
+                    "Neural Oracle will not be available. System will rely on symbolic rules only."
+                )
         else:
-            logger.warning("No pre-trained neural oracle model found. System will rely on symbolic rules only.")
-            logger.info("To train a model, run: python validator/scripts/train_neural_oracle_v2.py")
+            logger.warning(
+                "No pre-trained neural oracle model found. System will rely on symbolic rules only."
+            )
+            logger.info(
+                "To train a model, run: python validator/scripts/train_neural_oracle_v2.py"
+            )
 
     def train(
         self,
         features: List[MinimalFeatures],
         labels: List[PreprocessingAction],
-        validation_split: float = 0.2
+        validation_split: float = 0.2,
     ) -> Dict[str, Any]:
         """
         ⚠️ DEPRECATED: Training should be done offline using validator scripts.
@@ -312,7 +342,7 @@ class NeuralOracle:
         self,
         features: MinimalFeatures,
         return_probabilities: bool = True,
-        return_feature_importance: bool = False
+        return_feature_importance: bool = False,
     ) -> Optional[OraclePrediction]:
         """
         Predict using PRE-TRAINED model (inference only).
@@ -333,28 +363,30 @@ class NeuralOracle:
             OraclePrediction with action and confidence, or None if no model loaded
         """
         if self.model is None and not self.is_hybrid:
-            logger.warning("No pre-trained model loaded. Returning None to allow symbolic fallback.")
+            logger.warning(
+                "No pre-trained model loaded. Returning None to allow symbolic fallback."
+            )
             return None
-        
+
         # Handle hybrid model prediction
         if self.is_hybrid:
             return self._predict_hybrid(features, return_probabilities)
 
         # Convert features to array
         X = features.to_array().reshape(1, -1)
-        
+
         # Check if model is sklearn or XGBoost
-        is_sklearn = hasattr(self.model, 'predict_proba')
-        
+        is_sklearn = hasattr(self.model, "predict_proba")
+
         if is_sklearn:
             # Sklearn model (VotingClassifier, etc.)
             # Get feature names from model if available to avoid warnings
-            if hasattr(self.model, 'feature_names_in_'):
+            if hasattr(self.model, "feature_names_in_"):
                 feature_names = list(self.model.feature_names_in_)
             else:
                 # Fallback to generic column names matching model training
-                feature_names = [f'Column_{i}' for i in range(X.shape[1])]
-            
+                feature_names = [f"Column_{i}" for i in range(X.shape[1])]
+
             # Convert to DataFrame with proper feature names to match training
             X_df = pd.DataFrame(X, columns=feature_names)
             probs = self.model.predict_proba(X_df)[0]
@@ -366,7 +398,7 @@ class NeuralOracle:
         # Get top prediction
         top_idx = int(np.argmax(probs))
         top_action = self.action_encoder[top_idx]
-        
+
         # Ensure action is an Enum (handle string actions from loaded models)
         if isinstance(top_action, str):
             # Try direct mapping using consolidated ACTION_MAPPING
@@ -380,10 +412,12 @@ class NeuralOracle:
                         top_action = action_enum
                         found = True
                         break
-                
+
                 # 3. Fallback to KEEP_AS_IS if unknown
                 if not found:
-                    logger.warning(f"Unknown action '{top_action}' from model. Defaulting to KEEP_AS_IS.")
+                    logger.warning(
+                        f"Unknown action '{top_action}' from model. Defaulting to KEEP_AS_IS."
+                    )
                     top_action = PreprocessingAction.KEEP_AS_IS
 
         confidence = float(probs[top_idx])
@@ -394,7 +428,7 @@ class NeuralOracle:
             for idx, prob in enumerate(probs):
                 if idx in self.action_encoder:
                     action_name = self.action_encoder[idx]
-                    
+
                     # Apply same mapping logic using consolidated ACTION_MAPPING
                     if isinstance(action_name, str):
                         if action_name in self.ACTION_MAPPING:
@@ -413,54 +447,74 @@ class NeuralOracle:
         # Get feature importance (only for XGBoost)
         feature_importance = None
         if return_feature_importance and not is_sklearn:
-            importance_dict = self.model.get_score(importance_type='gain')
+            importance_dict = self.model.get_score(importance_type="gain")
             feature_importance = {
-                name: importance_dict.get(name, 0.0)
-                for name in self.feature_names
+                name: importance_dict.get(name, 0.0) for name in self.feature_names
             }
 
         return OraclePrediction(
             action=top_action,
             confidence=confidence,
             action_probabilities=action_probs,
-            feature_importance=feature_importance
+            feature_importance=feature_importance,
         )
-    
+
     def _predict_hybrid(
-        self,
-        features: MinimalFeatures,
-        return_probabilities: bool = True
+        self, features: MinimalFeatures, return_probabilities: bool = True
     ) -> OraclePrediction:
         """
         Predict using hybrid model (ML + rules).
-        
+
         This method uses the HybridPreprocessingOracle for prediction.
         Note: MinimalFeatures (20 features) needs to be converted/expanded
         to work with hybrid model's 40 features if using MetaFeatureExtractor.
-        
+
         For now, we use the hybrid_model directly if it's a HybridPreprocessingOracle,
         or fall back to using xgb_model and lgb_model directly.
-        
+
         Args:
             features: Minimal features (20-feature format)
             return_probabilities: Return probabilities for all actions
-            
+
         Returns:
             OraclePrediction with action and confidence
         """
         from ..features.meta_extractor import MetaFeatures
-        
+
         # For hybrid models, use xgb_model and lgb_model directly with MinimalFeatures
         # Note: The hybrid model components are stored separately (xgb_model, lgb_model)
         # rather than in self.model
         # Convert MinimalFeatures to array (20 features)
         X = features.to_array().reshape(1, -1)
-        
+
+        # Hybrid models are trained with MetaFeatureExtractor (40 features)
+        # but runtime uses MinimalFeatureExtractor (20 features)
+        expected_features = self.META_FEATURE_COUNT
+
+        # Check feature dimension and pad if necessary
+        if X.shape[1] != expected_features:
+            if X.shape[1] < expected_features:
+                # Pad with zeros to match expected feature count
+                logger.warning(
+                    f"Feature dimension mismatch: got {X.shape[1]} features, expected {expected_features}. "
+                    f"Padding with zeros to match model expectations."
+                )
+                padded = np.zeros((1, expected_features))
+                padded[0, : X.shape[1]] = X[0]
+                X = padded
+            else:
+                # More features than expected - truncate
+                logger.warning(
+                    f"Feature dimension mismatch: got {X.shape[1]} features, expected {expected_features}. "
+                    f"Truncating to match model expectations."
+                )
+                X = X[:, :expected_features]
+
         # Get predictions from both models if available
         if self.xgb_model is not None and self.lgb_model is not None:
             xgb_probs = self.xgb_model.predict_proba(X)[0]
             lgb_probs = self.lgb_model.predict_proba(X)[0]
-            
+
             # Average ensemble
             ensemble_probs = (xgb_probs + lgb_probs) / 2.0
         elif self.xgb_model is not None:
@@ -470,20 +524,20 @@ class NeuralOracle:
         else:
             # No models available
             raise ValueError("Hybrid model loaded but no XGBoost/LightGBM models found")
-        
+
         # Get top prediction
         top_idx = int(np.argmax(ensemble_probs))
         confidence = float(ensemble_probs[top_idx])
-        
+
         # Get action name from label encoder
         if self.label_encoder is not None:
             action_name = self.label_encoder.inverse_transform([top_idx])[0]
         else:
-            action_name = self.action_encoder.get(top_idx, 'keep_as_is')
-        
+            action_name = self.action_encoder.get(top_idx, "keep_as_is")
+
         # Map to PreprocessingAction enum
         action = self._map_hybrid_action(action_name)
-        
+
         # Build probabilities dictionary
         action_probs = {}
         if return_probabilities:
@@ -491,44 +545,44 @@ class NeuralOracle:
                 if self.label_encoder is not None:
                     action_name = self.label_encoder.inverse_transform([idx])[0]
                 else:
-                    action_name = self.action_encoder.get(idx, 'keep_as_is')
+                    action_name = self.action_encoder.get(idx, "keep_as_is")
                 mapped_action = self._map_hybrid_action(action_name)
                 action_probs[mapped_action] = float(prob)
-        
+
         return OraclePrediction(
             action=action,
             confidence=confidence,
             action_probabilities=action_probs,
-            feature_importance=None
+            feature_importance=None,
         )
-    
+
     def _map_hybrid_action(self, action_name: str) -> PreprocessingAction:
         """
         Map hybrid model action name to PreprocessingAction enum using consolidated mapping.
-        
+
         Args:
             action_name: Action name from hybrid model
-            
+
         Returns:
             PreprocessingAction enum
         """
         # Use consolidated ACTION_MAPPING
         if action_name in self.ACTION_MAPPING:
             return self.ACTION_MAPPING[action_name]
-        
+
         # Try to match by enum value
         for action in PreprocessingAction:
             if action.value == action_name:
                 return action
-        
+
         # Default fallback
-        logger.warning(f"Unknown hybrid action '{action_name}', defaulting to KEEP_AS_IS")
+        logger.warning(
+            f"Unknown hybrid action '{action_name}', defaulting to KEEP_AS_IS"
+        )
         return PreprocessingAction.KEEP_AS_IS
 
     def predict_with_shap(
-        self,
-        features: MinimalFeatures,
-        top_k: int = 3
+        self, features: MinimalFeatures, top_k: int = 3
     ) -> Optional[Dict[str, Any]]:
         """
         Predict with SHAP explanation.
@@ -555,7 +609,7 @@ class NeuralOracle:
 
         # Get base prediction
         prediction = self.predict(features, return_probabilities=True)
-        
+
         # Check if prediction succeeded (returns None if no model)
         if prediction is None:
             logger.warning("Prediction failed. Cannot generate SHAP explanation.")
@@ -571,9 +625,9 @@ class NeuralOracle:
         # Handle multi-class output
         if isinstance(shap_values, list):
             # Get SHAP values for predicted class
-            predicted_idx = np.argmax(self.model.predict(
-                xgb.DMatrix(X, feature_names=self.feature_names)
-            )[0])
+            predicted_idx = np.argmax(
+                self.model.predict(xgb.DMatrix(X, feature_names=self.feature_names))[0]
+            )
             class_shap_values = shap_values[predicted_idx][0]
         else:
             class_shap_values = shap_values[0]
@@ -586,9 +640,7 @@ class NeuralOracle:
 
         # Get top contributing features
         top_features = sorted(
-            contributions.items(),
-            key=lambda x: abs(x[1]),
-            reverse=True
+            contributions.items(), key=lambda x: abs(x[1]), reverse=True
         )[:top_k]
 
         # Build human-readable explanation
@@ -601,20 +653,18 @@ class NeuralOracle:
             )
 
         return {
-            'action': prediction.action,
-            'confidence': prediction.confidence,
-            'explanation': explanation_parts,
-            'shap_values': contributions,
-            'top_features': [
-                {'feature': name, 'impact': impact}
-                for name, impact in top_features
+            "action": prediction.action,
+            "confidence": prediction.confidence,
+            "explanation": explanation_parts,
+            "shap_values": contributions,
+            "top_features": [
+                {"feature": name, "impact": impact} for name, impact in top_features
             ],
-            'action_probabilities': prediction.action_probabilities
+            "action_probabilities": prediction.action_probabilities,
         }
 
     def predict_batch(
-        self,
-        features_list: List[MinimalFeatures]
+        self, features_list: List[MinimalFeatures]
     ) -> Optional[List[OraclePrediction]]:
         """
         Predict for a batch of feature sets (faster than individual predictions).
@@ -649,11 +699,13 @@ class NeuralOracle:
                 if idx in self.action_encoder
             }
 
-            predictions.append(OraclePrediction(
-                action=top_action,
-                confidence=confidence,
-                action_probabilities=action_probs
-            ))
+            predictions.append(
+                OraclePrediction(
+                    action=top_action,
+                    confidence=confidence,
+                    action_probabilities=action_probs,
+                )
+            )
 
         return predictions
 
@@ -672,19 +724,19 @@ class NeuralOracle:
 
         # Save model and encoders
         save_dict = {
-            'model': self.model,
-            'action_encoder': self.action_encoder,
-            'action_decoder': self.action_decoder,
-            'feature_names': self.feature_names
+            "model": self.model,
+            "action_encoder": self.action_encoder,
+            "action_decoder": self.action_decoder,
+            "feature_names": self.feature_names,
         }
 
-        with open(path, 'wb') as f:
+        with open(path, "wb") as f:
             pickle.dump(save_dict, f)
 
     def load(self, path: Path):
         """
         Load pre-trained model from disk.
-        
+
         Supports:
         - Hybrid models (new format with hybrid_model, xgb_model, lgb_model)
         - Ensemble models (VotingClassifier saved directly)
@@ -700,7 +752,7 @@ class NeuralOracle:
 
         try:
             logger.info(f"Loading neural oracle model from: {path}")
-            with open(path, 'rb') as f:
+            with open(path, "rb") as f:
                 # Use custom unpickler to handle class redirects
                 loaded = ModelUnpickler(f).load()
         except Exception as e:
@@ -710,35 +762,39 @@ class NeuralOracle:
         # Check if it's a direct sklearn model (ensemble) or a dictionary (legacy/hybrid)
         if isinstance(loaded, dict):
             # Check if it's the new hybrid model format
-            if 'hybrid_model' in loaded:
+            if "hybrid_model" in loaded:
                 logger.info("Loaded hybrid model format")
                 # New hybrid format: Store the hybrid model object
                 # We'll handle this in a hybrid-aware way
-                self.model = loaded.get('hybrid_model')
-                self.xgb_model = loaded.get('xgb_model')
-                self.lgb_model = loaded.get('lgb_model')
-                self.label_encoder = loaded.get('label_encoder')
-                self.feature_extractor = loaded.get('feature_extractor')
-                self.config = loaded.get('config', {})
-                self.metadata = loaded.get('metadata', {})
-                self.removed_classes = loaded.get('removed_classes', [])
-                
+                self.model = loaded.get("hybrid_model")
+                self.xgb_model = loaded.get("xgb_model")
+                self.lgb_model = loaded.get("lgb_model")
+                self.label_encoder = loaded.get("label_encoder")
+                self.feature_extractor = loaded.get("feature_extractor")
+                self.config = loaded.get("config", {})
+                self.metadata = loaded.get("metadata", {})
+                self.removed_classes = loaded.get("removed_classes", [])
+
                 # Build action encoder/decoder from label encoder
-                if self.label_encoder is not None and hasattr(self.label_encoder, 'classes_'):
+                if self.label_encoder is not None and hasattr(
+                    self.label_encoder, "classes_"
+                ):
                     classes = self.label_encoder.classes_
                     self.action_encoder = {i: cls for i, cls in enumerate(classes)}
                     self.action_decoder = {cls: i for i, cls in enumerate(classes)}
-                
+
                 # Mark as hybrid model
                 self.is_hybrid = True
-                logger.info(f"Hybrid model loaded successfully: {self.metadata.get('model_version', 'unknown')}")
+                logger.info(
+                    f"Hybrid model loaded successfully: {self.metadata.get('model_version', 'unknown')}"
+                )
             else:
                 # Legacy format: dictionary with model and encoders
                 logger.info("Loaded legacy model format")
-                self.model = loaded['model']
-                self.action_encoder = loaded['action_encoder']
-                self.action_decoder = loaded['action_decoder']
-                self.feature_names = loaded.get('feature_names', self.feature_names)
+                self.model = loaded["model"]
+                self.action_encoder = loaded["action_encoder"]
+                self.action_decoder = loaded["action_decoder"]
+                self.feature_names = loaded.get("feature_names", self.feature_names)
                 self.is_hybrid = False
                 logger.info("Legacy model loaded successfully")
         else:
@@ -746,12 +802,14 @@ class NeuralOracle:
             logger.info("Loaded ensemble model format")
             self.model = loaded
             # Build action encoder/decoder from model's classes
-            if hasattr(loaded, 'classes_'):
+            if hasattr(loaded, "classes_"):
                 classes = loaded.classes_
                 self.action_encoder = {i: cls for i, cls in enumerate(classes)}
                 self.action_decoder = {cls: i for i, cls in enumerate(classes)}
             self.is_hybrid = False
-            logger.info(f"Ensemble model loaded successfully with {len(classes)} classes")
+            logger.info(
+                f"Ensemble model loaded successfully with {len(classes)} classes"
+            )
 
     def get_model_size(self) -> int:
         """
@@ -767,7 +825,7 @@ class NeuralOracle:
         import tempfile
         import os
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as tmp_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp_file:
             tmp_path = tmp_file.name
 
         try:
@@ -779,9 +837,7 @@ class NeuralOracle:
                 os.remove(tmp_path)
 
     def benchmark_inference(
-        self,
-        features: MinimalFeatures,
-        num_iterations: int = 1000
+        self, features: MinimalFeatures, num_iterations: int = 1000
     ) -> float:
         """
         Benchmark inference time.
@@ -800,12 +856,16 @@ class NeuralOracle:
 
         # Warmup
         for _ in range(10):
-            self.predict(features, return_probabilities=False, return_feature_importance=False)
+            self.predict(
+                features, return_probabilities=False, return_feature_importance=False
+            )
 
         # Benchmark
         start = time.time()
         for _ in range(num_iterations):
-            self.predict(features, return_probabilities=False, return_feature_importance=False)
+            self.predict(
+                features, return_probabilities=False, return_feature_importance=False
+            )
         end = time.time()
 
         avg_time_ms = (end - start) / num_iterations * 1000
@@ -824,21 +884,17 @@ class NeuralOracle:
         if self.model is None:
             raise ValueError("Model not trained or loaded.")
 
-        importance_dict = self.model.get_score(importance_type='gain')
+        importance_dict = self.model.get_score(importance_type="gain")
 
         # Sort by importance
         sorted_features = sorted(
-            importance_dict.items(),
-            key=lambda x: x[1],
-            reverse=True
+            importance_dict.items(), key=lambda x: x[1], reverse=True
         )
 
         return sorted_features[:top_k]
 
     def evaluate(
-        self,
-        features: List[MinimalFeatures],
-        labels: List[PreprocessingAction]
+        self, features: List[MinimalFeatures], labels: List[PreprocessingAction]
     ) -> Dict[str, float]:
         """
         Evaluate model performance.
@@ -858,7 +914,8 @@ class NeuralOracle:
 
         # Compute metrics
         correct = sum(
-            1 for pred, true_label in zip(predictions, labels)
+            1
+            for pred, true_label in zip(predictions, labels)
             if pred.action == true_label
         )
 
@@ -871,9 +928,7 @@ class NeuralOracle:
         top3_correct = 0
         for pred, true_label in zip(predictions, labels):
             top3_actions = sorted(
-                pred.action_probabilities.items(),
-                key=lambda x: x[1],
-                reverse=True
+                pred.action_probabilities.items(), key=lambda x: x[1], reverse=True
             )[:3]
             top3_actions = [a for a, _ in top3_actions]
             if true_label in top3_actions:
@@ -882,10 +937,10 @@ class NeuralOracle:
         top3_accuracy = top3_correct / len(labels) if len(labels) > 0 else 0.0
 
         return {
-            'accuracy': accuracy,
-            'top3_accuracy': top3_accuracy,
-            'avg_confidence': float(avg_confidence),
-            'num_samples': len(labels)
+            "accuracy": accuracy,
+            "top3_accuracy": top3_accuracy,
+            "avg_confidence": float(avg_confidence),
+            "num_samples": len(labels),
         }
 
 
@@ -908,13 +963,13 @@ def get_neural_oracle(model_path: Optional[Path] = None) -> NeuralOracle:
     if _oracle_instance is None:
         if model_path is None:
             models_dir = Path(__file__).parent.parent.parent / "models"
-            
+
             if models_dir.exists():
                 # Priority 1: Hybrid models (newest first)
                 hybrid_models = sorted(
                     models_dir.glob("aurora_preprocessing_oracle_*.pkl"),
                     key=lambda p: p.stat().st_mtime,
-                    reverse=True
+                    reverse=True,
                 )
                 if hybrid_models:
                     model_path = hybrid_models[0]
@@ -924,7 +979,7 @@ def get_neural_oracle(model_path: Optional[Path] = None) -> NeuralOracle:
                     all_pkl_files = sorted(
                         models_dir.glob("*.pkl"),
                         key=lambda p: p.stat().st_mtime,
-                        reverse=True
+                        reverse=True,
                     )
                     if all_pkl_files:
                         model_path = all_pkl_files[0]
