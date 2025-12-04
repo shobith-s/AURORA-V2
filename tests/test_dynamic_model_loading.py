@@ -9,13 +9,9 @@ This test verifies that:
 """
 
 import pytest
-import pandas as pd
-import numpy as np
 from pathlib import Path
 import tempfile
-import shutil
 import time
-import pickle
 
 from src.neural.oracle import NeuralOracle, get_neural_oracle
 from src.core.actions import PreprocessingAction
@@ -23,6 +19,27 @@ from src.core.actions import PreprocessingAction
 
 class TestDynamicModelLoading:
     """Test suite for dynamic model loading in NeuralOracle."""
+    
+    @staticmethod
+    def _discover_model(models_dir: Path) -> Path:
+        """
+        Helper method that replicates the model discovery logic.
+        This matches the logic in NeuralOracle.__init__ and get_neural_oracle().
+        """
+        model_path = None
+        if models_dir.exists():
+            hybrid_models = sorted(models_dir.glob("aurora_preprocessing_oracle_*.pkl"), reverse=True)
+            if hybrid_models:
+                model_path = hybrid_models[0]
+            else:
+                all_pkl_files = sorted(
+                    models_dir.glob("*.pkl"),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True
+                )
+                if all_pkl_files:
+                    model_path = all_pkl_files[0]
+        return model_path
     
     def test_loads_hybrid_model_first(self):
         """Hybrid models should take priority over other .pkl files."""
@@ -39,27 +56,7 @@ class TestDynamicModelLoading:
             other_model.touch()
             
             # The hybrid model should be selected even though other_model is newer
-            oracle = NeuralOracle.__new__(NeuralOracle)
-            oracle.model = None
-            oracle.is_hybrid = False
-            oracle.action_encoder = {}
-            oracle.action_decoder = {}
-            oracle.feature_names = []
-            
-            # Simulate the model discovery logic
-            model_path = None
-            if models_dir.exists():
-                hybrid_models = sorted(models_dir.glob("aurora_preprocessing_oracle_*.pkl"), reverse=True)
-                if hybrid_models:
-                    model_path = hybrid_models[0]
-                else:
-                    all_pkl_files = sorted(
-                        models_dir.glob("*.pkl"),
-                        key=lambda p: p.stat().st_mtime,
-                        reverse=True
-                    )
-                    if all_pkl_files:
-                        model_path = all_pkl_files[0]
+            model_path = self._discover_model(models_dir)
             
             assert model_path is not None
             assert model_path.name == "aurora_preprocessing_oracle_20250101.pkl"
@@ -77,20 +74,7 @@ class TestDynamicModelLoading:
             time.sleep(0.01)
             model2.touch()  # This is newer
             
-            # Simulate the model discovery logic
-            model_path = None
-            if models_dir.exists():
-                hybrid_models = sorted(models_dir.glob("aurora_preprocessing_oracle_*.pkl"), reverse=True)
-                if hybrid_models:
-                    model_path = hybrid_models[0]
-                else:
-                    all_pkl_files = sorted(
-                        models_dir.glob("*.pkl"),
-                        key=lambda p: p.stat().st_mtime,
-                        reverse=True
-                    )
-                    if all_pkl_files:
-                        model_path = all_pkl_files[0]
+            model_path = self._discover_model(models_dir)
             
             assert model_path is not None
             # Should select the newer file
@@ -112,20 +96,7 @@ class TestDynamicModelLoading:
             time.sleep(0.01)
             new_model.touch()
             
-            # Simulate the model discovery logic
-            model_path = None
-            if models_dir.exists():
-                hybrid_models = sorted(models_dir.glob("aurora_preprocessing_oracle_*.pkl"), reverse=True)
-                if hybrid_models:
-                    model_path = hybrid_models[0]
-                else:
-                    all_pkl_files = sorted(
-                        models_dir.glob("*.pkl"),
-                        key=lambda p: p.stat().st_mtime,
-                        reverse=True
-                    )
-                    if all_pkl_files:
-                        model_path = all_pkl_files[0]
+            model_path = self._discover_model(models_dir)
             
             assert model_path is not None
             assert model_path.name == "new_model.pkl"
@@ -138,20 +109,7 @@ class TestDynamicModelLoading:
             # Create a non-.pkl file
             (models_dir / "readme.txt").touch()
             
-            # Simulate the model discovery logic
-            model_path = None
-            if models_dir.exists():
-                hybrid_models = sorted(models_dir.glob("aurora_preprocessing_oracle_*.pkl"), reverse=True)
-                if hybrid_models:
-                    model_path = hybrid_models[0]
-                else:
-                    all_pkl_files = sorted(
-                        models_dir.glob("*.pkl"),
-                        key=lambda p: p.stat().st_mtime,
-                        reverse=True
-                    )
-                    if all_pkl_files:
-                        model_path = all_pkl_files[0]
+            model_path = self._discover_model(models_dir)
             
             assert model_path is None
     
@@ -160,20 +118,7 @@ class TestDynamicModelLoading:
         with tempfile.TemporaryDirectory() as tmpdir:
             models_dir = Path(tmpdir)
             
-            # Simulate the model discovery logic
-            model_path = None
-            if models_dir.exists():
-                hybrid_models = sorted(models_dir.glob("aurora_preprocessing_oracle_*.pkl"), reverse=True)
-                if hybrid_models:
-                    model_path = hybrid_models[0]
-                else:
-                    all_pkl_files = sorted(
-                        models_dir.glob("*.pkl"),
-                        key=lambda p: p.stat().st_mtime,
-                        reverse=True
-                    )
-                    if all_pkl_files:
-                        model_path = all_pkl_files[0]
+            model_path = self._discover_model(models_dir)
             
             assert model_path is None
     
@@ -190,12 +135,7 @@ class TestDynamicModelLoading:
             time.sleep(0.01)
             new_hybrid.touch()
             
-            # Simulate the model discovery logic (with reverse=True, it sorts by name descending)
-            model_path = None
-            if models_dir.exists():
-                hybrid_models = sorted(models_dir.glob("aurora_preprocessing_oracle_*.pkl"), reverse=True)
-                if hybrid_models:
-                    model_path = hybrid_models[0]
+            model_path = self._discover_model(models_dir)
             
             assert model_path is not None
             # With reverse=True on sorted names, newer timestamp in filename comes first
