@@ -324,7 +324,10 @@ class AnonymizationUtils:
         precision: int = 2
     ) -> float:
         """
-        Alias for generalize_numeric_value for backward compatibility.
+        Generalize numeric value by reducing precision.
+        
+        Note: This is an alias for generalize_numeric_value() for backward compatibility
+        with existing tests.
 
         Args:
             value: Original value

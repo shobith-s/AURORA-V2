@@ -20,6 +20,7 @@ from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
 import pandas as pd
 import pickle
+import logging
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -33,6 +34,9 @@ except ImportError:
 
 from ..core.actions import PreprocessingAction
 from ..features.minimal_extractor import MinimalFeatures
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -92,9 +96,6 @@ class NeuralOracle:
         self.removed_classes = []
 
         # Try to load pre-trained model by default
-        import logging
-        logger = logging.getLogger(__name__)
-        
         if model_path is None:
             models_dir = Path(__file__).parent.parent.parent / "models"
             
@@ -589,9 +590,6 @@ class NeuralOracle:
         Args:
             path: Path to the saved model
         """
-        import logging
-        logger = logging.getLogger(__name__)
-        
         path = Path(path)
         if not path.exists():
             logger.error(f"Model file not found: {path}")
