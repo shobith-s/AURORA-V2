@@ -22,7 +22,7 @@ import pandas as pd
 import pickle
 import logging
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 try:
     import xgboost as xgb
@@ -39,6 +39,72 @@ from ..features.minimal_extractor import MinimalFeatures
 logger = logging.getLogger(__name__)
 
 
+# ============================================================================
+# Stub Classes for Pickle Deserialization
+# ============================================================================
+# These classes exist ONLY to allow pickle to deserialize models that were
+# trained in Colab notebooks where these classes were defined in __main__.
+# The actual values are NOT used at inference time.
+# ============================================================================
+
+@dataclass
+class TrainingConfig:
+    """Stub class for loading models trained with TrainingConfig.
+    
+    This class exists only to allow pickle to deserialize models that
+    included TrainingConfig during training. The actual config values
+    are not used at inference time.
+    """
+    # Dataset collection
+    n_datasets: int = 40
+    max_samples_per_dataset: int = 5000
+    min_samples_for_cv: int = 50
+    
+    # Cross-validation
+    cv_folds: int = 3
+    
+    # Training
+    test_size: float = 0.2
+    random_state: int = 42
+    min_confidence: float = 0.5
+    
+    # Actions to try for each column type
+    numeric_actions: List[str] = field(default_factory=list)
+    categorical_actions: List[str] = field(default_factory=list)
+    text_actions: List[str] = field(default_factory=list)
+
+
+@dataclass
+class CurriculumConfig:
+    """Stub class for loading models trained with CurriculumConfig.
+    
+    This class exists only to allow pickle to deserialize models that
+    included CurriculumConfig during training. The actual config values
+    are not used at inference time.
+    """
+    n_datasets: int = 40
+    cv_folds: int = 3
+    max_samples_per_dataset: int = 5000
+    random_state: int = 42
+
+
+@dataclass
+class TrainingSample:
+    """Stub class for loading models trained with TrainingSample.
+    
+    This class exists only to allow pickle to deserialize models that
+    included TrainingSample during training. The actual sample values
+    are not used at inference time.
+    """
+    features: Any = None
+    label: str = ""
+    confidence: float = 0.0
+    column_type: str = ""
+    column_name: str = ""
+    dataset_name: str = ""
+    performance_score: float = 0.0
+
+
 class ModelUnpickler(pickle.Unpickler):
     """
     Custom unpickler to handle class references from different modules.
@@ -49,11 +115,19 @@ class ModelUnpickler(pickle.Unpickler):
     
     # Map of class names to their actual module locations
     CLASS_REDIRECTS = {
+        # Core model classes
         'HybridPreprocessingOracle': 'src.neural.hybrid_oracle',
+        
+        # Feature extractors
         'MetaFeatureExtractor': 'src.features.meta_extractor',
         'MinimalFeatureExtractor': 'src.features.minimal_extractor',
         'MinimalFeatures': 'src.features.minimal_extractor',
         'MetaFeatures': 'src.features.meta_extractor',
+        
+        # Training-only classes (use stubs defined in oracle.py)
+        'TrainingConfig': 'src.neural.oracle',
+        'CurriculumConfig': 'src.neural.oracle',
+        'TrainingSample': 'src.neural.oracle',
     }
     
     def find_class(self, module, name):
