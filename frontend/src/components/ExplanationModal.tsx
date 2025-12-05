@@ -3,15 +3,35 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
+interface ExplanationData {
+    action?: string;
+    confidence?: number;
+    source?: string;
+    decision?: {
+        action: string;
+        confidence: number;
+        source: string;
+    };
+    markdown_report?: string;
+    what?: string;
+    why?: string;
+    impact?: string;
+    analogy?: string;
+    why_not?: Record<string, string>;
+    stats?: string[];
+    glossary_terms?: string[];
+    alternatives?: Array<{ action: string; confidence: number }>;
+}
+
 interface ExplanationModalProps {
     isOpen: boolean;
     onClose: () => void;
-    columnData: any[];
+    columnData: unknown[];
     columnName: string;
 }
 
 export default function ExplanationModal({ isOpen, onClose, columnData, columnName }: ExplanationModalProps) {
-    const [explanation, setExplanation] = useState<any>(null);
+    const [explanation, setExplanation] = useState<ExplanationData | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'explanation' | 'alternatives' | 'impact'>('explanation');
 
@@ -20,6 +40,7 @@ export default function ExplanationModal({ isOpen, onClose, columnData, columnNa
         if (isOpen && !explanation) {
             fetchExplanation();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]);
 
     const fetchExplanation = async () => {
@@ -41,11 +62,15 @@ export default function ExplanationModal({ isOpen, onClose, columnData, columnNa
 
             console.log('✅ API Response:', response.data);
             setExplanation(response.data);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('❌ Explanation Modal Error:', error);
-            console.error('Error Response:', error.response?.data);
-            console.error('Error Status:', error.response?.status);
-            toast.error('Failed to load explanation: ' + (error.response?.data?.detail || error.message));
+            if (axios.isAxiosError(error)) {
+                console.error('Error Response:', error.response?.data);
+                console.error('Error Status:', error.response?.status);
+                toast.error('Failed to load explanation: ' + (error.response?.data?.detail || error.message));
+            } else {
+                toast.error('Failed to load explanation');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -64,7 +89,7 @@ export default function ExplanationModal({ isOpen, onClose, columnData, columnNa
                         </div>
                         <div>
                             <h2 className="text-xl font-bold text-brand-black dark:text-brand-white">Enhanced Explanation</h2>
-                            <p className="text-sm text-foreground-muted dark:text-brand-cool-gray">Deep dive into the decision for "{columnName}"</p>
+                            <p className="text-sm text-foreground-muted dark:text-brand-cool-gray">Deep dive into the decision for &quot;{columnName}&quot;</p>
                         </div>
                     </div>
                     <button
@@ -129,6 +154,7 @@ export default function ExplanationModal({ isOpen, onClose, columnData, columnNa
                             {activeTab === 'explanation' && (
                                 <div className="prose prose-slate dark:prose-invert max-w-none">
                                     {/* Decision Summary Card */}
+                                    {explanation.decision && (
                                     <div className="p-6 bg-primary/10 dark:bg-background-dark border border-primary/50 dark:border-border-dark rounded-xl mb-6 shadow-sm">
                                         <div className="flex items-center justify-between mb-4">
                                             <h3 className="text-lg font-semibold text-brand-black dark:text-brand-white m-0">
@@ -147,12 +173,15 @@ export default function ExplanationModal({ isOpen, onClose, columnData, columnNa
                                             </span>
                                         </div>
                                     </div>
+                                    )}
 
                                     {/* Markdown Explanation */}
+                                    {explanation.markdown_report && (
                                     <div
                                         className="text-foreground dark:text-foreground-muted leading-relaxed prose-headings:text-brand-black dark:prose-headings:text-brand-white prose-strong:text-brand-black dark:prose-strong:text-brand-white prose-p:text-foreground dark:prose-p:text-foreground-muted"
                                         dangerouslySetInnerHTML={{ __html: formatMarkdown(explanation.markdown_report) }}
                                     />
+                                    )}
                                 </div>
                             )}
 
@@ -167,7 +196,7 @@ export default function ExplanationModal({ isOpen, onClose, columnData, columnNa
 
                                     {explanation.alternatives && explanation.alternatives.length > 0 ? (
                                         <div className="space-y-3">
-                                            {explanation.alternatives.map((alt: any, idx: number) => (
+                                            {explanation.alternatives.map((alt: { action: string; confidence: number }, idx: number) => (
                                                 <div key={idx} className="p-4 bg-brand-white dark:bg-background-dark/50 border border-brand-warm-gray dark:border-border-dark rounded-lg hover:border-primary dark:hover:border-primary transition-colors">
                                                     <div className="flex items-center justify-between">
                                                         <span className="font-semibold text-brand-black dark:text-brand-white">
@@ -193,7 +222,7 @@ export default function ExplanationModal({ isOpen, onClose, columnData, columnNa
                                     <div>
                                         <h3 className="text-xl font-bold text-brand-black dark:text-brand-white mb-2">Expected Impact</h3>
                                         <p className="text-foreground-muted dark:text-brand-cool-gray">
-                                            How this preprocessing decision will affect your model's performance.
+                                            How this preprocessing decision will affect your model&apos;s performance.
                                         </p>
                                     </div>
                                     <div className="p-6 bg-success/10 dark:bg-background-dark border border-success/30 dark:border-border-dark rounded-lg">

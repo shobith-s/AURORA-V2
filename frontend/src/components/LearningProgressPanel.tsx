@@ -7,22 +7,20 @@ import { useState, useEffect } from 'react';
 import { BookOpen, Target, TrendingUp, CheckCircle, Clock, Zap } from 'lucide-react';
 import axios from 'axios';
 
-interface LearningProgress {
-  approach: string;
-  total_corrections: number;
-  patterns_tracked: number;
-  pattern_corrections: number;
-  corrections_needed_for_training: number;
-  corrections_needed_for_production: number;
-  production_ready: boolean;
-  rule_created: boolean;
-  rule_name?: string;
-  total_symbolic_rules?: number;
-  message?: string;
+interface ProgressData {
+  corrections_count: number;
+  rules_created: number;
+  adaptive_learning?: {
+    enabled: boolean;
+    total_corrections?: number;
+    patterns_tracked?: number;
+    active_adjustments?: number;
+    adjustments: Record<string, { action: string; corrections: number; confidence_boost: number; confidence_delta?: string }>;
+  };
 }
 
 export default function LearningProgressPanel() {
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<ProgressData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -106,7 +104,7 @@ export default function LearningProgressPanel() {
         <div>
           <h4 className="text-sm font-semibold text-foreground mb-3">Active Learned Rules</h4>
           <div className="space-y-2">
-            {Object.entries(adaptiveLearning.adjustments).map(([pattern, adj]: [string, any]) => (
+            {Object.entries(adaptiveLearning.adjustments).map(([pattern, adj]: [string, { action: string; corrections: number; confidence_boost: number; confidence_delta?: string }]) => (
               <div key={pattern} className="p-3 bg-brand-white rounded-lg border border-brand-warm-gray">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium text-brand-black">

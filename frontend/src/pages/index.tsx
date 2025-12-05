@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Head from 'next/head';
 import PreprocessingPanel from '../components/PreprocessingPanel';
 import ChatbotPanel from '../components/ChatbotPanel';
 import MetricsDashboard from '../components/MetricsDashboard';
-import LearningProgressPanel from '../components/LearningProgressPanel';
 import Header from '../components/Header';
 import ScriptIDE from '../components/ScriptIDE';
 import { Toaster } from 'react-hot-toast';

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, Clock, Users, Star, CheckCircle, Award, Zap, ThumbsUp } from 'lucide-react';
+import { TrendingUp, Clock, Users, Star, CheckCircle, Award, Zap, ThumbsUp, LucideIcon } from 'lucide-react';
 import axios from 'axios';
 
 interface KeyStat {
@@ -10,9 +10,7 @@ interface KeyStat {
   description: string;
 }
 
-interface ProofPoint {
-  text: string;
-}
+
 
 interface Testimonial {
   user_id: string;
@@ -59,7 +57,7 @@ export default function ValidationDashboard() {
   const fetchDashboardData = async () => {
     try {
       // Use metrics/dashboard endpoint instead (simplified backend)
-      const [metricsRes, statsRes] = await Promise.all([
+      const [, statsRes] = await Promise.all([
         axios.get('/api/validation/metrics').catch(() => null),
         axios.get('/api/statistics').catch(() => null)
       ]);
@@ -122,8 +120,8 @@ export default function ValidationDashboard() {
     }
   };
 
-  const getIconComponent = (iconName: string) => {
-    const iconMap: Record<string, any> = {
+  const getIconComponent = (iconName: string): LucideIcon => {
+    const iconMap: Record<string, LucideIcon> = {
       'clock': Clock,
       'star': Star,
       'thumbs-up': ThumbsUp,
@@ -176,7 +174,7 @@ export default function ValidationDashboard() {
           AURORA Validation Dashboard
         </h1>
         <p className="text-foreground-muted text-lg">
-          Real metrics proving AURORA's value
+          Real metrics proving AURORA&apos;s value
         </p>
       </div>
 
@@ -347,7 +345,7 @@ export default function ValidationDashboard() {
                     <Star key={i} className="w-4 h-4 fill-yellow-400 text-warning" />
                   ))}
                 </div>
-                <p className="text-foreground italic mb-4">"{testimonial.testimonial}"</p>
+                <p className="text-foreground italic mb-4">&quot;{testimonial.testimonial}&quot;</p>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-foreground-muted">
                     <span className="font-medium">Use case:</span> {testimonial.use_case}

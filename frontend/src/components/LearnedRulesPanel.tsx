@@ -2,48 +2,48 @@ import React, { useEffect, useState } from 'react';
 import { Brain, TrendingUp, CheckCircle, Clock } from 'lucide-react';
 
 // Simple card components (inline to avoid import issues)
-const Card = ({ children, className = '' }: any) => (
+const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
     <div className={`glass-card ${className}`}>{children}</div>
 );
 
-const CardHeader = ({ children }: any) => (
+const CardHeader = ({ children }: { children: React.ReactNode }) => (
     <div className="p-6 pb-3">{children}</div>
 );
 
-const CardTitle = ({ children, className = '' }: any) => (
+const CardTitle = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
     <h3 className={`text-lg font-semibold ${className}`}>{children}</h3>
 );
 
-const CardContent = ({ children }: any) => (
+const CardContent = ({ children }: { children: React.ReactNode }) => (
     <div className="p-6 pt-0">{children}</div>
 );
 
-const Badge = ({ children, variant = 'default' }: any) => {
+const Badge = ({ children, variant = 'default' }: { children: React.ReactNode; variant?: 'default' | 'secondary' | 'outline' }) => {
     const variants = {
         default: 'bg-primary text-brand-white',
         secondary: 'bg-background-muted text-foreground',
         outline: 'border border-brand-warm-gray text-foreground'
     };
     return (
-        <span className={`px-2 py-1 rounded text-xs font-medium ${variants[variant as keyof typeof variants]}`}>
+        <span className={`px-2 py-1 rounded text-xs font-medium ${variants[variant]}`}>
             {children}
         </span>
     );
 };
 
-const Table = ({ children }: any) => (
+const Table = ({ children }: { children: React.ReactNode }) => (
     <div className="w-full overflow-auto">
         <table className="w-full">{children}</table>
     </div>
 );
 
-const TableHeader = ({ children }: any) => <thead>{children}</thead>;
-const TableBody = ({ children }: any) => <tbody>{children}</tbody>;
-const TableRow = ({ children }: any) => <tr className="border-b border-brand-warm-gray">{children}</tr>;
-const TableHead = ({ children }: any) => (
+const TableHeader = ({ children }: { children: React.ReactNode }) => <thead>{children}</thead>;
+const TableBody = ({ children }: { children: React.ReactNode }) => <tbody>{children}</tbody>;
+const TableRow = ({ children }: { children: React.ReactNode }) => <tr className="border-b border-brand-warm-gray">{children}</tr>;
+const TableHead = ({ children }: { children: React.ReactNode }) => (
     <th className="text-left p-3 text-sm font-medium text-foreground-muted">{children}</th>
 );
-const TableCell = ({ children }: any) => (
+const TableCell = ({ children }: { children: React.ReactNode }) => (
     <td className="p-3 text-sm">{children}</td>
 );
 

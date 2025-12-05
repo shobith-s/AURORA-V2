@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Upload, Play, Download, CheckCircle, AlertCircle, Info, FileSpreadsheet, X, Edit2, Activity, TrendingUp, TrendingDown, MinusCircle, ChevronDown, ChevronRight, Layers, Zap, Brain, BookOpen, Target, Shield } from 'lucide-react';
+import { Upload, Play, CheckCircle, AlertCircle, Info, FileSpreadsheet, X, Edit2, Activity, ChevronDown, ChevronRight, BookOpen, Target, Shield } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import ResultCard from './ResultCard';
@@ -37,8 +37,15 @@ interface BatchHealthResponse {
   column_health: Record<string, ColumnHealthMetrics>;
 }
 
+interface ColumnResult {
+  action: string;
+  confidence: number;
+  source: string;
+  explanation?: string;
+}
+
 interface BatchResults {
-  results: Record<string, any>;
+  results: Record<string, ColumnResult>;
   summary: {
     total_columns: number;
     processed_columns: number;
@@ -53,19 +60,18 @@ export default function PreprocessingPanel() {
   const [columnName, setColumnName] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ColumnResult | null>(null);
   const [batchResults, setBatchResults] = useState<BatchResults | null>(null);
   const [showCorrectionFor, setShowCorrectionFor] = useState<string | null>(null);
   const [showExplanationFor, setShowExplanationFor] = useState<string | null>(null);
   const [explanationColumnName, setExplanationColumnName] = useState<string | null>(null);
-  const [explanationColumnData, setExplanationColumnData] = useState<any>(null);
+  const [explanationColumnData, setExplanationColumnData] = useState<unknown[] | null>(null);
   const [correctActions, setCorrectActions] = useState<Record<string, string>>({});
   const [isSubmittingCorrection, setIsSubmittingCorrection] = useState<Record<string, boolean>>({});
-  const [expandedHealthColumn, setExpandedHealthColumn] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
-  const [originalData, setOriginalData] = useState<Record<string, any[]> | null>(null);
+  const [originalData, setOriginalData] = useState<Record<string, unknown[]> | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [preprocessedData, setPreprocessedData] = useState<Record<string, any[]> | null>(null);
+  const [preprocessedData, setPreprocessedData] = useState<Record<string, unknown[]> | null>(null);
 
   // Action Library State
   const [showActionLibrary, setShowActionLibrary] = useState(false);
@@ -108,14 +114,14 @@ export default function PreprocessingPanel() {
     setBatchResults(null);
   };
 
-  const parseCSV = (text: string): Record<string, any[]> => {
+  const parseCSV = (text: string): Record<string, unknown[]> => {
     const lines = text.trim().split('\n');
     if (lines.length < 2) {
       throw new Error('CSV must have at least a header row and one data row');
     }
 
     const headers = lines[0].split(',').map(h => h.trim());
-    const columns: Record<string, any[]> = {};
+    const columns: Record<string, unknown[]> = {};
 
     headers.forEach(header => {
       columns[header] = [];
@@ -179,8 +185,12 @@ export default function PreprocessingPanel() {
 
       setResult(response.data);
       toast.success('Analysis complete!');
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Analysis failed');
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        toast.error(error.response?.data?.detail || 'Analysis failed');
+      } else {
+        toast.error('Analysis failed');
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -200,12 +210,16 @@ export default function PreprocessingPanel() {
       });
       setBatchResults(response.data);
       toast.success(`Analyzed ${Object.keys(columns).length} columns!`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Upload error:', error);
-      if (error.code === 'ECONNABORTED') {
-        toast.error('Upload timed out. Try with a smaller file or fewer columns.');
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED') {
+          toast.error('Upload timed out. Try with a smaller file or fewer columns.');
+        } else {
+          toast.error(error.response?.data?.detail || error.message || 'Upload failed');
+        }
       } else {
-        toast.error(error.response?.data?.detail || error.message || 'Upload failed');
+        toast.error('Upload failed');
       }
     } finally {
       setIsProcessing(false);
@@ -253,14 +267,26 @@ export default function PreprocessingPanel() {
         delete newActions[columnName];
         return newActions;
       });
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Correction failed');
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        toast.error(error.response?.data?.detail || 'Correction failed');
+      } else {
+        toast.error('Correction failed');
+      }
     } finally {
       setIsSubmittingCorrection(prev => ({ ...prev, [columnName]: false }));
     }
   };
 
-  const [validationReport, setValidationReport] = useState<any>(null);
+  interface ValidationReport {
+    timestamp?: string;
+    overall_status?: string;
+    summary?: {
+      passed_validation: number;
+      validated_columns: number;
+    };
+  }
+  const [validationReport, setValidationReport] = useState<ValidationReport | null>(null);
 
   const handleExecutePipeline = async () => {
     if (!batchResults || !originalData) {
@@ -289,8 +315,12 @@ export default function PreprocessingPanel() {
       setValidationReport(response.data.validation_report);
 
       toast.success('✓ Preprocessing complete with Proof of Quality!');
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Pipeline execution failed');
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        toast.error(error.response?.data?.detail || 'Pipeline execution failed');
+      } else {
+        toast.error('Pipeline execution failed');
+      }
     } finally {
       setIsExecuting(false);
     }
@@ -306,31 +336,6 @@ export default function PreprocessingPanel() {
     window.location.href = `/api/download/${sessionId}?format=${format}`;
     toast.success(`📥 Downloading ${format.toUpperCase()} file...`);
   };
-
-  // Calculate decision source breakdown from batch results
-  const getDecisionSourceBreakdown = () => {
-    if (!batchResults) return null;
-
-    const sources = {
-      cache: 0,
-      learned: 0,
-      symbolic: 0,
-      meta_learning: 0,
-      neural: 0,
-      conservative_fallback: 0
-    };
-
-    Object.values(batchResults.results).forEach((result: any) => {
-      const source = result.source || 'symbolic';
-      if (sources.hasOwnProperty(source)) {
-        sources[source as keyof typeof sources]++;
-      }
-    });
-
-    return sources;
-  };
-
-  const sourceBreakdown = getDecisionSourceBreakdown();
 
   return (
     <div className="space-y-6" style={debugStyle}>
@@ -530,7 +535,7 @@ export default function PreprocessingPanel() {
               </div>
               <div className="text-center p-4 bg-success/10 rounded-lg">
                 <div className="text-3xl font-bold text-green-600">
-                  {Object.values(batchResults.results).filter((r: any) => r.action === 'keep_as_is').length}
+                  {Object.values(batchResults.results).filter((r: ColumnResult) => r.action === 'keep_as_is').length}
                 </div>
                 <div className="text-sm text-foreground-muted mt-1">Healthy Columns</div>
               </div>
@@ -637,7 +642,7 @@ export default function PreprocessingPanel() {
                       <p className="text-sm text-foreground-muted">Statistical Validation</p>
                     </div>
                   </div>
-                  {validationReport && (
+                  {validationReport && validationReport.summary && (
                     <div className="text-right">
                       <div className="text-2xl font-bold text-primary">
                         {validationReport.summary.passed_validation}/{validationReport.summary.validated_columns}
@@ -659,7 +664,7 @@ export default function PreprocessingPanel() {
                     </div>
                     <div className="mt-2 pt-2 border-t border-slate-100">
                       <p className="text-xs text-brand-cool-gray italic">
-                        "Every decision is statistically validated to ensure data integrity."
+                        &quot;Every decision is statistically validated to ensure data integrity.&quot;
                       </p>
                     </div>
                   </div>
@@ -869,7 +874,7 @@ export default function PreprocessingPanel() {
                                 <div className="flex-1">
                                   <p className="text-xs font-semibold text-blue-800">Override Recommendation</p>
                                   <p className="text-xs text-primary mt-0.5">
-                                    Select the correct action for "{columnName}"
+                                    Select the correct action for &quot;{columnName}&quot;
                                   </p>
                                 </div>
                               </div>

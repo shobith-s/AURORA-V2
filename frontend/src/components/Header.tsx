@@ -1,4 +1,4 @@
-import { Activity, BarChart3, Sparkles, Code } from 'lucide-react';
+import { BarChart3, Sparkles, Code } from 'lucide-react';
 
 interface HeaderProps {
   onToggleMetrics: () => void;
