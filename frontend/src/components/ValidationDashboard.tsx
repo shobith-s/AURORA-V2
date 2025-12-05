@@ -138,19 +138,19 @@ export default function ValidationDashboard() {
 
   const getColorClass = (color: string) => {
     const colorMap: Record<string, string> = {
-      'blue': 'from-blue-500 to-blue-600',
-      'green': 'from-green-500 to-green-600',
-      'yellow': 'from-yellow-500 to-yellow-600',
-      'purple': 'from-purple-500 to-purple-600',
-      'red': 'from-red-500 to-red-600',
+      'blue': 'bg-primary',
+      'green': 'bg-success',
+      'yellow': 'bg-warning',
+      'purple': 'bg-primary',
+      'red': 'bg-error',
     };
-    return colorMap[color] || 'from-gray-500 to-gray-600';
+    return colorMap[color] || 'bg-border-dark';
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -172,10 +172,10 @@ export default function ValidationDashboard() {
     <div className="container mx-auto px-4 py-8">
       {/* Hero Stats */}
       <div className="mb-8">
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+        <h1 className="text-4xl font-bold bg-primary bg-clip-text text-transparent mb-2">
           AURORA Validation Dashboard
         </h1>
-        <p className="text-slate-600 text-lg">
+        <p className="text-foreground-muted text-lg">
           Real metrics proving AURORA's value
         </p>
       </div>
@@ -189,22 +189,22 @@ export default function ValidationDashboard() {
           return (
             <div
               key={index}
-              className="bg-white rounded-lg shadow-lg p-6 border border-slate-200 hover:shadow-xl transition-shadow"
+              className="bg-brand-white rounded-lg shadow-lg p-6 border border-brand-warm-gray hover:shadow-xl transition-shadow"
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-slate-600 text-sm font-medium mb-1">
+                  <p className="text-foreground-muted text-sm font-medium mb-1">
                     {stat.label}
                   </p>
-                  <p className="text-3xl font-bold text-slate-900">
+                  <p className="text-3xl font-bold text-brand-black">
                     {stat.value}
                   </p>
-                  <p className="text-slate-500 text-xs mt-2">
+                  <p className="text-brand-cool-gray text-xs mt-2">
                     {stat.description}
                   </p>
                 </div>
                 <div className={`p-3 rounded-lg bg-gradient-to-br ${colorClass}`}>
-                  <IconComponent className="w-6 h-6 text-white" />
+                  <IconComponent className="w-6 h-6 text-brand-white" />
                 </div>
               </div>
             </div>
@@ -214,25 +214,25 @@ export default function ValidationDashboard() {
 
       {/* Overview Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white">
+        <div className="bg-primary rounded-lg p-6 text-brand-white">
           <Users className="w-8 h-8 mb-2 opacity-80" />
           <p className="text-sm opacity-90">Total Users</p>
           <p className="text-3xl font-bold">{dashboardData.overview.total_users}</p>
         </div>
 
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-6 text-white">
+        <div className="bg-gradient-to-br bg-success rounded-lg p-6 text-brand-white">
           <CheckCircle className="w-8 h-8 mb-2 opacity-80" />
           <p className="text-sm opacity-90">Decisions Made</p>
           <p className="text-3xl font-bold">{dashboardData.overview.total_decisions}</p>
         </div>
 
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg p-6 text-white">
+        <div className="bg-primary rounded-lg p-6 text-brand-white">
           <Clock className="w-8 h-8 mb-2 opacity-80" />
           <p className="text-sm opacity-90">Time Saved</p>
           <p className="text-3xl font-bold">{dashboardData.overview.time_saved_hours.toFixed(1)}h</p>
         </div>
 
-        <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg p-6 text-white">
+        <div className="bg-warning rounded-lg p-6 text-brand-white">
           <Star className="w-8 h-8 mb-2 opacity-80" />
           <p className="text-sm opacity-90">Avg Confidence</p>
           <p className="text-3xl font-bold">{(dashboardData.overview.average_confidence * 100).toFixed(0)}%</p>
@@ -241,19 +241,19 @@ export default function ValidationDashboard() {
 
       {/* Proof Points */}
       {dashboardData.proof_points && dashboardData.proof_points.length > 0 && (
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-8 border border-slate-200">
-          <h2 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
-            <Award className="w-6 h-6 text-blue-600" />
+        <div className="bg-brand-white rounded-lg shadow-lg p-6 mb-8 border border-brand-warm-gray">
+          <h2 className="text-2xl font-bold text-brand-black mb-4 flex items-center gap-2">
+            <Award className="w-6 h-6 text-primary" />
             Proven Results
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {dashboardData.proof_points.map((point, index) => (
               <div
                 key={index}
-                className="flex items-start gap-3 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg"
+                className="flex items-start gap-3 p-4 bg-primary/10 rounded-lg"
               >
-                <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-                <p className="text-slate-700">{point}</p>
+                <CheckCircle className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
+                <p className="text-foreground">{point}</p>
               </div>
             ))}
           </div>
@@ -262,8 +262,8 @@ export default function ValidationDashboard() {
 
       {/* Performance Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white rounded-lg shadow-lg p-6 border border-slate-200">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Acceptance Rate</h3>
+        <div className="bg-brand-white rounded-lg shadow-lg p-6 border border-brand-warm-gray">
+          <h3 className="text-lg font-semibold text-brand-black mb-4">Acceptance Rate</h3>
           <div className="relative pt-1">
             <div className="flex mb-2 items-center justify-between">
               <div>
@@ -275,35 +275,35 @@ export default function ValidationDashboard() {
             <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-green-200">
               <div
                 style={{ width: `${dashboardData.performance.acceptance_rate}%` }}
-                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-green-500"
+                className="shadow-none flex flex-col text-center whitespace-nowrap text-brand-white justify-center bg-success"
               ></div>
             </div>
-            <p className="text-sm text-slate-600">Decisions accepted without modification</p>
+            <p className="text-sm text-foreground-muted">Decisions accepted without modification</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-lg p-6 border border-slate-200">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Time Improvement</h3>
+        <div className="bg-brand-white rounded-lg shadow-lg p-6 border border-brand-warm-gray">
+          <h3 className="text-lg font-semibold text-brand-black mb-4">Time Improvement</h3>
           <div className="relative pt-1">
             <div className="flex mb-2 items-center justify-between">
               <div>
-                <span className="text-3xl font-bold text-blue-600">
+                <span className="text-3xl font-bold text-primary">
                   {dashboardData.performance.time_vs_manual_improvement_percentage.toFixed(0)}%
                 </span>
               </div>
             </div>
-            <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-blue-200">
+            <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-primary/30">
               <div
                 style={{ width: `${Math.min(100, dashboardData.performance.time_vs_manual_improvement_percentage)}%` }}
-                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500"
+                className="shadow-none flex flex-col text-center whitespace-nowrap text-brand-white justify-center bg-primary"
               ></div>
             </div>
-            <p className="text-sm text-slate-600">Faster than manual preprocessing</p>
+            <p className="text-sm text-foreground-muted">Faster than manual preprocessing</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-lg p-6 border border-slate-200">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">User Rating</h3>
+        <div className="bg-brand-white rounded-lg shadow-lg p-6 border border-brand-warm-gray">
+          <h3 className="text-lg font-semibold text-brand-black mb-4">User Rating</h3>
           <div className="relative pt-1">
             <div className="flex mb-2 items-center justify-between">
               <div>
@@ -318,41 +318,41 @@ export default function ValidationDashboard() {
                   key={star}
                   className={`w-6 h-6 ${
                     star <= dashboardData.user_satisfaction.average_rating
-                      ? 'fill-yellow-400 text-yellow-400'
+                      ? 'fill-yellow-400 text-warning'
                       : 'text-gray-300'
                   }`}
                 />
               ))}
             </div>
-            <p className="text-sm text-slate-600">Average user satisfaction</p>
+            <p className="text-sm text-foreground-muted">Average user satisfaction</p>
           </div>
         </div>
       </div>
 
       {/* Testimonials */}
       {dashboardData.testimonials && dashboardData.testimonials.length > 0 && (
-        <div className="bg-white rounded-lg shadow-lg p-6 border border-slate-200">
-          <h2 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-            <Star className="w-6 h-6 text-yellow-500" />
+        <div className="bg-brand-white rounded-lg shadow-lg p-6 border border-brand-warm-gray">
+          <h2 className="text-2xl font-bold text-brand-black mb-6 flex items-center gap-2">
+            <Star className="w-6 h-6 text-warning" />
             User Testimonials
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {dashboardData.testimonials.map((testimonial, index) => (
               <div
                 key={index}
-                className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg p-6 border border-slate-200"
+                className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg p-6 border border-brand-warm-gray"
               >
                 <div className="flex items-center gap-2 mb-3">
                   {[...Array(testimonial.rating)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                    <Star key={i} className="w-4 h-4 fill-yellow-400 text-warning" />
                   ))}
                 </div>
-                <p className="text-slate-700 italic mb-4">"{testimonial.testimonial}"</p>
+                <p className="text-foreground italic mb-4">"{testimonial.testimonial}"</p>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">
+                  <span className="text-foreground-muted">
                     <span className="font-medium">Use case:</span> {testimonial.use_case}
                   </span>
-                  <span className="text-slate-500">{testimonial.timestamp}</span>
+                  <span className="text-brand-cool-gray">{testimonial.timestamp}</span>
                 </div>
               </div>
             ))}
@@ -361,7 +361,7 @@ export default function ValidationDashboard() {
       )}
 
       {/* Footer */}
-      <div className="mt-8 text-center text-slate-500 text-sm">
+      <div className="mt-8 text-center text-brand-cool-gray text-sm">
         <p>Metrics updated in real-time • All data anonymized and aggregated</p>
       </div>
     </div>

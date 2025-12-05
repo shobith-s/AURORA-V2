@@ -8,25 +8,40 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        primary: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          300: '#7dd3fc',
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
+        // New minimal palette
+        'brand': {
+          black: '#000000',
+          white: '#FFFFFF',
+          'warm-gray': '#E0E0E0',
+          'cool-gray': '#9E9E9E',
+          'soft-blue': '#90CAF9',
         },
-        aurora: {
-          purple: '#8b5cf6',
-          blue: '#3b82f6',
-          green: '#10b981',
-          yellow: '#f59e0b',
-          red: '#ef4444',
-        }
+        // Semantic colors using the palette
+        primary: {
+          DEFAULT: '#90CAF9',
+          hover: '#64B5F6',
+          light: '#BBDEFB',
+          dark: '#42A5F5',
+        },
+        background: {
+          DEFAULT: '#FFFFFF',
+          dark: '#000000',
+          muted: '#E0E0E0',
+        },
+        foreground: {
+          DEFAULT: '#000000',
+          muted: '#9E9E9E',
+          inverse: '#FFFFFF',
+        },
+        border: {
+          DEFAULT: '#E0E0E0',
+          dark: '#9E9E9E',
+        },
+        // Status colors (derived from palette)
+        success: '#4CAF50',
+        warning: '#FFC107',
+        error: '#F44336',
+        info: '#90CAF9',
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',

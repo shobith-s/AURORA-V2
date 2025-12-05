@@ -52,7 +52,7 @@ export default function Home() {
         {!showChatbot && (
           <button
             onClick={() => setShowChatbot(true)}
-            className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center z-50 hover:scale-110"
+            className="fixed bottom-6 right-6 w-14 h-14 bg-primary text-brand-black rounded-full shadow-lg hover:shadow-xl hover:bg-primary-hover transition-all duration-300 flex items-center justify-center z-50 hover:scale-110"
             aria-label="Open AI Assistant"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -63,9 +63,9 @@ export default function Home() {
 
         {/* Floating Chatbot Panel */}
         {showChatbot && (
-          <div className="fixed bottom-6 right-6 w-96 h-[600px] bg-white rounded-lg shadow-2xl z-50 flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
+          <div className="fixed bottom-6 right-6 w-96 h-[600px] bg-brand-white rounded-lg shadow-2xl z-50 flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
             {/* Chatbot Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 flex items-center justify-between">
+            <div className="bg-primary text-brand-black p-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
@@ -74,7 +74,7 @@ export default function Home() {
               </div>
               <button
                 onClick={() => setShowChatbot(false)}
-                className="hover:bg-white/20 rounded-lg p-1 transition-colors"
+                className="hover:bg-brand-black/10 rounded-lg p-1 transition-colors"
                 aria-label="Close chatbot"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -91,14 +91,14 @@ export default function Home() {
         )}
 
         {/* Footer */}
-        <footer className="mt-12 py-6 text-center text-slate-400 text-sm">
+        <footer className="mt-12 py-6 text-center text-brand-cool-gray text-sm">
           <p>
             AURORA V2.1 - Intelligent Data Preprocessing System
-            <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">
+            <span className="ml-2 px-2 py-0.5 bg-success/10 text-success text-xs font-bold rounded-full">
               Validation Active ✅
             </span>
             <br />
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-foreground-muted">
               Symbolic-first • Validated Learning • A/B Testing • Zero Overgeneralization
             </span>
           </p>

@@ -11,27 +11,27 @@ export default function Header({ onToggleMetrics, onToggleIDE }: HeaderProps) {
       <div className="flex items-center justify-between">
         {/* Logo */}
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-            <Sparkles className="w-7 h-7 text-white" />
+          <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center shadow-lg">
+            <Sparkles className="w-7 h-7 text-brand-black" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold gradient-text">AURORA</h1>
-            <p className="text-xs text-slate-400">Intelligent Data Preprocessing</p>
+            <h1 className="text-2xl font-bold text-primary">AURORA</h1>
+            <p className="text-xs text-brand-cool-gray">Intelligent Data Preprocessing</p>
           </div>
         </div>
 
         {/* Status & Actions */}
         <div className="flex items-center gap-4">
           {/* Live Status */}
-          <div className="flex items-center gap-2 px-4 py-2 bg-green-500/10 rounded-lg border border-green-500/30">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-sm font-medium text-green-400">System Online</span>
+          <div className="flex items-center gap-2 px-4 py-2 bg-success/10 rounded-lg border border-success/30">
+            <div className="w-2 h-2 bg-success rounded-full animate-pulse"></div>
+            <span className="text-sm font-medium text-success">System Online</span>
           </div>
 
           {/* Custom Script IDE */}
           <button
             onClick={onToggleIDE}
-            className="btn-secondary flex items-center gap-2 border-yellow-500/30 hover:border-yellow-500/60 text-yellow-400 hover:text-yellow-300"
+            className="btn-secondary flex items-center gap-2 border-warning/30 hover:border-warning/60 text-warning hover:text-warning"
           >
             <Code className="w-4 h-4" />
             Custom Script
