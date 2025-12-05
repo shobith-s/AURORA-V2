@@ -2,8 +2,8 @@ import { useState, useMemo } from 'react';
 import {
     Search, X, Ruler, Zap, Scissors, Hash,
     Type, Database, Wand2, Filter, Check,
-    ArrowRight, Calculator, Globe, Calendar,
-    Trash2, Percent, AlignCenter
+    Calculator, Globe, Calendar,
+    Trash2, Percent
 } from 'lucide-react';
 
 interface ActionLibraryModalProps {
@@ -20,7 +20,7 @@ interface ActionItem {
     label: string;
     category: Category;
     description: string;
-    icon: any;
+    icon: React.ComponentType<{ className?: string }>;
     popular?: boolean;
 }
 

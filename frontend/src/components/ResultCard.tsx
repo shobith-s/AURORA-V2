@@ -1,12 +1,26 @@
-import { TrendingUp, Target, Clock, Sparkles, ThumbsUp, ThumbsDown, Edit2, BookOpen } from 'lucide-react';
+import { Target, Clock, Sparkles, ThumbsUp, ThumbsDown, Edit2, BookOpen } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import ExplanationModal from './ExplanationModal';
 import ActionLibraryModal from './ActionLibraryModal';
 
+interface ResultData {
+  action: string;
+  confidence: number;
+  source: string;
+  column_name?: string;
+  explanation?: string;
+  alternatives?: Array<{ action: string; confidence: number }>;
+  transformed_data?: unknown[];
+  warning?: string;
+  require_manual_review?: boolean;
+  decision_id?: string;
+  latency?: number;
+}
+
 interface ResultCardProps {
-  result: any;
+  result: ResultData;
 }
 
 export default function ResultCard({ result }: ResultCardProps) {
@@ -46,7 +60,7 @@ export default function ResultCard({ result }: ResultCardProps) {
 
     setIsSubmitting(true);
     try {
-      const response = await axios.post('/api/correct', {
+      await axios.post('/api/correct', {
         column_data: [], // In real app, would pass actual data
         column_name: result.column_name || 'column',
         wrong_action: result.action,
@@ -56,7 +70,7 @@ export default function ResultCard({ result }: ResultCardProps) {
 
       toast.success('Correction submitted! System is learning...');
       setShowCorrection(false);
-    } catch (error) {
+    } catch {
       toast.error('Failed to submit correction');
     } finally {
       setIsSubmitting(false);
@@ -205,7 +219,7 @@ export default function ResultCard({ result }: ResultCardProps) {
         <div>
           <h4 className="text-sm font-semibold text-foreground mb-3">Alternative Actions</h4>
           <div className="space-y-2">
-            {result.alternatives.slice(0, 3).map((alt: any, idx: number) => (
+            {result.alternatives.slice(0, 3).map((alt: { action: string; confidence: number }, idx: number) => (
               <div
                 key={idx}
                 className="flex items-center justify-between p-3 bg-brand-white/50 rounded-lg border border-brand-warm-gray"

@@ -3,8 +3,20 @@ import { Activity, Zap, Brain, Target, TrendingUp, Database } from 'lucide-react
 import axios from 'axios';
 import { LearnedRulesPanel } from './LearnedRulesPanel';
 
+interface DashboardMetrics {
+  total_decisions?: number;
+  symbolic_decisions?: number;
+  neural_decisions?: number;
+  avg_confidence?: number;
+  corrections_count?: number;
+  rules_created?: number;
+  active_rules?: number;
+  avg_latency?: number;
+  avg_time_ms?: number;
+}
+
 export default function MetricsDashboard() {
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

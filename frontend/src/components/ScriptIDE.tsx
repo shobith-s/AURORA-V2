@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Play, Save, Trash2, Code, Terminal, X, ChevronRight } from 'lucide-react';
+import { Play, Save, Trash2, Code, Terminal, X } from 'lucide-react';
 
 interface ScriptIDEProps {
     isOpen: boolean;
