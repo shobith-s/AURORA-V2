@@ -4,40 +4,59 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  body {
-    @apply bg-slate-50 text-slate-900;
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-    min-height: 100vh;
-  }
+:root {
+  /* New color palette */
+  --color-black: #000000;
+  --color-white: #FFFFFF;
+  --color-warm-gray: #E0E0E0;
+  --color-cool-gray: #9E9E9E;
+  --color-soft-blue: #90CAF9;
+  
+  /* Semantic mappings */
+  --background: var(--color-white);
+  --foreground: var(--color-black);
+  --primary: var(--color-soft-blue);
+  --muted: var(--color-warm-gray);
+  --muted-foreground: var(--color-cool-gray);
+  --border: var(--color-warm-gray);
+}
+
+/* Dark mode (optional) */
+.dark {
+  --background: var(--color-black);
+  --foreground: var(--color-white);
+  --muted: #1a1a1a;
+  --muted-foreground: var(--color-cool-gray);
+  --border: #333333;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  min-height: 100vh;
 }
 
 @layer components {
   .glass-card {
-    @apply bg-white/80 backdrop-blur-xl rounded-2xl border border-slate-200/60 shadow-xl;
+    @apply bg-brand-white border border-brand-warm-gray rounded-2xl shadow-lg;
     transition: all 0.3s ease;
   }
 
   .glass-card:hover {
-    @apply shadow-2xl border-blue-200/50;
+    @apply shadow-xl border-primary;
     transform: translateY(-2px);
   }
 
   .gradient-text {
-    @apply bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent;
+    @apply text-primary;
   }
 
   .btn-primary {
-    @apply px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200;
-  }
-
-  .btn-primary:hover {
-    @apply from-blue-500 to-purple-500;
-    box-shadow: 0 0 20px rgba(99, 102, 241, 0.5);
+    @apply px-6 py-3 bg-primary text-brand-black rounded-xl font-medium shadow-lg hover:shadow-xl hover:bg-primary-hover transform hover:-translate-y-0.5 transition-all duration-200;
   }
 
   .btn-secondary {
-    @apply px-6 py-3 bg-white/80 backdrop-blur-sm text-slate-700 rounded-xl font-medium border border-slate-200 hover:border-slate-300 shadow-sm hover:shadow-md transition-all duration-200;
+    @apply px-6 py-3 bg-brand-white text-brand-black rounded-xl font-medium border border-brand-warm-gray hover:border-primary shadow-sm hover:shadow-md transition-all duration-200;
   }
 
   .metric-card {
@@ -50,11 +69,11 @@
   }
 
   .chat-bubble-user {
-    @apply chat-bubble bg-gradient-to-r from-blue-600 to-purple-600 text-white ml-auto;
+    @apply chat-bubble bg-primary text-brand-black ml-auto;
   }
 
   .chat-bubble-assistant {
-    @apply chat-bubble bg-slate-800/80 backdrop-blur-sm text-slate-100 border border-slate-700;
+    @apply chat-bubble bg-background-dark text-brand-white border border-border-dark;
   }
 
   @keyframes slideIn {
@@ -70,22 +89,22 @@
   }
 }
 
-/* Custom scrollbar - Dark Mode */
+/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-slate-800 rounded-full;
+  @apply bg-background-muted rounded-full;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gradient-to-b from-blue-500 to-purple-500 rounded-full;
+  @apply bg-primary rounded-full;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply from-blue-400 to-purple-400;
+  @apply bg-primary-hover;
 }
 
 /* Loading animation */

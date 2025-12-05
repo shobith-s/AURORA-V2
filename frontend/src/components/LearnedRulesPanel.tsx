@@ -20,9 +20,9 @@ const CardContent = ({ children }: any) => (
 
 const Badge = ({ children, variant = 'default' }: any) => {
     const variants = {
-        default: 'bg-blue-500 text-white',
-        secondary: 'bg-slate-200 text-slate-700',
-        outline: 'border border-slate-300 text-slate-700'
+        default: 'bg-primary text-brand-white',
+        secondary: 'bg-background-muted text-foreground',
+        outline: 'border border-brand-warm-gray text-foreground'
     };
     return (
         <span className={`px-2 py-1 rounded text-xs font-medium ${variants[variant as keyof typeof variants]}`}>
@@ -39,9 +39,9 @@ const Table = ({ children }: any) => (
 
 const TableHeader = ({ children }: any) => <thead>{children}</thead>;
 const TableBody = ({ children }: any) => <tbody>{children}</tbody>;
-const TableRow = ({ children }: any) => <tr className="border-b border-slate-200">{children}</tr>;
+const TableRow = ({ children }: any) => <tr className="border-b border-brand-warm-gray">{children}</tr>;
 const TableHead = ({ children }: any) => (
-    <th className="text-left p-3 text-sm font-medium text-slate-600">{children}</th>
+    <th className="text-left p-3 text-sm font-medium text-foreground-muted">{children}</th>
 );
 const TableCell = ({ children }: any) => (
     <td className="p-3 text-sm">{children}</td>
@@ -184,13 +184,13 @@ export function LearnedRulesPanel() {
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex items-center gap-1">
-                                        <TrendingUp className="h-3 w-3 text-blue-500" />
+                                        <TrendingUp className="h-3 w-3 text-primary" />
                                         <span>{(rule.confidence * 100).toFixed(0)}%</span>
                                     </div>
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex items-center gap-1">
-                                        <CheckCircle className="h-3 w-3 text-green-500" />
+                                        <CheckCircle className="h-3 w-3 text-success" />
                                         <span>{rule.support}</span>
                                     </div>
                                 </TableCell>

@@ -93,14 +93,14 @@ export default function ChatbotPanel() {
   return (
     <div className="glass-card h-[calc(100vh-12rem)] flex flex-col">
       {/* Header */}
-      <div className="border-b border-slate-200 p-4">
+      <div className="border-b border-brand-warm-gray p-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-            <Bot className="w-6 h-6 text-white" />
+          <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+            <Bot className="w-6 h-6 text-brand-white" />
           </div>
           <div>
-            <h3 className="font-bold text-slate-800">AI Assistant</h3>
-            <p className="text-xs text-slate-600">Powered by AURORA Intelligence</p>
+            <h3 className="font-bold text-brand-black">AI Assistant</h3>
+            <p className="text-xs text-foreground-muted">Powered by AURORA Intelligence</p>
           </div>
         </div>
       </div>
@@ -114,8 +114,8 @@ export default function ChatbotPanel() {
           >
             <div className="flex items-start gap-2 max-w-[85%]">
               {message.role === 'assistant' && (
-                <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Bot className="w-5 h-5 text-white" />
+                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-5 h-5 text-brand-white" />
                 </div>
               )}
               <div
@@ -129,8 +129,8 @@ export default function ChatbotPanel() {
                 </p>
               </div>
               {message.role === 'user' && (
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <User className="w-5 h-5 text-white" />
+                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
+                  <User className="w-5 h-5 text-brand-white" />
                 </div>
               )}
             </div>
@@ -139,8 +139,8 @@ export default function ChatbotPanel() {
 
         {isTyping && (
           <div className="flex items-start gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-              <Bot className="w-5 h-5 text-white" />
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+              <Bot className="w-5 h-5 text-brand-white" />
             </div>
             <div className="chat-bubble-assistant">
               <div className="loading-dots flex gap-1">
@@ -158,13 +158,13 @@ export default function ChatbotPanel() {
       {/* Quick Questions */}
       {messages.length <= 2 && (
         <div className="px-4 pb-2">
-          <p className="text-xs font-medium text-slate-600 mb-2">Quick questions:</p>
+          <p className="text-xs font-medium text-foreground-muted mb-2">Quick questions:</p>
           <div className="flex flex-wrap gap-2">
             {quickQuestions.map((q, idx) => (
               <button
                 key={idx}
                 onClick={() => setInput(q)}
-                className="text-xs px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition"
+                className="text-xs px-3 py-1.5 bg-primary/10 text-primary-dark rounded-lg hover:bg-primary/20 transition"
               >
                 {q}
               </button>
@@ -174,7 +174,7 @@ export default function ChatbotPanel() {
       )}
 
       {/* Input */}
-      <div className="border-t border-slate-200 p-4">
+      <div className="border-t border-brand-warm-gray p-4">
         <div className="flex gap-2">
           <input
             type="text"
@@ -182,12 +182,12 @@ export default function ChatbotPanel() {
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Ask me anything about data preprocessing..."
-            className="flex-1 px-4 py-2 rounded-lg border border-slate-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition text-sm"
+            className="flex-1 px-4 py-2 rounded-lg border border-brand-warm-gray focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition text-sm"
           />
           <button
             onClick={handleSend}
             disabled={!input.trim() || isTyping}
-            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-primary text-brand-white rounded-lg hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="w-5 h-5" />
           </button>

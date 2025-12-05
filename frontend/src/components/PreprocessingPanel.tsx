@@ -81,7 +81,7 @@ export default function PreprocessingPanel() {
   // DEBUG MARKER - REMOVE BEFORE PRODUCTION
   const debugStyle = { border: '4px solid #ef4444', position: 'relative' as const };
   const debugBadge = (
-    <div className="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold px-2 py-1 z-50">
+    <div className="absolute top-0 right-0 bg-error text-brand-white text-xs font-bold px-2 py-1 z-50">
       DEBUG: V2 ACTIVE
     </div>
   );
@@ -341,8 +341,8 @@ export default function PreprocessingPanel() {
           <button
             onClick={() => setMode('single')}
             className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${mode === 'single'
-              ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-              : 'bg-white/50 text-slate-600 hover:bg-white/80'
+              ? 'bg-primary text-brand-white shadow-lg'
+              : 'bg-brand-white/50 text-foreground-muted hover:bg-brand-white'
               }`}
           >
             <div className="flex items-center justify-center gap-2">
@@ -353,8 +353,8 @@ export default function PreprocessingPanel() {
           <button
             onClick={() => setMode('file')}
             className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${mode === 'file'
-              ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-              : 'bg-white/50 text-slate-600 hover:bg-white/80'
+              ? 'bg-primary text-brand-white shadow-lg'
+              : 'bg-brand-white/50 text-foreground-muted hover:bg-brand-white'
               }`}
           >
             <div className="flex items-center justify-center gap-2">
@@ -370,17 +370,17 @@ export default function PreprocessingPanel() {
         {mode === 'single' ? (
           <>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-slate-800">Single Column Analysis</h2>
+              <h2 className="text-xl font-bold text-brand-black">Single Column Analysis</h2>
               <div className="flex gap-2">
                 <button
                   onClick={() => handleSampleData('skewed')}
-                  className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"
+                  className="text-xs px-3 py-1 bg-primary/10 text-primary rounded-lg hover:bg-primary/20"
                 >
                   Skewed Data
                 </button>
                 <button
                   onClick={() => handleSampleData('categorical')}
-                  className="text-xs px-3 py-1 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100"
+                  className="text-xs px-3 py-1 bg-primary/10 text-primary rounded-lg hover:bg-primary/20"
                 >
                   Categorical
                 </button>
@@ -395,7 +395,7 @@ export default function PreprocessingPanel() {
 
             {/* Column Name */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Column Name
               </label>
               <input
@@ -403,22 +403,22 @@ export default function PreprocessingPanel() {
                 value={columnName}
                 onChange={(e) => setColumnName(e.target.value)}
                 placeholder="e.g., revenue, age, category"
-                className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition"
+                className="w-full px-4 py-2 rounded-lg border border-brand-warm-gray focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
               />
             </div>
 
             {/* Column Data */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Column Data (comma or newline separated)
               </label>
               <textarea
                 value={columnData}
                 onChange={(e) => setColumnData(e.target.value)}
                 placeholder="Enter your data here... (e.g., 10, 20, 30, 100, 200)"
-                className="w-full h-32 px-4 py-2 rounded-lg border border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition font-mono text-sm"
+                className="w-full h-32 px-4 py-2 rounded-lg border border-brand-warm-gray focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition font-mono text-sm"
               />
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-brand-cool-gray">
                 💡 Tip: Paste data from CSV or Excel directly
               </p>
             </div>
@@ -431,9 +431,9 @@ export default function PreprocessingPanel() {
               {isProcessing ? (
                 <>
                   <div className="loading-dots flex gap-1">
-                    <span className="w-2 h-2 bg-white rounded-full"></span>
-                    <span className="w-2 h-2 bg-white rounded-full"></span>
-                    <span className="w-2 h-2 bg-white rounded-full"></span>
+                    <span className="w-2 h-2 bg-brand-white rounded-full"></span>
+                    <span className="w-2 h-2 bg-brand-white rounded-full"></span>
+                    <span className="w-2 h-2 bg-brand-white rounded-full"></span>
                   </div>
                   Processing...
                 </>
@@ -447,16 +447,16 @@ export default function PreprocessingPanel() {
           </>
         ) : (
           <>
-            <h2 className="text-xl font-bold text-slate-800 mb-4">CSV File Upload</h2>
+            <h2 className="text-xl font-bold text-brand-black mb-4">CSV File Upload</h2>
 
             {!selectedFile ? (
-              <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
-                <Upload className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+              <div className="border-2 border-dashed border-brand-warm-gray rounded-lg p-8 text-center hover:border-primary transition-colors">
+                <Upload className="w-12 h-12 mx-auto mb-4 text-brand-cool-gray" />
                 <label className="cursor-pointer">
-                  <span className="text-slate-700 font-medium">
+                  <span className="text-foreground font-medium">
                     Click to upload or drag and drop
                   </span>
-                  <p className="text-sm text-slate-500 mt-1">CSV files only</p>
+                  <p className="text-sm text-brand-cool-gray mt-1">CSV files only</p>
                   <input
                     type="file"
                     accept=".csv"
@@ -467,21 +467,21 @@ export default function PreprocessingPanel() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+                <div className="flex items-center justify-between p-4 bg-primary/10 rounded-lg">
                   <div className="flex items-center gap-3">
-                    <FileSpreadsheet className="w-8 h-8 text-blue-600" />
+                    <FileSpreadsheet className="w-8 h-8 text-primary" />
                     <div>
-                      <p className="font-medium text-slate-800">{selectedFile.name}</p>
-                      <p className="text-sm text-slate-600">
+                      <p className="font-medium text-brand-black">{selectedFile.name}</p>
+                      <p className="text-sm text-foreground-muted">
                         {(selectedFile.size / 1024).toFixed(2)} KB
                       </p>
                     </div>
                   </div>
                   <button
                     onClick={removeFile}
-                    className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                    className="p-2 hover:bg-primary/20 rounded-lg transition-colors"
                   >
-                    <X className="w-5 h-5 text-slate-600" />
+                    <X className="w-5 h-5 text-foreground-muted" />
                   </button>
                 </div>
 
@@ -493,9 +493,9 @@ export default function PreprocessingPanel() {
                   {isProcessing ? (
                     <>
                       <div className="loading-dots flex gap-1">
-                        <span className="w-2 h-2 bg-white rounded-full"></span>
-                        <span className="w-2 h-2 bg-white rounded-full"></span>
-                        <span className="w-2 h-2 bg-white rounded-full"></span>
+                        <span className="w-2 h-2 bg-brand-white rounded-full"></span>
+                        <span className="w-2 h-2 bg-brand-white rounded-full"></span>
+                        <span className="w-2 h-2 bg-brand-white rounded-full"></span>
                       </div>
                       Analyzing CSV...
                     </>
@@ -520,25 +520,25 @@ export default function PreprocessingPanel() {
         <div className="space-y-4">
           {/* Summary Card */}
           <div className="glass-card p-6">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">Analysis Summary</h3>
+            <h3 className="text-lg font-bold text-brand-black mb-4">Analysis Summary</h3>
             <div className="grid grid-cols-3 gap-4 mb-6">
-              <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
-                <div className="text-3xl font-bold text-blue-600">
+              <div className="text-center p-4 bg-primary/10 rounded-lg">
+                <div className="text-3xl font-bold text-primary">
                   {batchResults.summary.total_columns}
                 </div>
-                <div className="text-sm text-slate-600 mt-1">Total Columns</div>
+                <div className="text-sm text-foreground-muted mt-1">Total Columns</div>
               </div>
-              <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
+              <div className="text-center p-4 bg-success/10 rounded-lg">
                 <div className="text-3xl font-bold text-green-600">
                   {Object.values(batchResults.results).filter((r: any) => r.action === 'keep_as_is').length}
                 </div>
-                <div className="text-sm text-slate-600 mt-1">Healthy Columns</div>
+                <div className="text-sm text-foreground-muted mt-1">Healthy Columns</div>
               </div>
-              <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg">
-                <div className="text-3xl font-bold text-purple-600">
+              <div className="text-center p-4 bg-primary/10 rounded-lg">
+                <div className="text-3xl font-bold text-primary">
                   {(batchResults.summary.avg_confidence * 100).toFixed(0)}%
                 </div>
-                <div className="text-sm text-slate-600 mt-1">Avg Confidence</div>
+                <div className="text-sm text-foreground-muted mt-1">Avg Confidence</div>
               </div>
             </div>
 
@@ -552,9 +552,9 @@ export default function PreprocessingPanel() {
                 {isExecuting ? (
                   <>
                     <div className="loading-dots flex gap-1">
-                      <span className="w-2 h-2 bg-white rounded-full"></span>
-                      <span className="w-2 h-2 bg-white rounded-full"></span>
-                      <span className="w-2 h-2 bg-white rounded-full"></span>
+                      <span className="w-2 h-2 bg-brand-white rounded-full"></span>
+                      <span className="w-2 h-2 bg-brand-white rounded-full"></span>
+                      <span className="w-2 h-2 bg-brand-white rounded-full"></span>
                     </div>
                     Executing Preprocessing...
                   </>
@@ -580,32 +580,32 @@ export default function PreprocessingPanel() {
               {/* Download Panel */}
               <div className="glass-card p-6">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
-                    <CheckCircle className="w-6 h-6 text-white" />
+                  <div className="w-12 h-12 bg-success rounded-xl flex items-center justify-center">
+                    <CheckCircle className="w-6 h-6 text-brand-white" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-slate-800">Ready to Download</h3>
-                    <p className="text-sm text-slate-600">
+                    <h3 className="text-lg font-bold text-brand-black">Ready to Download</h3>
+                    <p className="text-sm text-foreground-muted">
                       {Object.keys(preprocessedData).length} columns processed
                     </p>
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  <p className="text-sm font-medium text-slate-700">Choose format:</p>
+                  <p className="text-sm font-medium text-foreground">Choose format:</p>
                   <div className="grid grid-cols-3 gap-3">
                     <button
                       onClick={() => handleDownload('csv')}
-                      className="group relative overflow-hidden bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl p-3 transition-all hover:scale-105"
+                      className="group relative overflow-hidden bg-primary/10 hover:bg-primary/20 border border-primary/50 rounded-xl p-3 transition-all hover:scale-105"
                     >
                       <div className="flex flex-col items-center gap-1">
-                        <FileSpreadsheet className="w-6 h-6 text-blue-600" />
+                        <FileSpreadsheet className="w-6 h-6 text-primary" />
                         <span className="text-xs font-bold text-blue-800">CSV</span>
                       </div>
                     </button>
                     <button
                       onClick={() => handleDownload('excel')}
-                      className="group relative overflow-hidden bg-green-50 hover:bg-green-100 border border-green-200 rounded-xl p-3 transition-all hover:scale-105"
+                      className="group relative overflow-hidden bg-green-50 hover:bg-green-100 border border-success/30 rounded-xl p-3 transition-all hover:scale-105"
                     >
                       <div className="flex flex-col items-center gap-1">
                         <FileSpreadsheet className="w-6 h-6 text-green-600" />
@@ -614,10 +614,10 @@ export default function PreprocessingPanel() {
                     </button>
                     <button
                       onClick={() => handleDownload('json')}
-                      className="group relative overflow-hidden bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl p-3 transition-all hover:scale-105"
+                      className="group relative overflow-hidden bg-primary/10 hover:bg-primary/20 border border-primary/50 rounded-xl p-3 transition-all hover:scale-105"
                     >
                       <div className="flex flex-col items-center gap-1">
-                        <FileSpreadsheet className="w-6 h-6 text-purple-600" />
+                        <FileSpreadsheet className="w-6 h-6 text-primary" />
                         <span className="text-xs font-bold text-purple-800">JSON</span>
                       </div>
                     </button>
@@ -629,42 +629,42 @@ export default function PreprocessingPanel() {
               <div className="glass-card p-6 border-l-4 border-l-blue-500">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                      <Shield className="w-6 h-6 text-blue-600" />
+                    <div className="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center">
+                      <Shield className="w-6 h-6 text-primary" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-slate-800">Proof of Quality</h3>
-                      <p className="text-sm text-slate-600">Statistical Validation</p>
+                      <h3 className="text-lg font-bold text-brand-black">Proof of Quality</h3>
+                      <p className="text-sm text-foreground-muted">Statistical Validation</p>
                     </div>
                   </div>
                   {validationReport && (
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-blue-600">
+                      <div className="text-2xl font-bold text-primary">
                         {validationReport.summary.passed_validation}/{validationReport.summary.validated_columns}
                       </div>
-                      <div className="text-xs text-slate-500">Passed Checks</div>
+                      <div className="text-xs text-brand-cool-gray">Passed Checks</div>
                     </div>
                   )}
                 </div>
 
                 {validationReport ? (
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between text-sm p-2 bg-slate-50 rounded-lg">
-                      <span className="text-slate-600">Statistical Tests</span>
+                    <div className="flex items-center justify-between text-sm p-2 bg-brand-white rounded-lg">
+                      <span className="text-foreground-muted">Statistical Tests</span>
                       <span className="font-medium text-green-600">Active ✅</span>
                     </div>
-                    <div className="flex items-center justify-between text-sm p-2 bg-slate-50 rounded-lg">
-                      <span className="text-slate-600">Consistency Checks</span>
+                    <div className="flex items-center justify-between text-sm p-2 bg-brand-white rounded-lg">
+                      <span className="text-foreground-muted">Consistency Checks</span>
                       <span className="font-medium text-green-600">Active ✅</span>
                     </div>
                     <div className="mt-2 pt-2 border-t border-slate-100">
-                      <p className="text-xs text-slate-500 italic">
+                      <p className="text-xs text-brand-cool-gray italic">
                         "Every decision is statistically validated to ensure data integrity."
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center h-24 text-slate-400 text-sm">
+                  <div className="flex items-center justify-center h-24 text-brand-cool-gray text-sm">
                     Waiting for execution...
                   </div>
                 )}
@@ -679,14 +679,14 @@ export default function PreprocessingPanel() {
               <div className="xl:col-span-1 glass-card overflow-hidden flex flex-col">
                 <button
                   onClick={() => togglePanel('dataHealth')}
-                  className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
+                  className="w-full p-6 flex items-center justify-between hover:bg-brand-white/50 transition-colors"
                 >
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-3">
-                      <Activity className="w-6 h-6 text-blue-600" />
-                      <h3 className="text-base font-bold text-slate-800">Health</h3>
+                      <Activity className="w-6 h-6 text-primary" />
+                      <h3 className="text-base font-bold text-brand-black">Health</h3>
                     </div>
-                    <span className={`px-2 py-1 text-xs rounded-full font-medium w-fit ${batchResults.health.overall_health_score >= 80 ? 'bg-green-100 text-green-700' :
+                    <span className={`px-2 py-1 text-xs rounded-full font-medium w-fit ${batchResults.health.overall_health_score >= 80 ? 'bg-green-100 text-success' :
                       batchResults.health.overall_health_score >= 50 ? 'bg-yellow-100 text-yellow-700' :
                         'bg-red-100 text-red-700'
                       }`}>
@@ -694,17 +694,17 @@ export default function PreprocessingPanel() {
                     </span>
                   </div>
                   {expandedPanels.dataHealth ? (
-                    <ChevronDown className="w-5 h-5 text-slate-600 flex-shrink-0" />
+                    <ChevronDown className="w-5 h-5 text-foreground-muted flex-shrink-0" />
                   ) : (
-                    <ChevronRight className="w-5 h-5 text-slate-600 flex-shrink-0" />
+                    <ChevronRight className="w-5 h-5 text-foreground-muted flex-shrink-0" />
                   )}
                 </button>
 
                 {expandedPanels.dataHealth && (
-                  <div className="px-4 pb-4 border-t border-slate-200 flex-1">
+                  <div className="px-4 pb-4 border-t border-brand-warm-gray flex-1">
                     {/* Overall Health Score - Compact */}
-                    <div className="mt-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-100">
-                      <p className="text-xs text-slate-600 mb-2">Dataset Health</p>
+                    <div className="mt-4 bg-primary/10 rounded-lg p-4 border border-primary/30">
+                      <p className="text-xs text-foreground-muted mb-2">Dataset Health</p>
                       <div className="flex items-center gap-2 mb-3">
                         <div className="text-3xl font-bold" style={{
                           color: batchResults.health.overall_health_score >= 80 ? '#10b981' :
@@ -712,29 +712,29 @@ export default function PreprocessingPanel() {
                         }}>
                           {batchResults.health.overall_health_score.toFixed(0)}
                         </div>
-                        <div className="text-lg text-slate-400">/100</div>
+                        <div className="text-lg text-brand-cool-gray">/100</div>
                       </div>
                       <div className="grid grid-cols-3 gap-2">
-                        <div className="text-center p-2 bg-white rounded-lg shadow-sm">
+                        <div className="text-center p-2 bg-brand-white rounded-lg shadow-sm">
                           <div className="text-lg font-bold text-green-600">{batchResults.health.healthy_columns}</div>
-                          <div className="text-xs text-slate-600">OK</div>
+                          <div className="text-xs text-foreground-muted">OK</div>
                         </div>
-                        <div className="text-center p-2 bg-white rounded-lg shadow-sm">
+                        <div className="text-center p-2 bg-brand-white rounded-lg shadow-sm">
                           <div className="text-lg font-bold text-yellow-600">{batchResults.health.warning_columns}</div>
-                          <div className="text-xs text-slate-600">Warn</div>
+                          <div className="text-xs text-foreground-muted">Warn</div>
                         </div>
-                        <div className="text-center p-2 bg-white rounded-lg shadow-sm">
-                          <div className="text-lg font-bold text-red-600">{batchResults.health.critical_columns}</div>
-                          <div className="text-xs text-slate-600">Crit</div>
+                        <div className="text-center p-2 bg-brand-white rounded-lg shadow-sm">
+                          <div className="text-lg font-bold text-error">{batchResults.health.critical_columns}</div>
+                          <div className="text-xs text-foreground-muted">Crit</div>
                         </div>
                       </div>
                     </div>
 
                     {/* Column Health Details - Compact */}
                     <div className="mt-4 space-y-2 max-h-[600px] overflow-y-auto pr-2">
-                      <h4 className="text-xs font-semibold text-slate-700">Columns</h4>
+                      <h4 className="text-xs font-semibold text-foreground">Columns</h4>
                       {Object.values(batchResults.health.column_health).map((health: ColumnHealthMetrics) => (
-                        <div key={health.column_name} className={`border rounded-lg p-2 transition-all ${health.severity === 'healthy' ? 'border-green-200 bg-green-50/30' :
+                        <div key={health.column_name} className={`border rounded-lg p-2 transition-all ${health.severity === 'healthy' ? 'border-success/30 bg-green-50/30' :
                           health.severity === 'warning' ? 'border-yellow-200 bg-yellow-50/30' :
                             'border-red-200 bg-red-50/30'
                           }`}>
@@ -742,15 +742,15 @@ export default function PreprocessingPanel() {
                             <div className="flex items-center gap-2 flex-1 min-w-0">
                               {health.severity === 'healthy' && <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />}
                               {health.severity === 'warning' && <AlertCircle className="w-4 h-4 text-yellow-600 flex-shrink-0" />}
-                              {health.severity === 'critical' && <X className="w-4 h-4 text-red-600 flex-shrink-0" />}
+                              {health.severity === 'critical' && <X className="w-4 h-4 text-error flex-shrink-0" />}
                               <div className="flex-1 min-w-0">
-                                <h5 className="font-semibold text-slate-800 text-xs truncate">{health.column_name}</h5>
-                                <span className="text-xs text-slate-500">{health.data_type}</span>
+                                <h5 className="font-semibold text-brand-black text-xs truncate">{health.column_name}</h5>
+                                <span className="text-xs text-brand-cool-gray">{health.data_type}</span>
                               </div>
                             </div>
                             <div className={`text-lg font-bold ${health.severity === 'healthy' ? 'text-green-600' :
                               health.severity === 'warning' ? 'text-yellow-600' :
-                                'text-red-600'
+                                'text-error'
                               }`}>
                               {health.health_score.toFixed(0)}
                             </div>
@@ -760,13 +760,13 @@ export default function PreprocessingPanel() {
                               {health.anomalies.slice(0, 2).map((anomaly, idx) => (
                                 <span key={idx} className={`text-xs px-1 py-0.5 rounded ${health.severity === 'critical' ? 'bg-red-100 text-red-700' :
                                   health.severity === 'warning' ? 'bg-yellow-100 text-yellow-700' :
-                                    'bg-blue-100 text-blue-700'
+                                    'bg-primary/20 text-primary-dark'
                                   }`}>
                                   {anomaly}
                                 </span>
                               ))}
                               {health.anomalies.length > 2 && (
-                                <span className="text-xs text-slate-500">+{health.anomalies.length - 2}</span>
+                                <span className="text-xs text-brand-cool-gray">+{health.anomalies.length - 2}</span>
                               )}
                             </div>
                           )}
@@ -783,33 +783,33 @@ export default function PreprocessingPanel() {
               <div className="xl:col-span-1 glass-card overflow-hidden flex flex-col">
                 <button
                   onClick={() => togglePanel('recommendations')}
-                  className="w-full p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
+                  className="w-full p-6 flex items-center justify-between hover:bg-brand-white/50 transition-colors"
                 >
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-3">
-                      <Target className="w-6 h-6 text-blue-600" />
-                      <h3 className="text-base font-bold text-slate-800">Recommendations</h3>
+                      <Target className="w-6 h-6 text-primary" />
+                      <h3 className="text-base font-bold text-brand-black">Recommendations</h3>
                     </div>
-                    <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium w-fit">
+                    <span className="px-2 py-1 bg-primary/20 text-primary-dark text-xs rounded-full font-medium w-fit">
                       {Object.keys(batchResults.results).length} columns
                     </span>
                   </div>
                   {expandedPanels.recommendations ? (
-                    <ChevronDown className="w-5 h-5 text-slate-600 flex-shrink-0" />
+                    <ChevronDown className="w-5 h-5 text-foreground-muted flex-shrink-0" />
                   ) : (
-                    <ChevronRight className="w-5 h-5 text-slate-600 flex-shrink-0" />
+                    <ChevronRight className="w-5 h-5 text-foreground-muted flex-shrink-0" />
                   )}
                 </button>
 
                 {expandedPanels.recommendations && (
-                  <div className="px-4 pb-4 border-t border-slate-200 flex-1">
+                  <div className="px-4 pb-4 border-t border-brand-warm-gray flex-1">
                     <div className="mt-4 space-y-2 max-h-[600px] overflow-y-auto pr-2">
                       {Object.entries(batchResults.results).map(([columnName, columnResult]) => (
-                        <div key={columnName} className="border border-slate-200 rounded-lg p-2 bg-white/50">
+                        <div key={columnName} className="border border-brand-warm-gray rounded-lg p-2 bg-brand-white/50">
                           <div className="flex items-center justify-between gap-2 mb-2">
-                            <h4 className="font-semibold text-slate-800 text-xs truncate flex-1 min-w-0">{columnName}</h4>
+                            <h4 className="font-semibold text-brand-black text-xs truncate flex-1 min-w-0">{columnName}</h4>
                             <div className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${columnResult.confidence >= 0.9
-                              ? 'bg-green-100 text-green-700'
+                              ? 'bg-green-100 text-success'
                               : columnResult.confidence >= 0.7
                                 ? 'bg-yellow-100 text-yellow-700'
                                 : 'bg-red-100 text-red-700'
@@ -820,20 +820,20 @@ export default function PreprocessingPanel() {
 
                           <div className="flex flex-col gap-1 mb-2">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-slate-600">Action:</span>
-                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                              <span className="text-xs text-foreground-muted">Action:</span>
+                              <span className="px-2 py-0.5 bg-primary/20 text-primary-dark rounded text-xs font-medium">
                                 {columnResult.action}
                               </span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-slate-600">Source:</span>
+                              <span className="text-xs text-foreground-muted">Source:</span>
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${columnResult.source === 'user_override'
-                                ? 'bg-green-100 text-green-700'
+                                ? 'bg-green-100 text-success'
                                 : columnResult.source === 'meta_learning'
                                   ? 'bg-orange-100 text-orange-700'
                                   : columnResult.source === 'conservative_fallback'
-                                    ? 'bg-slate-100 text-slate-700'
-                                    : 'bg-purple-100 text-purple-700'
+                                    ? 'bg-background-muted text-foreground'
+                                    : 'bg-primary/20 text-primary-dark'
                                 }`}>
                                 {columnResult.source}
                               </span>
@@ -847,14 +847,14 @@ export default function PreprocessingPanel() {
                                 setExplanationColumnName(columnName);
                                 setExplanationColumnData(originalData?.[columnName] || []);
                               }}
-                              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-white hover:bg-purple-50 text-purple-600 rounded text-xs font-medium border border-purple-200 transition"
+                              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-brand-white hover:bg-primary/10 text-primary rounded text-xs font-medium border border-primary/50 transition"
                             >
                               <BookOpen className="w-3 h-3" />
                               Explain
                             </button>
                             <button
                               onClick={() => setShowCorrectionFor(showCorrectionFor === columnName ? null : columnName)}
-                              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-white hover:bg-blue-50 text-blue-600 rounded text-xs font-medium border border-blue-200 transition"
+                              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-brand-white hover:bg-primary/10 text-primary rounded text-xs font-medium border border-primary/50 transition"
                             >
                               <Edit2 className="w-3 h-3" />
                               Override
@@ -863,12 +863,12 @@ export default function PreprocessingPanel() {
 
                           {/* Override Form */}
                           {showCorrectionFor === columnName && (
-                            <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mt-3">
+                            <div className="bg-primary/10 rounded-lg p-3 border border-primary/50 mt-3">
                               <div className="flex items-start gap-2 mb-2">
-                                <Edit2 className="w-4 h-4 text-blue-600 mt-0.5" />
+                                <Edit2 className="w-4 h-4 text-primary mt-0.5" />
                                 <div className="flex-1">
                                   <p className="text-xs font-semibold text-blue-800">Override Recommendation</p>
-                                  <p className="text-xs text-blue-600 mt-0.5">
+                                  <p className="text-xs text-primary mt-0.5">
                                     Select the correct action for "{columnName}"
                                   </p>
                                 </div>
@@ -883,21 +883,21 @@ export default function PreprocessingPanel() {
                                     setShowActionLibrary(true);
                                     setLibraryTargetColumn(columnName);
                                   }}
-                                  className="flex-1 px-3 py-1.5 bg-white border border-blue-300 rounded-lg text-left text-xs text-slate-700 hover:border-blue-500 hover:ring-2 hover:ring-blue-100 transition-all flex items-center justify-between group"
+                                  className="flex-1 px-3 py-1.5 bg-brand-white border border-primary rounded-lg text-left text-xs text-foreground hover:border-primary hover:ring-2 hover:ring-blue-100 transition-all flex items-center justify-between group"
                                 >
-                                  <span className={correctActions[columnName] ? 'text-blue-700 font-medium' : 'text-slate-500'}>
+                                  <span className={correctActions[columnName] ? 'text-primary-dark font-medium' : 'text-brand-cool-gray'}>
                                     {correctActions[columnName]
                                       ? correctActions[columnName].replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
                                       : 'Select Action...'}
                                   </span>
-                                  <div className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-medium group-hover:bg-blue-100 transition-colors">
+                                  <div className="px-1.5 py-0.5 bg-primary/10 text-primary rounded text-[10px] font-medium group-hover:bg-primary/20 transition-colors">
                                     Browse Library
                                   </div>
                                 </button>
                                 <button
                                   onClick={() => handleBatchCorrection(columnName, columnResult.action, columnResult.confidence)}
                                   disabled={isSubmittingCorrection[columnName] || !correctActions[columnName]}
-                                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="px-3 py-1.5 bg-primary text-brand-white rounded-lg text-xs font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   {isSubmittingCorrection[columnName] ? 'Submitting...' : 'Apply'}
                                 </button>
@@ -919,12 +919,12 @@ export default function PreprocessingPanel() {
       <div className="grid grid-cols-2 gap-4">
         <div className="glass-card p-4">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-              <CheckCircle className="w-5 h-5 text-blue-600" />
+            <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center flex-shrink-0">
+              <CheckCircle className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-semibold text-slate-800 text-sm">Privacy-First</h3>
-              <p className="text-xs text-slate-600 mt-1">
+              <h3 className="font-semibold text-brand-black text-sm">Privacy-First</h3>
+              <p className="text-xs text-foreground-muted mt-1">
                 Your data is processed in real-time and never stored
               </p>
             </div>
@@ -933,12 +933,12 @@ export default function PreprocessingPanel() {
 
         <div className="glass-card p-4">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Info className="w-5 h-5 text-purple-600" />
+            <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Info className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-semibold text-slate-800 text-sm">Universal Coverage</h3>
-              <p className="text-xs text-slate-600 mt-1">
+              <h3 className="font-semibold text-brand-black text-sm">Universal Coverage</h3>
+              <p className="text-xs text-foreground-muted mt-1">
                 95-99% autonomous on ANY domain (financial, medical, IoT, web)
               </p>
             </div>

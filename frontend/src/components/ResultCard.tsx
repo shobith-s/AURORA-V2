@@ -21,21 +21,21 @@ export default function ResultCard({ result }: ResultCardProps) {
     const isLimitedTraining = source === 'learned' && result.explanation?.includes('Limited training');
 
     const colors = {
-      symbolic: 'bg-blue-100 text-blue-700 border-blue-200',
-      neural: 'bg-purple-100 text-purple-700 border-purple-200',
+      symbolic: 'bg-primary/20 text-primary-dark border-primary/50',
+      neural: 'bg-primary/20 text-primary-dark border-primary/50',
       learned: isLimitedTraining
         ? 'bg-amber-100 text-amber-700 border-amber-200'  // Warning color for limited training
-        : 'bg-green-100 text-green-700 border-green-200',
-      meta_learning: 'bg-slate-100 text-slate-700 border-slate-200',
-      conservative_fallback: 'bg-gray-100 text-gray-700 border-gray-200'
+        : 'bg-green-100 text-success border-success/30',
+      meta_learning: 'bg-background-muted text-foreground border-brand-warm-gray',
+      conservative_fallback: 'bg-background-muted text-foreground border-brand-warm-gray'
     };
-    return colors[source as keyof typeof colors] || 'bg-gray-100 text-gray-700';
+    return colors[source as keyof typeof colors] || 'bg-background-muted text-foreground';
   };
 
   const getConfidenceColor = (confidence: number) => {
     if (confidence >= 0.9) return 'text-green-600';
     if (confidence >= 0.7) return 'text-yellow-600';
-    return 'text-red-600';
+    return 'text-error';
   };
 
   const handleCorrection = async () => {
@@ -67,7 +67,7 @@ export default function ResultCard({ result }: ResultCardProps) {
     <div className="glass-card p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold text-slate-800">Recommendation</h3>
+        <h3 className="text-lg font-bold text-brand-black">Recommendation</h3>
         <div
           className={`px-3 py-1 rounded-full text-xs font-medium border ${getSourceColor(result.source)} cursor-help`}
           title={result.source === 'neural' ? 'Decision made by Neural Oracle (XGBoost) based on learned patterns' : 'Decision made by Symbolic Engine based on explicit rules'}
@@ -79,14 +79,14 @@ export default function ResultCard({ result }: ResultCardProps) {
       </div>
 
       {/* Main Action */}
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 border border-blue-100">
+      <div className="bg-primary/10 rounded-xl p-6 border border-primary/30">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-blue-600" />
+            <div className="w-12 h-12 bg-brand-white rounded-lg flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <p className="text-sm text-slate-600">Recommended Action</p>
+              <p className="text-sm text-foreground-muted">Recommended Action</p>
               <h4 className="text-2xl font-bold gradient-text">
                 {result.action.replace(/_/g, ' ').toUpperCase()}
               </h4>
@@ -95,21 +95,21 @@ export default function ResultCard({ result }: ResultCardProps) {
           <div className="flex gap-2">
             <button
               onClick={() => setShowExplanation(true)}
-              className={`flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg text-sm font-medium transition shadow-md ${result.source === 'neural' ? 'animate-pulse' : ''}`}
+              className={`flex items-center gap-2 px-3 py-2 bg-primary hover:bg-primary-hover text-brand-white rounded-lg text-sm font-medium transition shadow-md ${result.source === 'neural' ? 'animate-pulse' : ''}`}
             >
               <BookOpen className="w-4 h-4" />
               Explain
             </button>
             <button
               onClick={() => setShowCorrection(!showCorrection)}
-              className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-blue-50 text-blue-600 rounded-lg text-sm font-medium border border-blue-200 transition"
+              className="flex items-center gap-2 px-3 py-2 bg-brand-white hover:bg-primary/10 text-primary rounded-lg text-sm font-medium border border-primary/50 transition"
             >
               <Edit2 className="w-4 h-4" />
               Override
             </button>
           </div>
         </div>
-        <p className="text-sm text-slate-700">{result.explanation}</p>
+        <p className="text-sm text-foreground">{result.explanation}</p>
       </div>
 
       {/* Learned Pattern Training Warning */}
@@ -170,18 +170,18 @@ export default function ResultCard({ result }: ResultCardProps) {
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 gap-4">
         {/* Confidence */}
-        <div className="bg-white/50 rounded-lg p-4 border border-slate-200">
+        <div className="bg-brand-white/50 rounded-lg p-4 border border-brand-warm-gray">
           <div className="flex items-center gap-2 mb-2">
-            <Target className="w-4 h-4 text-slate-600" />
-            <span className="text-xs font-medium text-slate-600">Confidence</span>
+            <Target className="w-4 h-4 text-foreground-muted" />
+            <span className="text-xs font-medium text-foreground-muted">Confidence</span>
           </div>
           <div className={`text-2xl font-bold ${getConfidenceColor(result.confidence)}`}>
             {(result.confidence * 100).toFixed(1)}%
           </div>
-          <div className="w-full bg-slate-200 rounded-full h-2 mt-2">
+          <div className="w-full bg-background-muted rounded-full h-2 mt-2">
             <div
-              className={`h-2 rounded-full ${result.confidence >= 0.9 ? 'bg-green-500' :
-                result.confidence >= 0.7 ? 'bg-yellow-500' : 'bg-red-500'
+              className={`h-2 rounded-full ${result.confidence >= 0.9 ? 'bg-success' :
+                result.confidence >= 0.7 ? 'bg-warning' : 'bg-error'
                 }`}
               style={{ width: `${result.confidence * 100}%` }}
             />
@@ -189,12 +189,12 @@ export default function ResultCard({ result }: ResultCardProps) {
         </div>
 
         {/* Decision ID */}
-        <div className="bg-white/50 rounded-lg p-4 border border-slate-200">
+        <div className="bg-brand-white/50 rounded-lg p-4 border border-brand-warm-gray">
           <div className="flex items-center gap-2 mb-2">
-            <Clock className="w-4 h-4 text-slate-600" />
-            <span className="text-xs font-medium text-slate-600">Decision ID</span>
+            <Clock className="w-4 h-4 text-foreground-muted" />
+            <span className="text-xs font-medium text-foreground-muted">Decision ID</span>
           </div>
-          <div className="text-xs font-mono text-slate-700 truncate">
+          <div className="text-xs font-mono text-foreground truncate">
             {result.decision_id?.slice(0, 16)}...
           </div>
         </div>
@@ -203,24 +203,24 @@ export default function ResultCard({ result }: ResultCardProps) {
       {/* Alternatives */}
       {result.alternatives && result.alternatives.length > 0 && (
         <div>
-          <h4 className="text-sm font-semibold text-slate-700 mb-3">Alternative Actions</h4>
+          <h4 className="text-sm font-semibold text-foreground mb-3">Alternative Actions</h4>
           <div className="space-y-2">
             {result.alternatives.slice(0, 3).map((alt: any, idx: number) => (
               <div
                 key={idx}
-                className="flex items-center justify-between p-3 bg-white/50 rounded-lg border border-slate-200"
+                className="flex items-center justify-between p-3 bg-brand-white/50 rounded-lg border border-brand-warm-gray"
               >
-                <span className="text-sm text-slate-700">
+                <span className="text-sm text-foreground">
                   {alt.action.replace(/_/g, ' ')}
                 </span>
                 <div className="flex items-center gap-2">
-                  <div className="w-24 bg-slate-200 rounded-full h-1.5">
+                  <div className="w-24 bg-background-muted rounded-full h-1.5">
                     <div
                       className="bg-slate-400 h-1.5 rounded-full"
                       style={{ width: `${alt.confidence * 100}%` }}
                     />
                   </div>
-                  <span className="text-xs text-slate-600 w-12 text-right">
+                  <span className="text-xs text-foreground-muted w-12 text-right">
                     {(alt.confidence * 100).toFixed(0)}%
                   </span>
                 </div>
@@ -231,9 +231,9 @@ export default function ResultCard({ result }: ResultCardProps) {
       )}
 
       {/* Feedback Section */}
-      <div className="border-t border-slate-200 pt-4">
+      <div className="border-t border-brand-warm-gray pt-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm text-slate-600">Was this recommendation helpful?</p>
+          <p className="text-sm text-foreground-muted">Was this recommendation helpful?</p>
           <div className="flex gap-2">
             <button className="p-2 hover:bg-green-50 rounded-lg transition">
               <ThumbsUp className="w-4 h-4 text-green-600" />
@@ -242,19 +242,19 @@ export default function ResultCard({ result }: ResultCardProps) {
               onClick={() => setShowCorrection(!showCorrection)}
               className="p-2 hover:bg-red-50 rounded-lg transition"
             >
-              <ThumbsDown className="w-4 h-4 text-red-600" />
+              <ThumbsDown className="w-4 h-4 text-error" />
             </button>
           </div>
         </div>
 
         {/* Override/Correction Form */}
         {showCorrection && (
-          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 animate-in slide-in-from-top mt-3">
+          <div className="bg-primary/10 rounded-lg p-4 border border-primary/50 animate-in slide-in-from-top mt-3">
             <div className="flex items-start gap-2 mb-3">
-              <Edit2 className="w-5 h-5 text-blue-600 mt-0.5" />
+              <Edit2 className="w-5 h-5 text-primary mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-blue-800">Override Recommendation</p>
-                <p className="text-xs text-blue-600 mt-0.5">
+                <p className="text-xs text-primary mt-0.5">
                   Provide the correct action and help AURORA learn from your expertise
                 </p>
               </div>
@@ -262,14 +262,14 @@ export default function ResultCard({ result }: ResultCardProps) {
             <div className="flex gap-2">
               <button
                 onClick={() => setShowActionLibrary(true)}
-                className="flex-1 px-4 py-2 bg-white border border-blue-300 rounded-lg text-left text-sm text-slate-700 hover:border-blue-500 hover:ring-2 hover:ring-blue-100 transition-all flex items-center justify-between group"
+                className="flex-1 px-4 py-2 bg-brand-white border border-primary rounded-lg text-left text-sm text-foreground hover:border-primary hover:ring-2 hover:ring-blue-100 transition-all flex items-center justify-between group"
               >
-                <span className={correctAction ? 'text-blue-700 font-medium' : 'text-slate-500'}>
+                <span className={correctAction ? 'text-primary-dark font-medium' : 'text-brand-cool-gray'}>
                   {correctAction
                     ? correctAction.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
                     : 'Select an action...'}
                 </span>
-                <div className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs font-medium group-hover:bg-blue-100 transition-colors">
+                <div className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-medium group-hover:bg-primary/20 transition-colors">
                   Browse Library
                 </div>
               </button>
@@ -277,7 +277,7 @@ export default function ResultCard({ result }: ResultCardProps) {
               <button
                 onClick={handleCorrection}
                 disabled={isSubmitting || !correctAction}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+                className="px-4 py-2 bg-primary text-brand-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
               >
                 {isSubmitting ? 'Submitting...' : 'Apply Override'}
               </button>
