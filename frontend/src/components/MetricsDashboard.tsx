@@ -74,7 +74,7 @@ export default function MetricsDashboard() {
         {/* Average Confidence */}
         <div className="stats-card">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br bg-success rounded-xl flex items-center justify-center">
+            <div className="w-12 h-12 bg-success rounded-xl flex items-center justify-center">
               <Target className="w-6 h-6 text-brand-white" />
             </div>
             <span className="text-xs text-brand-cool-gray uppercase tracking-wider">Accuracy</span>
@@ -127,7 +127,7 @@ export default function MetricsDashboard() {
           </div>
           <div className="mt-3 h-2 bg-slate-700 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r bg-primary rounded-full transition-all duration-500"
+              className="h-full bg-primary rounded-full transition-all duration-500"
               style={{ width: `${symbolicPct}%` }}
             ></div>
           </div>
@@ -136,7 +136,7 @@ export default function MetricsDashboard() {
         {/* Fallback / Safety */}
         <div className="glass-card p-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-brand-white0/20 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-brand-white/20 rounded-lg flex items-center justify-center">
               <TrendingUp className="w-5 h-5 text-brand-cool-gray" />
             </div>
             <div>

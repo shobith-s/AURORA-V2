@@ -528,7 +528,7 @@ export default function PreprocessingPanel() {
                 </div>
                 <div className="text-sm text-foreground-muted mt-1">Total Columns</div>
               </div>
-              <div className="text-center p-4 bg-gradient-to-br bg-success/10 rounded-lg">
+              <div className="text-center p-4 bg-success/10 rounded-lg">
                 <div className="text-3xl font-bold text-green-600">
                   {Object.values(batchResults.results).filter((r: any) => r.action === 'keep_as_is').length}
                 </div>
@@ -580,7 +580,7 @@ export default function PreprocessingPanel() {
               {/* Download Panel */}
               <div className="glass-card p-6">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-gradient-to-br bg-success rounded-xl flex items-center justify-center">
+                  <div className="w-12 h-12 bg-success rounded-xl flex items-center justify-center">
                     <CheckCircle className="w-6 h-6 text-brand-white" />
                   </div>
                   <div>

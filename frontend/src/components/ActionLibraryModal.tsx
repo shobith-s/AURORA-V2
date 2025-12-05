@@ -176,7 +176,7 @@ export default function ActionLibraryModal({ isOpen, onClose, onSelectAction, cu
                                         onClick={() => onSelectAction(action.id)}
                                         className={`group relative flex items-start gap-4 p-4 rounded-xl border text-left transition-all duration-200 hover:shadow-md ${currentAction === action.id
                                                 ? 'bg-primary/10 border-primary ring-1 ring-blue-500'
-                                                : 'bg-brand-white border-brand-warm-gray hover:border-primary hover:bg-primary/10/30'
+                                                : 'bg-brand-white border-brand-warm-gray hover:border-primary hover:bg-primary/10'
                                             }`}
                                     >
                                         <div className={`p-3 rounded-lg ${currentAction === action.id ? 'bg-primary/30 text-primary-dark' : 'bg-background-muted text-foreground-muted group-hover:bg-primary/20 group-hover:text-primary'

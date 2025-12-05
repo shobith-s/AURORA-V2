@@ -92,7 +92,7 @@ export default function LearningProgressPanel() {
           <div className="text-2xl font-bold text-purple-900">{patternsTracked}</div>
         </div>
 
-        <div className="p-4 bg-gradient-to-br bg-success/10 rounded-lg border border-success/30">
+        <div className="p-4 bg-success/10 rounded-lg border border-success/30">
           <div className="flex items-center gap-2 mb-2">
             <Zap className="w-4 h-4 text-green-600" />
             <span className="text-xs font-medium text-success">Rules Created</span>

@@ -220,7 +220,7 @@ export default function ValidationDashboard() {
           <p className="text-3xl font-bold">{dashboardData.overview.total_users}</p>
         </div>
 
-        <div className="bg-gradient-to-br bg-success rounded-lg p-6 text-brand-white">
+        <div className="bg-success rounded-lg p-6 text-brand-white">
           <CheckCircle className="w-8 h-8 mb-2 opacity-80" />
           <p className="text-sm opacity-90">Decisions Made</p>
           <p className="text-3xl font-bold">{dashboardData.overview.total_decisions}</p>
