@@ -1,23 +1,33 @@
 """
 Enhanced explanation system for AURORA preprocessing decisions.
+
+Consolidated into a single explainer.py module for simplicity.
 """
 
-from .enhanced_explanation import (
+# Import from consolidated explainer module
+from .explainer import (
+    # Data structures
     EnhancedExplanation,
     ExplanationSection,
     AlternativeExplanation,
     ImpactPrediction,
     StatisticalEvidence,
-    ExplanationSeverity
+    ExplanationSeverity,
+    # Template registry
+    ExplanationTemplateRegistry,
+    # New simple API
+    Explainer
 )
-from .explanation_templates import ExplanationTemplateRegistry
 
 __all__ = [
+    # Existing exports (backward compatible)
     'EnhancedExplanation',
     'ExplanationSection',
     'AlternativeExplanation',
     'ImpactPrediction',
     'StatisticalEvidence',
     'ExplanationSeverity',
-    'ExplanationTemplateRegistry'
+    'ExplanationTemplateRegistry',
+    # New export
+    'Explainer'
 ]

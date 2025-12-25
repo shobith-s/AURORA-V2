@@ -27,7 +27,13 @@ from .schemas import (
     BatchPreprocessResponse,
     ExecutePipelineRequest,
     ExecutePipelineResponse,
-    AlternativeAction
+    AlternativeAction,
+    ExportPipelineRequest,
+    ExportPipelineResponse,
+    ProfileColumnRequest,
+    ProfileColumnResponse,
+    ComparePreprocessingRequest,
+    ComparePreprocessingResponse
 )
 from ..core.preprocessor import IntelligentPreprocessor, get_preprocessor
 from ..utils.monitor import get_monitor
@@ -1712,3 +1718,118 @@ async def record_user_action(
     except Exception as e:
         logger.error(f"Error recording user action: {e}", exc_info=True)
         return {"success": False, "message": "Recording failed"}
+
+
+@app.post("/export-pipeline", response_model=ExportPipelineResponse)
+async def export_pipeline(request: ExportPipelineRequest):
+    """
+    Export preprocessing pipeline in requested format.
+    
+    Args:
+        request: Export request with decisions and format
+        
+    Returns:
+        Exported pipeline content with suggested filename
+    """
+    try:
+        from ..core.pipeline_exporter import PipelineExporter
+        
+        exporter = PipelineExporter()
+        
+        # Validate format
+        valid_formats = ["python", "sklearn", "json"]
+        if request.format not in valid_formats:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid format. Must be one of: {', '.join(valid_formats)}"
+            )
+        
+        # Export pipeline
+        content = exporter.export(request.decisions, format=request.format)
+        
+        # Determine filename
+        filename_map = {
+            "python": "preprocess.py",
+            "sklearn": "pipeline.pkl",
+            "json": "pipeline_config.json"
+        }
+        filename = filename_map.get(request.format, "pipeline.txt")
+        
+        # For sklearn format, encode bytes as base64 for JSON response
+        if request.format == "sklearn" and isinstance(content, bytes):
+            import base64
+            content = base64.b64encode(content).decode('utf-8')
+        
+        return ExportPipelineResponse(
+            format=request.format,
+            content=content,
+            filename=filename
+        )
+    
+    except Exception as e:
+        logger.error(f"Error exporting pipeline: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Pipeline export failed: {str(e)}"
+        )
+
+
+@app.post("/api/profile-column", response_model=ProfileColumnResponse)
+async def profile_column(request: ProfileColumnRequest):
+    """
+    Generate statistical profile for a column.
+    
+    Args:
+        request: Profile request with column data
+        
+    Returns:
+        Comprehensive statistical profile with distribution data
+    """
+    try:
+        from ..core.column_profiler import ColumnProfiler
+        
+        profiler = ColumnProfiler(bins=request.bins)
+        profile = profiler.profile_column(
+            data=request.column_data,
+            column_name=request.column_name
+        )
+        
+        return ProfileColumnResponse(**profile)
+    
+    except Exception as e:
+        logger.error(f"Error profiling column: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Column profiling failed: {str(e)}"
+        )
+
+
+@app.post("/api/compare-preprocessing", response_model=ComparePreprocessingResponse)
+async def compare_preprocessing(request: ComparePreprocessingRequest):
+    """
+    Compare original and transformed data.
+    
+    Args:
+        request: Comparison request with original and transformed data
+        
+    Returns:
+        Before/after profiles with improvement metrics
+    """
+    try:
+        from ..core.column_profiler import ColumnProfiler
+        
+        profiler = ColumnProfiler()
+        comparison = profiler.compare_preprocessing(
+            original_data=request.original_data,
+            transformed_data=request.transformed_data,
+            action=request.action
+        )
+        
+        return ComparePreprocessingResponse(**comparison)
+    
+    except Exception as e:
+        logger.error(f"Error comparing preprocessing: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Preprocessing comparison failed: {str(e)}"
+        )

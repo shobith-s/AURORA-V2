@@ -1,0 +1,895 @@
+{
+  "timestamp": "2025-12-25T23:26:06.359514",
+  "overall_score": 83.19548872180451,
+  "total_columns": 133,
+  "datasets": {
+    "Titanic (Kaggle)": {
+      "shape": [
+        891,
+        12
+      ],
+      "columns": [
+        {
+          "column": "PassengerId",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "Survived",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "Pclass",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "Name",
+          "action": "text_vectorize_tfidf",
+          "confidence": 0.92,
+          "score": 90
+        },
+        {
+          "column": "Sex",
+          "action": "label_encode",
+          "confidence": 0.95,
+          "score": 90
+        },
+        {
+          "column": "Age",
+          "action": "standard_scale",
+          "confidence": 0.855,
+          "score": 90
+        },
+        {
+          "column": "SibSp",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "Parch",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "Ticket",
+          "action": "text_clean",
+          "confidence": 0.765,
+          "score": 85
+        },
+        {
+          "column": "Fare",
+          "action": "log1p_transform",
+          "confidence": 0.8280000000000001,
+          "score": 85
+        },
+        {
+          "column": "Cabin",
+          "action": "drop_column",
+          "confidence": 0.7866000000000001,
+          "score": 85
+        },
+        {
+          "column": "Embarked",
+          "action": "label_encode",
+          "confidence": 0.95,
+          "score": 90
+        }
+      ],
+      "average_score": 88.75
+    },
+    "Iris (UCI)": {
+      "shape": [
+        150,
+        5
+      ],
+      "columns": [
+        {
+          "column": "sepal length (cm)",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "sepal width (cm)",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "petal length (cm)",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "petal width (cm)",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "target",
+          "action": "keep_as_is",
+          "confidence": 0.6900000000000001,
+          "score": 75
+        }
+      ],
+      "average_score": 83.0
+    },
+    "Wine Quality (UCI)": {
+      "shape": [
+        178,
+        14
+      ],
+      "columns": [
+        {
+          "column": "alcohol",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "malic_acid",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "ash",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "alcalinity_of_ash",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "magnesium",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "total_phenols",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "flavanoids",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "nonflavanoid_phenols",
+          "action": "keep_as_is",
+          "confidence": 0.6075,
+          "score": 75
+        },
+        {
+          "column": "proanthocyanins",
+          "action": "minmax_scale",
+          "confidence": 0.765,
+          "score": 85
+        },
+        {
+          "column": "color_intensity",
+          "action": "keep_as_is",
+          "confidence": 0.5265000000000001,
+          "score": 55
+        },
+        {
+          "column": "hue",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "od280/od315_of_diluted_wines",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "proline",
+          "action": "robust_scale",
+          "confidence": 0.65,
+          "score": 80
+        },
+        {
+          "column": "target",
+          "action": "keep_as_is",
+          "confidence": 0.6900000000000001,
+          "score": 75
+        }
+      ],
+      "average_score": 81.07142857142857
+    },
+    "Breast Cancer (UCI)": {
+      "shape": [
+        569,
+        31
+      ],
+      "columns": [
+        {
+          "column": "mean radius",
+          "action": "keep_as_is",
+          "confidence": 0.5535,
+          "score": 65
+        },
+        {
+          "column": "mean texture",
+          "action": "minmax_scale",
+          "confidence": 0.765,
+          "score": 85
+        },
+        {
+          "column": "mean perimeter",
+          "action": "keep_as_is",
+          "confidence": 0.5265000000000001,
+          "score": 55
+        },
+        {
+          "column": "mean area",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "mean smoothness",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "mean compactness",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "mean concavity",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "mean concave points",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "mean symmetry",
+          "action": "keep_as_is",
+          "confidence": 0.5265000000000001,
+          "score": 55
+        },
+        {
+          "column": "mean fractal dimension",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "radius error",
+          "action": "binning_equal_freq",
+          "confidence": 0.8280000000000001,
+          "score": 65
+        },
+        {
+          "column": "texture error",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "perimeter error",
+          "action": "binning_equal_freq",
+          "confidence": 0.8280000000000001,
+          "score": 65
+        },
+        {
+          "column": "area error",
+          "action": "binning_equal_freq",
+          "confidence": 0.8280000000000001,
+          "score": 65
+        },
+        {
+          "column": "smoothness error",
+          "action": "keep_as_is",
+          "confidence": 0.64125,
+          "score": 75
+        },
+        {
+          "column": "compactness error",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "concavity error",
+          "action": "binning_equal_freq",
+          "confidence": 0.8280000000000001,
+          "score": 65
+        },
+        {
+          "column": "concave points error",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "symmetry error",
+          "action": "binning_equal_freq",
+          "confidence": 0.8280000000000001,
+          "score": 65
+        },
+        {
+          "column": "fractal dimension error",
+          "action": "keep_as_is",
+          "confidence": 0.64125,
+          "score": 75
+        },
+        {
+          "column": "worst radius",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "worst texture",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "worst perimeter",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "worst area",
+          "action": "robust_scale",
+          "confidence": 0.8280000000000001,
+          "score": 85
+        },
+        {
+          "column": "worst smoothness",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "worst compactness",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "worst concavity",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "worst concave points",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "worst symmetry",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "worst fractal dimension",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "target",
+          "action": "keep_as_is",
+          "confidence": 0.6900000000000001,
+          "score": 75
+        }
+      ],
+      "average_score": 78.2258064516129
+    },
+    "Adult Income (UCI)": {
+      "shape": [
+        32561,
+        15
+      ],
+      "columns": [
+        {
+          "column": "age",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "workclass",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "fnlwgt",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "education",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "education-num",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "marital-status",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "occupation",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "relationship",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "race",
+          "action": "onehot_encode",
+          "confidence": 0.92,
+          "score": 90
+        },
+        {
+          "column": "sex",
+          "action": "label_encode",
+          "confidence": 0.95,
+          "score": 90
+        },
+        {
+          "column": "capital-gain",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "capital-loss",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "hours-per-week",
+          "action": "robust_scale",
+          "confidence": 0.9,
+          "score": 90
+        },
+        {
+          "column": "native-country",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "income",
+          "action": "label_encode",
+          "confidence": 0.95,
+          "score": 90
+        }
+      ],
+      "average_score": 89.66666666666667
+    },
+    "Diabetes (UCI)": {
+      "shape": [
+        442,
+        11
+      ],
+      "columns": [
+        {
+          "column": "age",
+          "action": "keep_as_is",
+          "confidence": 0.62775,
+          "score": 75
+        },
+        {
+          "column": "sex",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "bmi",
+          "action": "robust_scale",
+          "confidence": 0.783,
+          "score": 85
+        },
+        {
+          "column": "bp",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "s1",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "s2",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "s3",
+          "action": "robust_scale",
+          "confidence": 0.783,
+          "score": 85
+        },
+        {
+          "column": "s4",
+          "action": "robust_scale",
+          "confidence": 0.783,
+          "score": 85
+        },
+        {
+          "column": "s5",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "s6",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "target",
+          "action": "keep_as_is",
+          "confidence": 0.6900000000000001,
+          "score": 75
+        }
+      ],
+      "average_score": 83.63636363636364
+    },
+    "Digits (UCI)": {
+      "shape": [
+        1797,
+        65
+      ],
+      "columns": [
+        {
+          "column": "pixel_0_0",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_0_1",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_0_2",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_0_3",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_0_4",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_0_5",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_0_6",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_0_7",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_1_0",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_1_1",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_1_2",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_1_3",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_1_4",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_1_5",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_1_6",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_1_7",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_2_0",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_2_1",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_2_2",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "pixel_2_3",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        }
+      ],
+      "average_score": 90.0
+    },
+    "California Housing (UCI)": {
+      "shape": [
+        20640,
+        9
+      ],
+      "columns": [
+        {
+          "column": "MedInc",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "HouseAge",
+          "action": "drop_column",
+          "confidence": 0.874,
+          "score": 90
+        },
+        {
+          "column": "AveRooms",
+          "action": "log_transform",
+          "confidence": 0.855,
+          "score": 90
+        },
+        {
+          "column": "AveBedrms",
+          "action": "binning_equal_freq",
+          "confidence": 0.8280000000000001,
+          "score": 65
+        },
+        {
+          "column": "Population",
+          "action": "binning_equal_freq",
+          "confidence": 0.8280000000000001,
+          "score": 65
+        },
+        {
+          "column": "AveOccup",
+          "action": "log_transform",
+          "confidence": 0.855,
+          "score": 90
+        },
+        {
+          "column": "Latitude",
+          "action": "geo_cluster_kmeans",
+          "confidence": 0.855,
+          "score": 70
+        },
+        {
+          "column": "Longitude",
+          "action": "geo_cluster_kmeans",
+          "confidence": 0.855,
+          "score": 70
+        },
+        {
+          "column": "MedHouseVal",
+          "action": "robust_scale",
+          "confidence": 0.8280000000000001,
+          "score": 85
+        }
+      ],
+      "average_score": 78.88888888888889
+    },
+    "Credit Card Fraud": {
+      "shape": [
+        1000,
+        6
+      ],
+      "columns": [
+        {
+          "column": "Time",
+          "action": "keep_as_is",
+          "confidence": 0.64125,
+          "score": 75
+        },
+        {
+          "column": "V1",
+          "action": "keep_as_is",
+          "confidence": 0.621,
+          "score": 75
+        },
+        {
+          "column": "V2",
+          "action": "keep_as_is",
+          "confidence": 0.621,
+          "score": 75
+        },
+        {
+          "column": "V3",
+          "action": "keep_as_is",
+          "confidence": 0.64125,
+          "score": 75
+        },
+        {
+          "column": "Amount",
+          "action": "log_transform",
+          "confidence": 0.855,
+          "score": 90
+        },
+        {
+          "column": "Class",
+          "action": "keep_as_is",
+          "confidence": 0.6900000000000001,
+          "score": 75
+        }
+      ],
+      "average_score": 77.5
+    },
+    "Housing Prices": {
+      "shape": [
+        500,
+        10
+      ],
+      "columns": [
+        {
+          "column": "CRIM",
+          "action": "binning_equal_freq",
+          "confidence": 0.8280000000000001,
+          "score": 65
+        },
+        {
+          "column": "ZN",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "INDUS",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "NOX",
+          "action": "keep_as_is",
+          "confidence": 0.6075,
+          "score": 75
+        },
+        {
+          "column": "RM",
+          "action": "keep_as_is",
+          "confidence": 0.64125,
+          "score": 75
+        },
+        {
+          "column": "AGE",
+          "action": "standard_scale",
+          "confidence": 0.855,
+          "score": 90
+        },
+        {
+          "column": "DIS",
+          "action": "binning_equal_freq",
+          "confidence": 0.8280000000000001,
+          "score": 65
+        },
+        {
+          "column": "TAX",
+          "action": "standard_scale",
+          "confidence": 0.81,
+          "score": 85
+        },
+        {
+          "column": "PTRATIO",
+          "action": "keep_as_is",
+          "confidence": 0.6142500000000001,
+          "score": 75
+        },
+        {
+          "column": "MEDV",
+          "action": "sqrt_transform",
+          "confidence": 0.81,
+          "score": 85
+        }
+      ],
+      "average_score": 78.5
+    }
+  }
+}
