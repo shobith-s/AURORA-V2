@@ -243,6 +243,99 @@ def _has_alphanumeric_pattern(stats: Dict[str, Any]) -> bool:
     ])
 
 
+def _contains_month_names(unique_values: List[Any]) -> bool:
+    """
+    Check if a list of unique values contains month names.
+    
+    This performs exact value matching (not substring matching) to avoid
+    false positives like matching 'January' within 'SomeJanuaryData'.
+    
+    Args:
+        unique_values: List of unique values from a column
+    
+    Returns:
+        True if any value exactly matches a month name
+    """
+    month_names = {
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    }
+    
+    # Convert unique values to strings and check for exact matches
+    for val in unique_values:
+        if str(val) in month_names:
+            return True
+    return False
+
+
+def _is_likely_non_age_column(column_name: str) -> bool:
+    """
+    Check if a column name suggests it's NOT an age column.
+    
+    Uses word boundary matching to avoid false positives on compound names
+    like 'patient_age_years' (which should be detected as age).
+    
+    Args:
+        column_name: The column name to check
+    
+    Returns:
+        True if the column is likely NOT an age column
+    """
+    name_lower = column_name.lower()
+    
+    # Exact exclusion patterns (column names that look like age values but aren't)
+    exclusion_patterns = [
+        "_id", "id_", "_code", "code_", "_year", "year_",
+        "_date", "date_", "_index", "index_"
+    ]
+    
+    # Check for exact patterns
+    for pattern in exclusion_patterns:
+        if pattern in name_lower:
+            return True
+    
+    # Check if name ends with _id or starts with id_
+    if name_lower.endswith("_id") or name_lower.startswith("id_"):
+        return True
+    
+    return False
+
+
+def _is_likely_non_rating_column(column_name: str) -> bool:
+    """
+    Check if a column name suggests it's NOT a rating/score column.
+    
+    Uses word boundary matching to avoid excluding valid rating columns
+    like 'product_rating' or 'age_rating'.
+    
+    Args:
+        column_name: The column name to check
+    
+    Returns:
+        True if the column is likely NOT a rating column
+    """
+    name_lower = column_name.lower()
+    
+    # Columns that have similar value ranges but are clearly not ratings
+    exclusion_patterns = [
+        "_id", "id_", "_count", "count_", "_qty", "qty_",
+        "_year", "year_", "_age", "age_"
+    ]
+    
+    # Check for exact patterns - but allow compound names with rating
+    # e.g., 'product_count_rating' should still be detected as rating
+    if "rating" in name_lower or "score" in name_lower:
+        return False  # Has rating/score in name, so it's likely a rating
+    
+    for pattern in exclusion_patterns:
+        if pattern in name_lower:
+            return True
+    
+    return False
+
+
 # =============================================================================
 # UNIVERSAL RULE CREATION
 # =============================================================================
@@ -416,9 +509,10 @@ def create_universal_rules() -> List[Rule]:
                 # Name-based detection (primary)
                 _column_name_contains(stats, ["age", "patient_age", "customer_age"]) or
                 # Value-based fallback - detects age by 0-120 range with limited cardinality
+                # Exclude columns that explicitly contain identifiers or dates
                 (
                     _is_age_by_value_range(stats) and
-                    not _column_name_contains(stats, ["year", "yr", "date", "id", "code"])
+                    not _is_likely_non_age_column(stats.get("column_name", ""))
                 )
             )
         ),
@@ -446,9 +540,10 @@ def create_universal_rules() -> List[Rule]:
                 # Name-based detection (primary)
                 _column_name_contains(stats, ["rating", "score", "stars", "grade", "review"]) or
                 # Value-based fallback - bounded scales (0-5, 0-10, 0-100)
+                # Exclude columns that are clearly not ratings
                 (
                     _is_rating_by_value_range(stats) and
-                    not _column_name_contains(stats, ["year", "age", "id", "count", "qty"])
+                    not _is_likely_non_rating_column(stats.get("column_name", ""))
                 )
             )
         ),
@@ -578,7 +673,7 @@ def create_universal_rules() -> List[Rule]:
         action=PreprocessingAction.CYCLIC_TIME_ENCODE,
         condition=lambda stats: (
             stats.get("is_numeric", False) and
-            stats.get("min_value", -1) >= 0 and
+            stats.get("min_value", 0) >= 0 and
             stats.get("max_value", 25) <= 24 and
             stats.get("unique_count", 0) <= 24 and
             _column_name_contains(stats, ["hour", "month", "day", "minute", "weekday", "day_of_week"])
@@ -620,12 +715,12 @@ def create_universal_rules() -> List[Rule]:
         category=RuleCategory.CATEGORICAL,
         action=PreprocessingAction.ORDINAL_ENCODE,
         condition=lambda stats: (
-            stats.get("is_categorical", False) and
+            # Check if categorical or string type
+            (stats.get("is_categorical", False) or 
+             stats.get("dtype", "") in ["object", "string", "str"]) and
             stats.get("unique_values", []) and
-            any(month in str(stats.get("unique_values", [])) 
-                for month in ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-                             "January", "February", "March"])
+            # Check if any unique value matches month names (exact match within list)
+            _contains_month_names(stats.get("unique_values", []))
         ),
         confidence_fn=lambda stats: 0.93,
         explanation_fn=lambda stats: (
