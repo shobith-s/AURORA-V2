@@ -21,6 +21,7 @@ class RuleCategory(Enum):
     CATEGORICAL = "categorical"
     DOMAIN_SPECIFIC = "domain_specific"
     FEATURE_ENGINEERING = "feature_engineering"
+    UNIVERSAL = "universal"  # High-priority universal rules for any domain
 
 
 @dataclass

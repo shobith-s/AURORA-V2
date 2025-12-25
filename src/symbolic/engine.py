@@ -510,21 +510,34 @@ class SymbolicEngine:
         # Enhancement #1: Binary/Low-Cardinality Categorical Detection
         # Rule: If unique_count <= LOW_CARDINALITY_THRESHOLD AND dtype is object AND no delimiters found
         #       THEN label_encode with high confidence
+        # SAFEGUARD: Skip this for columns that match phone/email/URL patterns (handled by universal rules)
         if stats.unique_count <= LOW_CARDINALITY_THRESHOLD and not stats.is_numeric and stats.dtype in ['object', 'string']:
-            # Check for clean categorical (no multi-value delimiters)
-            sample_values = column.dropna().astype(str).head(100)
-            has_delimiters = sample_values.str.contains(MULTI_VALUE_DELIMITERS, regex=True).any()
+            # Check if column matches phone/email/URL patterns (should be dropped, not encoded)
+            col_name_lower = column_name.lower() if column_name else ""
+            is_identifier_column = (
+                stats.matches_phone_pattern > 0.5 or
+                stats.matches_email_pattern > 0.5 or
+                stats.matches_url_pattern > 0.5 or
+                any(keyword in col_name_lower for keyword in 
+                    ["phone", "email", "url", "link", "tel", "mobile", "contact"])
+            )
             
-            if not has_delimiters and stats.unique_count >= 2:
-                return PreprocessingResult(
-                    action=PreprocessingAction.LABEL_ENCODE,
-                    confidence=0.95,
-                    source="symbolic",
-                    explanation=f"Clean low-cardinality categorical ({stats.unique_count} unique values)",
-                    alternatives=[],
-                    parameters={},
-                    context=stats_dict
-                )
+            # Only apply low-cardinality encoding if NOT an identifier column
+            if not is_identifier_column:
+                # Check for clean categorical (no multi-value delimiters)
+                sample_values = column.dropna().astype(str).head(100)
+                has_delimiters = sample_values.str.contains(MULTI_VALUE_DELIMITERS, regex=True).any()
+                
+                if not has_delimiters and stats.unique_count >= 2:
+                    return PreprocessingResult(
+                        action=PreprocessingAction.LABEL_ENCODE,
+                        confidence=0.95,
+                        source="symbolic",
+                        explanation=f"Clean low-cardinality categorical ({stats.unique_count} unique values)",
+                        alternatives=[],
+                        parameters={},
+                        context=stats_dict
+                    )
         
         # Enhancement #2: Outlier-Aware Numeric Scaling
         # Rule: If numeric AND not highly skewed BUT has outliers (beyond OUTLIER_IQR_MULTIPLIER * IQR)
