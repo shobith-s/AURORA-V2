@@ -944,6 +944,35 @@ class IntelligentPreprocessor:
             except Exception:
                 pass
 
+    def submit_correction(
+        self,
+        column_data: Union[pd.Series, List, np.ndarray],
+        column_name: str,
+        wrong_action: Union[str, PreprocessingAction],
+        correct_action: Union[str, PreprocessingAction],
+        confidence: float = 0.0
+    ) -> Dict[str, Any]:
+        """
+        Submit a correction for adaptive learning (alias for process_correction).
+        
+        Args:
+            column_data: Column data
+            column_name: Column name
+            wrong_action: Incorrect action
+            correct_action: Correct action
+            confidence: Confidence of wrong prediction
+            
+        Returns:
+            Learning result dictionary
+        """
+        return self.process_correction(
+            column=column_data,
+            column_name=column_name,
+            wrong_action=wrong_action,
+            correct_action=correct_action,
+            confidence=confidence
+        )
+
 
 # Singleton instance
 _preprocessor_instance: Optional[IntelligentPreprocessor] = None
@@ -955,3 +984,32 @@ def get_preprocessor(**kwargs) -> IntelligentPreprocessor:
     if _preprocessor_instance is None:
         _preprocessor_instance = IntelligentPreprocessor(**kwargs)
     return _preprocessor_instance
+
+    def submit_correction(
+        self,
+        column_data: Union[pd.Series, List, np.ndarray],
+        column_name: str,
+        wrong_action: Union[str, PreprocessingAction],
+        correct_action: Union[str, PreprocessingAction],
+        confidence: float = 0.0
+    ) -> Dict[str, Any]:
+        """
+        Submit a correction for adaptive learning (alias for process_correction).
+        
+        Args:
+            column_data: Column data
+            column_name: Column name
+            wrong_action: Incorrect action
+            correct_action: Correct action
+            confidence: Confidence of wrong prediction
+            
+        Returns:
+            Learning result dictionary
+        """
+        return self.process_correction(
+            column=column_data,
+            column_name=column_name,
+            wrong_action=wrong_action,
+            correct_action=correct_action,
+            confidence=confidence
+        )

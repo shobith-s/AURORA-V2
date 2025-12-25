@@ -116,19 +116,19 @@ class ColumnStatistics:
             "null_pct": self.null_pct,
             "unique_count": self.unique_count,
             "unique_ratio": self.unique_ratio,
-            "dtype": self.dtype,
+            "dtype": self.dtype or "",
             "is_numeric": self.is_numeric,
             "is_categorical": self.is_categorical,
             "is_text": self.is_text,
             "is_temporal": self.is_temporal,
             "is_boolean": self.is_boolean,
-            "min_value": self.min_value,
-            "max_value": self.max_value,
-            "mean": self.mean,
-            "median": self.median,
-            "std": self.std,
-            "skewness": self.skewness,
-            "kurtosis": self.kurtosis,
+            "min_value": self.min_value if self.min_value is not None else 0,
+            "max_value": self.max_value if self.max_value is not None else 0,
+            "mean": self.mean if self.mean is not None else 0,
+            "median": self.median if self.median is not None else 0,
+            "std": self.std if self.std is not None else 0,
+            "skewness": self.skewness if self.skewness is not None else 0,
+            "kurtosis": self.kurtosis if self.kurtosis is not None else 0,
             "all_positive": self.all_positive,
             "has_zeros": self.has_zeros,
             "has_outliers": self.has_outliers,
@@ -141,11 +141,11 @@ class ColumnStatistics:
             "is_ordinal": self.is_ordinal,
             "duplicate_ratio": self.duplicate_ratio,
             "null_has_pattern": self.null_has_pattern,
-            "cv": self.cv,
-            "entropy": self.entropy,
-            "target_correlation": self.target_correlation,
-            "range_size": self.range_size,
-            "iqr": self.iqr,
+            "cv": self.cv if self.cv is not None else 0,
+            "entropy": self.entropy if self.entropy is not None else 0,
+            "target_correlation": self.target_correlation if self.target_correlation is not None else 0,
+            "range_size": self.range_size if self.range_size is not None else 0,
+            "iqr": self.iqr if self.iqr is not None else 0,
             "matches_iso_datetime": self.matches_iso_datetime,
             "matches_date_pattern": self.matches_date_pattern,
             "matches_boolean_tf": self.matches_boolean_tf,
@@ -164,15 +164,16 @@ class ColumnStatistics:
             "looks_like_percentage": self.looks_like_percentage,
             "looks_like_categorical_code": self.looks_like_categorical_code,
             "target_available": self.target_available,
-            "domain_pattern_matches": self.domain_pattern_matches,
+            "domain_pattern_matches": self.domain_pattern_matches or {},
             "column_name": self.column_name,
             "avg_length": self.avg_length,
             "is_primary_key": self.is_primary_key,
             "is_foreign_key": self.is_foreign_key,
             "correlation_with_target": self.correlation_with_target,
+            "encoded_null_ratio": self.encoded_null_ratio,
+            "unique_values": [],  # Add empty list as default - will be populated if needed
         }
-        # Filter out None values so .get(key, default) works as expected
-        return {k: v for k, v in stats.items() if v is not None}
+        return stats
 
 
 class SymbolicEngine:
@@ -510,21 +511,34 @@ class SymbolicEngine:
         # Enhancement #1: Binary/Low-Cardinality Categorical Detection
         # Rule: If unique_count <= LOW_CARDINALITY_THRESHOLD AND dtype is object AND no delimiters found
         #       THEN label_encode with high confidence
+        # SAFEGUARD: Skip this for columns that match phone/email/URL patterns (handled by universal rules)
         if stats.unique_count <= LOW_CARDINALITY_THRESHOLD and not stats.is_numeric and stats.dtype in ['object', 'string']:
-            # Check for clean categorical (no multi-value delimiters)
-            sample_values = column.dropna().astype(str).head(100)
-            has_delimiters = sample_values.str.contains(MULTI_VALUE_DELIMITERS, regex=True).any()
+            # Check if column matches phone/email/URL patterns (should be dropped, not encoded)
+            col_name_lower = column_name.lower() if column_name else ""
+            is_identifier_column = (
+                stats.matches_phone_pattern > 0.5 or
+                stats.matches_email_pattern > 0.5 or
+                stats.matches_url_pattern > 0.5 or
+                any(keyword in col_name_lower for keyword in 
+                    ["phone", "email", "url", "link", "tel", "mobile", "contact"])
+            )
             
-            if not has_delimiters and stats.unique_count >= 2:
-                return PreprocessingResult(
-                    action=PreprocessingAction.LABEL_ENCODE,
-                    confidence=0.95,
-                    source="symbolic",
-                    explanation=f"Clean low-cardinality categorical ({stats.unique_count} unique values)",
-                    alternatives=[],
-                    parameters={},
-                    context=stats_dict
-                )
+            # Only apply low-cardinality encoding if NOT an identifier column
+            if not is_identifier_column:
+                # Check for clean categorical (no multi-value delimiters)
+                sample_values = column.dropna().astype(str).head(100)
+                has_delimiters = sample_values.str.contains(MULTI_VALUE_DELIMITERS, regex=True).any()
+                
+                if not has_delimiters and stats.unique_count >= 2:
+                    return PreprocessingResult(
+                        action=PreprocessingAction.LABEL_ENCODE,
+                        confidence=0.95,
+                        source="symbolic",
+                        explanation=f"Clean low-cardinality categorical ({stats.unique_count} unique values)",
+                        alternatives=[],
+                        parameters={},
+                        context=stats_dict
+                    )
         
         # Enhancement #2: Outlier-Aware Numeric Scaling
         # Rule: If numeric AND not highly skewed BUT has outliers (beyond OUTLIER_IQR_MULTIPLIER * IQR)
