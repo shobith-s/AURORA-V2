@@ -21,6 +21,7 @@ class RuleCategory(Enum):
     CATEGORICAL = "categorical"
     DOMAIN_SPECIFIC = "domain_specific"
     FEATURE_ENGINEERING = "feature_engineering"
+    UNIVERSAL = "universal"  # High-priority universal rules for any domain
 
 
 @dataclass
@@ -117,25 +118,35 @@ def create_data_quality_rules() -> List[Rule]:
     # KEEP_AS_IS RULES - HIGH PRIORITY (evaluated first)
     # These catch healthy columns that don't need preprocessing
 
-    # Rule 4: CONSERVATIVE FALLBACK - Safety Net (HIGHEST PRIORITY)
-    # If we're not confident about any transformation, keep it as-is
-    # This prevents bad decisions when rules are uncertain
+    # Rule 4: CONSERVATIVE FALLBACK - TRUE Safety Net (LOW PRIORITY)
+    # FIXED: This should be a TRUE fallback that only triggers when NO other rules match
+    # Moved from priority 200 to 40 (below all transformation rules)
+    # Tightened condition to only match truly ambiguous cases
     rules.append(Rule(
         name="CONSERVATIVE_FALLBACK",
         category=RuleCategory.DATA_QUALITY,
         action=PreprocessingAction.KEEP_AS_IS,
         condition=lambda stats: (
-            # Only trigger if column has basic quality
+            # Only trigger for truly ambiguous cases
+            # Must have basic quality but not match any specific pattern
             stats.get("null_pct", 0) < 0.3 and  # Less than 30% nulls
             stats.get("unique_count", 0) > 1 and  # Not constant
-            stats.get("unique_ratio", 0) < 0.99  # Not all unique (unless it's a key)
+            # CRITICAL FIX: Only match if it's truly ambiguous
+            # (not clearly numeric, not clearly categorical, not clearly temporal)
+            not (
+                stats.get("is_numeric", False) or
+                stats.get("is_categorical", False) or
+                stats.get("is_temporal", False) or
+                stats.get("is_boolean", False)
+            )
         ),
-        confidence_fn=lambda stats: 0.50,  # Reduced from 0.70 to allow Neural Oracle participation
-        explanation_fn=lambda stats: "Column has acceptable quality - keeping as-is (conservative approach)",
-        priority=200  # HIGHEST PRIORITY - acts as default for uncertain cases
+        confidence_fn=lambda stats: 0.50,  # Low confidence - this is a fallback
+        explanation_fn=lambda stats: "Ambiguous column type - keeping as-is (conservative fallback)",
+        priority=40  # LOW PRIORITY - only triggers when no other rules match
     ))
 
     # Rule 4a: Keep Primary Keys / IDs (HIGHEST PRIORITY)
+    # FIXED: Added dtype check to avoid matching continuous numeric columns
     rules.append(Rule(
         name="KEEP_IF_PRIMARY_KEY",
         category=RuleCategory.DATA_QUALITY,
@@ -143,7 +154,16 @@ def create_data_quality_rules() -> List[Rule]:
         condition=lambda stats: (
             stats.get("unique_ratio", 0) > 0.95 and  # Relaxed from 0.99 to 0.95
             stats.get("null_pct", 0) < 0.05 and  # Allow up to 5% nulls (was 0%)
-            stats.get("unique_count", 0) > 10  # Must have reasonable number of unique values
+            stats.get("unique_count", 0) > 10 and  # Must have reasonable number of unique values
+            # CRITICAL FIX: Exclude continuous numeric data (floats)
+            # Primary keys are typically strings or integers, not continuous floats
+            (
+                stats.get("dtype", "") in ["object", "string", "str", "int64", "int32"] or
+                # For numeric types, check if values are integer-like (no decimals)
+                (stats.get("is_numeric", False) and 
+                 stats.get("std", 1) > 0 and  # Has variation
+                 abs(stats.get("mean", 0) - round(stats.get("mean", 0))) < 0.01)  # Integer-like mean
+            )
         ),
         confidence_fn=lambda stats: 0.95,
         explanation_fn=lambda stats: f"Column appears to be a Primary Key or ID ({stats.get('unique_ratio', 0):.1%} unique, {stats.get('unique_count', 0)} values) - keeping as identifier",

@@ -2,20 +2,93 @@
 
 **AI-powered data preprocessing with symbolic rules, neural oracle, and adaptive learning**
 
+[![Production Ready](https://img.shields.io/badge/status-production--ready-brightgreen)]()
+[![Score](https://img.shields.io/badge/evaluation-83.2%2F100-blue)]()
+[![Datasets](https://img.shields.io/badge/datasets-10%20real--world-orange)]()
+
 ---
 
-## Overview
+## 🎯 Overview
 
-AURORA V2 is an intelligent data preprocessing system that combines:
+AURORA V2 is an intelligent data preprocessing system that achieved **83.2/100 (B+ Good)** on comprehensive real-world evaluation across 10 diverse datasets.
 
-- **Symbolic Engine**: 185+ expert-crafted rules for common preprocessing patterns
-- **Neural Oracle**: Pre-trained ensemble (XGBoost + LightGBM) with ~76% validation accuracy for edge cases
+### Core Components
+
+- **Symbolic Engine**: 230+ expert-crafted rules for intelligent preprocessing
+- **Neural Oracle**: Pre-trained ensemble (XGBoost + LightGBM) for edge cases
 - **Adaptive Learning**: Learns from user corrections to improve over time
-- **LLM Validation**: Uses AI to validate and improve preprocessing decisions
+- **Pipeline Export**: Generate standalone preprocessing code
+- **Visual Profiling**: Interactive column analysis and visualization
 
 ---
 
-## Architecture
+## 🏆 Evaluation Results
+
+**Comprehensive 10-Dataset Evaluation:**
+- **Overall Score:** 83.2/100 (B+ Good)
+- **Datasets:** Titanic, Iris, Wine, Breast Cancer, Adult Income, Diabetes, Digits, California Housing, Credit Card, Housing Prices
+- **Total Columns:** 133 analyzed
+- **Total Rows:** 57,728 processed
+- **Expert Alignment:** 85% match with expert decisions
+
+**Top Performing Datasets:**
+1. Digits (UCI): 90.0/100 ⭐
+2. Adult Income (UCI): 89.7/100 ⭐
+3. Titanic (Kaggle): 88.8/100 ⭐
+
+See [`evaluation/FINAL_COMPREHENSIVE_REPORT.md`](evaluation/FINAL_COMPREHENSIVE_REPORT.md) for detailed analysis.
+
+---
+
+## 🚀 Quick Start
+
+### Installation
+
+```bash
+# Clone repository
+git clone https://github.com/shobith-s/AURORA-V2.git
+cd AURORA-V2
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Start backend
+python -m uvicorn src.api.server:app --reload
+
+# Start frontend (in another terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+### Basic Usage
+
+```python
+from src.core.preprocessor import IntelligentPreprocessor
+import pandas as pd
+
+# Initialize preprocessor
+preprocessor = IntelligentPreprocessor(
+    use_neural_oracle=False,  # Symbolic engine only
+    enable_learning=True       # Enable adaptive learning
+)
+
+# Preprocess a column
+df = pd.read_csv('your_data.csv')
+result = preprocessor.preprocess_column(
+    df['column_name'],
+    column_name='column_name',
+    apply_action=True
+)
+
+print(f"Action: {result.action}")
+print(f"Confidence: {result.confidence}")
+print(f"Explanation: {result.explanation}")
+```
+
+---
+
+## 📊 Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -25,8 +98,8 @@ AURORA V2 is an intelligent data preprocessing system that combines:
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
 │  │   Symbolic   │───▶│    Neural    │───▶│   Adaptive   │ │
 │  │    Engine    │    │    Oracle    │    │   Learning   │ │
-│  │  (185 rules) │    │  (~76% acc)  │    │   (User      │ │
-│  │              │    │   Ensemble   │    │  Corrections)│ │
+│  │  (230 rules) │    │   Ensemble   │    │   (User      │ │
+│  │              │    │              │    │  Corrections)│ │
 │  └──────────────┘    └──────────────┘    └──────────────┘ │
 │         │                    │                    │        │
 │         └────────────────────┴────────────────────┘        │
@@ -40,186 +113,190 @@ AURORA V2 is an intelligent data preprocessing system that combines:
 
 ---
 
-## Key Features
+## ✨ Key Features
 
-### 1. **Three-Layer Decision System**
+### 1. **Intelligent Preprocessing**
 
-**Layer 1: Symbolic Engine (Primary)**
+- **Type Detection**: Automatically identifies numeric, categorical, text, temporal data
+- **Distribution-Aware**: Applies appropriate transformations based on data distribution
+- **Domain Intelligence**: Recognizes domain patterns (IDs, emails, phone numbers, etc.)
+- **High Confidence**: Average 0.81 confidence across decisions
 
-- 185+ hand-crafted rules
-- Handles 85% of cases with high confidence (>0.7)
-- Conservative thresholds (80% null, 99.5% unique)
-- Fast (<1ms per column)
+### 2. **Pipeline Export**
 
-**Layer 2: Neural Oracle (Ensemble - Edge Cases)**
-
-- **Architecture:** XGBoost + LightGBM ensemble with soft voting
-- **Validation Accuracy:** ~76% on real-world test data
-- **Inference Only:** Uses pre-trained model, no runtime training
-- **Model File:** `models/neural_oracle_v2_improved_20251129_150244.pkl`
-- **Trained:** November 2025 on diverse OpenML datasets with LLM validation
-- **Handles:** Ambiguous preprocessing decisions (when symbolic confidence < 0.65)
-
-**Layer 3: Adaptive Learning (Continuous Improvement)**
-
-- Learns from user corrections
-- Creates new rules after 10 consistent corrections
-- Validates patterns with LLM before deployment
-
-### 2. **Supported Actions**
-
-- `keep_as_is` - Preserve column unchanged
-- `drop_column` - Remove low-value columns
-- `standard_scale` - Normalize numeric data
-- `robust_scale` - Scale with outlier resistance
-- `log_transform` - Handle skewed distributions
-- `onehot_encode` - Categorical to binary
-- `label_encode` - Categorical to numeric
-- `hash_encode` - High-cardinality categoricals
-- `fill_null_*` - Various null handling strategies
-
-### 3. **Quality Assurance**
-
-- Statistical validation (normality, variance)
-- Consistency validation (correlation preservation)
-- Action-specific validators
-- Confidence scoring (0.0-1.0)
-- Explainable decisions
-
----
-
-## Quick Start
-
-### Installation
-
-```bash
-# Clone repository
-git clone https://github.com/shobith-s/AURORA-V2.git
-cd AURORA-V2
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Start backend
-uvicorn src.api.server:app --reload
-
-# Start frontend (in another terminal)
-cd frontend
-npm install
-npm run dev
-```
-
-### Usage
+Export preprocessing pipelines as standalone Python code:
 
 ```python
-from src.core.preprocessor import IntelligentPreprocessor
-import pandas as pd
+from src.core.pipeline_exporter import PipelineExporter
 
-# Initialize
-preprocessor = IntelligentPreprocessor()
-
-# Preprocess a column
-df = pd.read_csv('data.csv')
-result = preprocessor.preprocess_column(
-    column=df['price'],
-    column_name='price'
+exporter = PipelineExporter()
+code = exporter.export_pipeline(
+    preprocessing_results=results,
+    dataset_name='my_dataset'
 )
 
-print(f"Action: {result.action}")
-print(f"Confidence: {result.confidence:.2f}")
-print(f"Explanation: {result.explanation}")
+# Save to file
+with open('preprocessing_pipeline.py', 'w') as f:
+    f.write(code)
+```
+
+### 3. **Visual Profiling**
+
+Interactive column analysis with statistical insights:
+
+```python
+from src.core.column_profiler import ColumnProfiler
+
+profiler = ColumnProfiler()
+profile = profiler.profile_column(df['column_name'], 'column_name')
+
+# Returns: distribution, outliers, missing values, statistics
+```
+
+### 4. **Adaptive Learning**
+
+System learns from user corrections:
+
+```python
+# Submit correction
+preprocessor.submit_correction(
+    column_data=df['column'],
+    column_name='column',
+    wrong_action='standard_scale',
+    correct_action='log_transform',
+    confidence=0.75
+)
+
+# System learns and applies to similar columns
 ```
 
 ---
 
-## Documentation
-
-- [Architecture](./ARCHITECTURE.md) - System design and components
-- [Neural Oracle Training](./NEURAL_ORACLE.md) - How to train the ML model
-- [API Reference](./API.md) - Backend API documentation
-- [Development Guide](./DEVELOPMENT.md) - Contributing guidelines
-
----
-
-## Performance
-
-**Symbolic Engine:**
-
-- Accuracy: 85-95% on common patterns
-- Speed: <1ms per column
-- Coverage: ~85% of cases
-
-**Neural Oracle (Ensemble):**
-
-- Validation accuracy: ~76%
-- Architecture: XGBoost + LightGBM ensemble
-- Inference only: <5ms per column
-- Pre-trained on LLM-validated examples
-
-**Hybrid System:**
-
-- Overall accuracy: ~85-90% (symbolic + neural combined)
-- Handles both common and edge cases
-- Continuous improvement via learning
-
----
-
-## Tech Stack
-
-**Backend:**
-
-- Python 3.10+
-- FastAPI
-- XGBoost
-- Pandas, NumPy, Scikit-learn
-
-**Frontend:**
-
-- Next.js 14
-- TypeScript
-- TailwindCSS
-- Zustand (state management)
-
-**ML/AI:**
-
-- XGBoost + LightGBM ensemble (neural oracle)
-- Groq API (LLM validation)
-- SHAP (explainability)
-
----
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 AURORA-V2/
 ├── src/
-│   ├── core/           # Core preprocessing logic
-│   ├── symbolic/       # Symbolic rule engine
-│   ├── neural/         # Neural oracle
-│   ├── learning/       # Adaptive learning
-│   ├── validation/     # Quality assurance
-│   └── api/            # FastAPI backend
-├── frontend/           # Next.js UI
-├── validator/          # Neural oracle training
-├── models/             # Trained models
-├── docs/               # Documentation
-└── tests/              # Test suite
+│   ├── core/              # Core preprocessing logic
+│   │   ├── preprocessor.py
+│   │   ├── pipeline_exporter.py
+│   │   └── column_profiler.py
+│   ├── symbolic/          # Symbolic engine
+│   │   ├── engine.py
+│   │   └── rules.py       # 230+ preprocessing rules
+│   ├── neural/            # Neural oracle
+│   ├── learning/          # Adaptive learning
+│   ├── api/               # FastAPI backend
+│   └── explanation/       # Explanation generation
+├── frontend/              # React frontend
+├── evaluation/            # Evaluation scripts and reports
+│   ├── FINAL_COMPREHENSIVE_REPORT.md
+│   ├── real_world_evaluation.py
+│   └── comprehensive_10dataset_results.json
+├── scripts/               # Training scripts
+├── docs/                  # Documentation
+├── tests/                 # Test suite
+└── colab/                 # Jupyter notebooks
 ```
 
 ---
 
-## License
+## 📚 Documentation
 
-MIT License - See [LICENSE](../LICENSE) for details
+- **[API Documentation](docs/API.md)** - REST API endpoints
+- **[Architecture](docs/ARCHITECTURE.md)** - System architecture
+- **[Meta Learning Guide](docs/META_LEARNING_GUIDE.md)** - Training neural oracle
+- **[Neural Oracle](docs/NEURAL_ORACLE.md)** - Neural oracle details
+- **[Smart Preprocessing Guide](docs/SMART_PREPROCESSING_GUIDE.md)** - Usage guide
+- **[Transformation Decisions](docs/TRANSFORMATION_DECISIONS.md)** - Decision logic
+- **[Universal Preprocessing Vision](docs/UNIVERSAL_PREPROCESSING_VISION.md)** - Project vision
 
 ---
 
-## Contributors
+## 🧪 Testing
 
-- Shobith S - Creator and maintainer
+```bash
+# Run all tests
+pytest tests/
+
+# Run specific test
+pytest tests/test_symbolic_engine.py
+
+# Run evaluation
+python evaluation/real_world_evaluation.py
+```
 
 ---
 
-**Version:** 2.0  
-**Last Updated:** 2024-11-29  
-**Status:** Production Ready ✅
+## 🎯 Performance Metrics
+
+| Metric | Value | Status |
+|--------|-------|--------|
+| **Overall Score** | 83.2/100 | ✅ B+ Good |
+| **Expert Alignment** | 85% | ✅ High |
+| **Average Confidence** | 0.81 | ✅ High |
+| **Inference Time** | <5ms | ✅ Fast |
+| **High Confidence Decisions** | 42% | ✅ Good |
+
+---
+
+## 🔧 Configuration
+
+Configuration files in `configs/`:
+- `preprocessing_config.yaml` - Preprocessing settings
+- `neural_oracle_config.yaml` - Neural oracle settings
+- `learning_config.yaml` - Adaptive learning settings
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- **Datasets:** Kaggle, UCI Machine Learning Repository
+- **Libraries:** scikit-learn, pandas, numpy, FastAPI, React
+- **Evaluation:** 10 real-world datasets, 133 columns, 57K+ rows
+
+---
+
+## 📧 Contact
+
+**Shobith S** - shobi7196@gmail.com
+
+**Project Link:** https://github.com/shobith-s/AURORA-V2
+
+---
+
+## 🎓 Citation
+
+If you use AURORA V2 in your research, please cite:
+
+```bibtex
+@software{aurora_v2_2025,
+  author = {Shobith S},
+  title = {AURORA V2: Intelligent Data Preprocessing System},
+  year = {2025},
+  publisher = {GitHub},
+  url = {https://github.com/shobith-s/AURORA-V2}
+}
+```
+
+---
+
+**Status:** Production-Ready ✅  
+**Last Updated:** December 2025  
+**Version:** 2.0

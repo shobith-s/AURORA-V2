@@ -543,3 +543,88 @@ class ChatQueryResponse(BaseModel):
                 ]
             }
         }
+
+
+class ExportPipelineRequest(BaseModel):
+    """Request schema for exporting preprocessing pipeline."""
+    
+    decisions: List[Dict[str, Any]] = Field(
+        ...,
+        description="List of preprocessing decisions with column names and actions"
+    )
+    format: str = Field(
+        default="python",
+        description="Export format: 'python', 'sklearn', or 'json'"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "decisions": [
+                    {
+                        "column_name": "age",
+                        "action": "standard_scale",
+                        "confidence": 0.92,
+                        "explanation": "Normal distribution"
+                    },
+                    {
+                        "column_name": "category",
+                        "action": "label_encode",
+                        "confidence": 0.88,
+                        "explanation": "Low cardinality categorical"
+                    }
+                ],
+                "format": "python"
+            }
+        }
+
+
+class ExportPipelineResponse(BaseModel):
+    """Response schema for pipeline export."""
+    
+    format: str = Field(..., description="Export format used")
+    content: str = Field(..., description="Exported pipeline content")
+    filename: str = Field(..., description="Suggested filename")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "format": "python",
+                "content": "def preprocess(df):\\n    ...",
+                "filename": "preprocess.py"
+            }
+        }
+
+class ProfileColumnRequest(BaseModel):
+    """Request schema for column profiling."""
+    
+    column_data: List[Any] = Field(..., description="Column data as list")
+    column_name: str = Field(default="column", description="Name of the column")
+    bins: int = Field(default=20, description="Number of bins for histogram")
+
+
+class ProfileColumnResponse(BaseModel):
+    """Response schema for column profiling."""
+    
+    column_name: str
+    data_type: str
+    statistics: Dict[str, Any]
+    distribution: Dict[str, Any]
+    outliers: Optional[Dict[str, Any]]
+
+
+class ComparePreprocessingRequest(BaseModel):
+    """Request schema for preprocessing comparison."""
+    
+    original_data: List[Any] = Field(..., description="Original column data")
+    transformed_data: List[Any] = Field(..., description="Transformed column data")
+    action: str = Field(..., description="Preprocessing action applied")
+
+
+class ComparePreprocessingResponse(BaseModel):
+    """Response schema for preprocessing comparison."""
+    
+    action: str
+    original: Dict[str, Any]
+    transformed: Dict[str, Any]
+    improvement_metrics: Dict[str, Any]

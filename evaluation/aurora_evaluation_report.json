@@ -1,0 +1,282 @@
+{
+  "symbolic_engine": {
+    "overall_accuracy": 0.5555555555555556,
+    "total_tests": 9,
+    "correct": 5,
+    "by_category": {
+      "numeric": {
+        "correct": 1,
+        "total": 4
+      },
+      "categorical": {
+        "correct": 1,
+        "total": 2
+      },
+      "edge_case": {
+        "correct": 3,
+        "total": 3
+      }
+    },
+    "detailed_results": [
+      {
+        "test": "Normal Distribution",
+        "category": "numeric",
+        "predicted": "standard_scale",
+        "expected": "standard_scale",
+        "correct": true,
+        "confidence": 0.81,
+        "source": "symbolic"
+      },
+      {
+        "test": "Moderately Skewed Distribution",
+        "category": "numeric",
+        "predicted": "minmax_scale",
+        "expected": "sqrt_transform",
+        "correct": false,
+        "confidence": 0.855,
+        "source": "symbolic"
+      },
+      {
+        "test": "Highly Skewed Distribution",
+        "category": "numeric",
+        "predicted": "keep_as_is",
+        "expected": "log_transform",
+        "correct": false,
+        "confidence": 0.64125,
+        "source": "symbolic"
+      },
+      {
+        "test": "Data with Moderate Outliers",
+        "category": "numeric",
+        "predicted": "binning_equal_freq",
+        "expected": "winsorize",
+        "correct": false,
+        "confidence": 0.8280000000000001,
+        "source": "symbolic"
+      },
+      {
+        "test": "Low Cardinality Categorical",
+        "category": "categorical",
+        "predicted": "drop_column",
+        "expected": "onehot_encode",
+        "correct": false,
+        "confidence": 0.874,
+        "source": "symbolic"
+      },
+      {
+        "test": "High Cardinality (ID-like)",
+        "category": "categorical",
+        "predicted": "drop_column",
+        "expected": "drop_column",
+        "correct": true,
+        "confidence": 0.874,
+        "source": "symbolic"
+      },
+      {
+        "test": "Constant Column",
+        "category": "edge_case",
+        "predicted": "drop_column",
+        "expected": "drop_column",
+        "correct": true,
+        "confidence": 0.874,
+        "source": "symbolic"
+      },
+      {
+        "test": "Sparse Column (90% null)",
+        "category": "edge_case",
+        "predicted": "drop_column",
+        "expected": "drop_column",
+        "correct": true,
+        "confidence": 0.8037,
+        "source": "symbolic"
+      },
+      {
+        "test": "All Null Column",
+        "category": "edge_case",
+        "predicted": "drop_column",
+        "expected": "drop_column",
+        "correct": true,
+        "confidence": 0.874,
+        "source": "symbolic"
+      }
+    ]
+  },
+  "adaptive_learning": {
+    "corrections_submitted": 3,
+    "corrections_learned": 3,
+    "patterns_recorded": 0,
+    "new_rules_created": 0,
+    "learned_pattern_applied": false,
+    "detailed_results": [
+      {
+        "correction": 1,
+        "column": "revenue",
+        "learned": true,
+        "pattern_recorded": false,
+        "new_rule": false
+      },
+      {
+        "correction": 2,
+        "column": "priority",
+        "learned": true,
+        "pattern_recorded": false,
+        "new_rule": false
+      },
+      {
+        "correction": 3,
+        "column": "price",
+        "learned": true,
+        "pattern_recorded": false,
+        "new_rule": false
+      }
+    ]
+  },
+  "performance": {
+    "avg_ms": 4.367349147796631,
+    "p50_ms": 4.2972564697265625,
+    "p95_ms": 4.859769344329834,
+    "p99_ms": 5.135743618011475,
+    "min_ms": 4.216194152832031,
+    "max_ms": 5.203485488891602,
+    "target_avg_met": "True",
+    "target_p95_met": "True"
+  },
+  "coverage": {},
+  "real_datasets": [
+    {
+      "dataset": "E-commerce",
+      "shape": [
+        1000,
+        6
+      ],
+      "columns": [
+        {
+          "column": "product_id",
+          "action": "PreprocessingAction.DROP_COLUMN",
+          "confidence": 0.874,
+          "source": "symbolic"
+        },
+        {
+          "column": "price",
+          "action": "PreprocessingAction.BINNING_EQUAL_FREQ",
+          "confidence": 0.8280000000000001,
+          "source": "symbolic"
+        },
+        {
+          "column": "quantity",
+          "action": "PreprocessingAction.DROP_COLUMN",
+          "confidence": 0.7866000000000001,
+          "source": "symbolic"
+        },
+        {
+          "column": "category",
+          "action": "PreprocessingAction.ONEHOT_ENCODE",
+          "confidence": 0.92,
+          "source": "symbolic"
+        },
+        {
+          "column": "rating",
+          "action": "PreprocessingAction.STANDARD_SCALE",
+          "confidence": 0.92,
+          "source": "symbolic"
+        },
+        {
+          "column": "views",
+          "action": "PreprocessingAction.BINNING_EQUAL_FREQ",
+          "confidence": 0.8280000000000001,
+          "source": "symbolic"
+        }
+      ]
+    },
+    {
+      "dataset": "Customer",
+      "shape": [
+        1000,
+        6
+      ],
+      "columns": [
+        {
+          "column": "customer_id",
+          "action": "PreprocessingAction.DROP_COLUMN",
+          "confidence": 0.874,
+          "source": "symbolic"
+        },
+        {
+          "column": "age",
+          "action": "PreprocessingAction.STANDARD_SCALE",
+          "confidence": 0.855,
+          "source": "symbolic"
+        },
+        {
+          "column": "income",
+          "action": "PreprocessingAction.BINNING_EQUAL_FREQ",
+          "confidence": 0.8280000000000001,
+          "source": "symbolic"
+        },
+        {
+          "column": "city",
+          "action": "PreprocessingAction.ONEHOT_ENCODE",
+          "confidence": 0.92,
+          "source": "symbolic"
+        },
+        {
+          "column": "subscription",
+          "action": "PreprocessingAction.LABEL_ENCODE",
+          "confidence": 0.95,
+          "source": "symbolic"
+        },
+        {
+          "column": "active_days",
+          "action": "PreprocessingAction.STANDARD_SCALE",
+          "confidence": 0.81,
+          "source": "symbolic"
+        }
+      ]
+    },
+    {
+      "dataset": "Financial",
+      "shape": [
+        1000,
+        6
+      ],
+      "columns": [
+        {
+          "column": "transaction_id",
+          "action": "PreprocessingAction.DROP_COLUMN",
+          "confidence": 0.874,
+          "source": "symbolic"
+        },
+        {
+          "column": "amount",
+          "action": "PreprocessingAction.LOG_TRANSFORM",
+          "confidence": 0.855,
+          "source": "symbolic"
+        },
+        {
+          "column": "balance",
+          "action": "PreprocessingAction.STANDARD_SCALE",
+          "confidence": 0.81,
+          "source": "symbolic"
+        },
+        {
+          "column": "credit_score",
+          "action": "PreprocessingAction.KEEP_AS_IS",
+          "confidence": 0.621,
+          "source": "symbolic"
+        },
+        {
+          "column": "account_type",
+          "action": "PreprocessingAction.LABEL_ENCODE",
+          "confidence": 0.95,
+          "source": "symbolic"
+        },
+        {
+          "column": "days_overdue",
+          "action": "PreprocessingAction.CYCLIC_TIME_ENCODE",
+          "confidence": 0.8280000000000001,
+          "source": "symbolic"
+        }
+      ]
+    }
+  ]
+}
